@@ -1,2 +1,4 @@
 data/raw/*
 data/cutadapt/noprimers/*.fastq
+data/cutadapt/noprimers_filtered/*.fastq.gz
+data/dada2/hash_key*
