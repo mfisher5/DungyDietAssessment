@@ -26,7 +26,7 @@ As with everything, we will start the process by loading the required packages a
 
 ```{r load libraries, include=FALSE}
  knitr::opts_chunk$set()
-
+ library (here)
  library (tidyverse)
  library (vegan)
  #library (MASS)
@@ -34,6 +34,7 @@ As with everything, we will start the process by loading the required packages a
  library (reshape2)
  library (seqinr)
  library (patchwork)
+ library (magrittr)
 
 ```
 
@@ -42,9 +43,9 @@ As with everything, we will start the process by loading the required packages a
 User directories
 ```{r set up }
 # directory with ASV table from dada2
-dada2_dir <- "data/raw/dada2"
+dada2_dir <- "data/dada2"
 # output directory
-outdir    <- "data/raw/dada2"
+outdir    <- "data/dada2"
 ```
 
 User inputs
@@ -73,7 +74,8 @@ filter metadata to only include samples which came out of dada2
 ```{r}
 metadata <- all.metadata %>%
   rename(sample_id=Sample_label,Tag=Sample_name) %>% mutate(MiSeqRun=1,pri_index_name="Lib_A") %>%
-  dply::select(sample_id, pri_index_name, Tag, MiSeqRun)
+  mutate(Tag = paste0("Tag_",Tag)) %>%
+  dplyr::select(sample_id, pri_index_name, Tag, MiSeqRun)
 ```
 <br>
 
@@ -92,9 +94,8 @@ metadata %>%
 
 # We should change Tag_1 for Tag_01
 
-metadata %>%
-  mutate(Tag = case_when(str_detect(Tag, "\\_[0-9]{1}$")       ~     str_replace(Tag, "Tag_", "Tag_0"),
-                         TRUE                                  ~     Tag  )) -> metadata
+metadata <- metadata %>%
+  mutate(Tag = ifelse(str_detect(Tag, "\\_[0-9]{1}$"), str_replace(Tag, "Tag_", "Tag_0"),Tag))
 
 ```
 <br>
@@ -109,9 +110,8 @@ The outputs of this process are a clean ASV table and a clean metadata file.
 Before we modify our datasets on any way, we can calculate how many sequences that were only supposed to be in the positives control appeared in the environmental samples, and how many did the opposite. First we divide the dataset into positive control and environmental samples. Also create an ordered list of the Hashes present in the positive controls, for ease of plotting
 
 ```{r split into two}
-
-ASV.table %>%  mutate(source = case_when(str_detect(sample, "Control|Positive\\+|Negative\\+")    ~   "Positives",
-                                         TRUE                                                ~   "Samples")) -> ASV.table
+ASV.table <- filter(all.asvs, MiSeqRun==1)
+ASV.table %<>%  mutate(source = ifelse(str_detect(sample_id, "Control|Positive\\+|Negative\\+"),"Positives","Samples"))
 
 ASV.table %>% 
   filter (source == "Positives") %>% 
