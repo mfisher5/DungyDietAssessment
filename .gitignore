@@ -4,3 +4,5 @@ data/cutadapt/noprimers_filtered/*.fastq.gz
 data/dada2/hash_key*
 data/dada2/cleaned_hash_key*
 data/dada2/*.rds
+data/blast/*.fasta
+data/blast/*.csv
