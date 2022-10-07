@@ -39,6 +39,13 @@ As with everything, we will start the process by loading the required packages a
 ```
 
 
+Custom functions
+```{r}
+source(here('R','dist_to_centroid.R'))
+source(here('R','how_many.R'))
+source(here('R','tibble_to_matrix.R'))
+```
+
 
 User directories
 ```{r set up }
@@ -53,6 +60,14 @@ User inputs
 # metadata file (with directory)
 metadat_file <- "data/DCRB_run1_samples.csv"
 ```
+<br>
+
+We will fit the number of reads assigned to each sample to a normal distribution and discard those samples with a probability of ___% of not fitting in that distribution. 
+```{r}
+pfit <- 0.95
+```
+<br>
+<br>
 
 
 # Load data
@@ -128,94 +143,73 @@ Now let's create a jumping vector. What proportion of the reads found in the pos
 ### Step 1: Nest the dataset and split it in positives and samples
 
 To streamline the process and make it easier to execute it similarly but independently on each Miseq run, we nest the dataset by run. 
-So Step1 is create a nested table so we can run this analysis on each run independently. 
 
+So Step1 is create a nested table so we can run this analysis on each run independently. The nested table has three columns: MiSeqRun, Samples, Positives. The "Samples" column contains the ASV table for all samples in the given MiSeqRun. The "Positives" column contains the ASV table for all controls in the given MiSeqRun.
 
 ```{r nesting the dataset}
-
 ASV.table %>% 
-  group_by(Miseq_run, source) %>% 
+  group_by(MiSeqRun, source) %>% 
   nest() %>% 
   pivot_wider(names_from = source, values_from =  data) -> ASV.nested 
 ```
+<br>
 
-That wasn't too complicated. Let's start a summary function that keeps track of our cleaning process
 
+That wasn't too complicated. Let's use the custom function `how.many` to keep track of our cleaning process. This summary function just counts the number of distinct samples, hashes, and reads from an ASV table. The code applying the function maps it to each dataframe in the "Samples" column of the nested table. 
 ```{r summary.file}
-
-how.many <- function(ASVtable, round){
-  ASVtable %>% ungroup() %>% 
-    summarise(nsamples = n_distinct(sample),
-              nHashes = n_distinct(Hash),
-              nReads = sum(nReads), 
-              Stage = paste0("Step_", round)) %>% 
-    gather(starts_with("n"), value = "number", key = "Stat")
-}
-
 ASV.nested %>% 
   transmute(Summary = map(Samples, ~ how.many(ASVtable = .,round = 0)))  -> ASV.summary
 
 ```
+<br>
+
 
 ### Step 2: Model the composition of the positive controls of each run 
 
 
 We create a vector of the composition of each positive control and substract it from the environmental samples from their runs
-
-
-
 ```{r jumping vector}
-
-
 ASV.nested %>% 
   mutate (contam.tibble = map(Positives, 
                               function(.x){
                                 .x %>%
-                                  group_by(sample) %>%
+                                  group_by(Sample_name,sample_id) %>%    ## changed from group_by(sample) | MCF 10/7
                                   mutate (TotalReadsperSample = sum(nReads)) %>%
                                   mutate (proportion = nReads/TotalReadsperSample) %>%
                                   group_by (Hash) %>%
                                   summarise (vector_contamination = max (proportion))
                                 }) ) -> ASV.nested
-
+# Check how it looks across all runs
 ASV.nested %>% 
-  group_by(Miseq_run) %>% 
+  group_by(MiSeqRun) %>%      ## changed from group_by(Miseq_Run) | MCF 10/7
   select(contam.tibble) %>% 
-  unnest(cols = contam.tibble) # Check how it looks like
-
-
-
+  unnest(cols = contam.tibble) 
 ```
-
+<br>
 
 ### Step 3: Substract the composition of the positive controls from the environment samples
 
-The idea behind this procedure is that we know, for each run, how many reads from each Hash appeared in teh positive controls. These come from 2 processes: sequences we know should appear in the positive controls, and sequences that have *jumped* from the environment to the positive controls. With this procedure, we substract from every environmental sample the proportion of reads that jumped from elsewhere.
+The idea behind this procedure is that we know, for each run, how many reads from each Hash appeared in the positive controls. These come from 2 processes: sequences we know should appear in the positive controls, and sequences that have *jumped* from the environment to the positive controls. With this procedure, we subtract from every environmental sample the proportion of reads that jumped from elsewhere.
 
 ```{r cleaning step 1}
 ASV.nested %>% 
   mutate(cleaned.tibble = map2(Samples, contam.tibble, function(.x,.y){ 
     .x %>%
-      group_by (sample) %>%
+      group_by (Sample_name, sample_id) %>%                       ## changed from group_by(sample) | MCF 10/7
       mutate (TotalReadsperSample = sum (nReads)) %>%
       left_join(.y, by = "Hash") %>%
       mutate (Updated_nReads = ifelse (!is.na(vector_contamination),  nReads - (ceiling(vector_contamination*TotalReadsperSample)), nReads)) %>%
       filter (Updated_nReads > 0) %>%
       ungroup() %>% 
-      dplyr::select (sample, Hash, nReads = Updated_nReads)
+      dplyr::select (Sample_name, sample_id, Hash, nReads = Updated_nReads)
       
     
   })) -> ASV.nested
-
-ASV.nested %>% 
-  group_by(Miseq_run) %>% 
-  select(cleaned.tibble) %>% 
-  unnest(cleaned.tibble) #Check how they look
-
-
 ```
-Add this step to the summary table we were creating
+<br>
 
+
+Add this step to the summary table we were creating to track sample / hash / read counts.
 ```{r summary.file.2}
 ASV.nested %>% 
   transmute( Summary.1 = map(cleaned.tibble, ~ how.many(ASVtable = .,round = "1.Jump"))) %>% 
@@ -223,17 +217,26 @@ ASV.nested %>%
   mutate(Summary   = map2(Summary, Summary.1, bind_rows)) %>%
   dplyr::select(-Summary.1) -> ASV.summary 
 ```
+<br>
+<br>
 
 ## Cleaning Process 2: **Discarding PCR replicates with low number of reads**
 
-We will fit the number of reads assigned to each sample to a normal distribution and discard those samples with a probability of 95% of not fitting in that distribution. The output would be a dataset with less samples and potentially less number of unique Hashes.
+We will fit the number of reads assigned to each sample to a normal distribution and discard those samples with a probability of `r pfit`% of not fitting in that distribution. 
 
+First, use the user-specified `pfit` to set a cutoff: 
+```{r}
+cutoff_prob <- (1-pfit)/2
+```
+<br>
+
+The output of this filtering would be a dataset with less samples and potentially less number of unique Hashes.
 ```{r fitting nReads per sample}
 
 ASV.nested %>% 
-  select(Miseq_run,cleaned.tibble) %>% 
+  select(MiSeqRun,cleaned.tibble) %>% 
   unnest(cleaned.tibble) %>% 
-  group_by(sample) %>%
+  group_by(Sample_name, sample_id) %>%
   summarise(tot = sum(nReads)) -> all.reps
 
 # Visualize
@@ -241,7 +244,7 @@ ASV.nested %>%
 all.reps %>%  
   pull(tot) -> reads.per.sample
 
-names(reads.per.sample) <- all.reps %>% pull(sample)  
+names(reads.per.sample) <- all.reps %>% pull(Sample_name)  
 
 normparams.reads <- MASS::fitdistr(reads.per.sample, "normal")$estimate
 
@@ -254,10 +257,10 @@ all.reps %>%
 
 outliers <- 
   all.reps %>% 
-  filter(prob < 0.075 & tot < normparams.reads[1])
+  filter(prob < cutoff_prob & tot < normparams.reads[1])
 
 ASV.nested %>% 
-  mutate(Step.1.low.reads = map (cleaned.tibble, ~ filter(.,!sample %in% outliers$sample) %>% ungroup)) -> ASV.nested
+  mutate(Step.1.low.reads = map (cleaned.tibble, ~ filter(.,!Sample_name %in% outliers$Sample_name) %>% ungroup)) -> ASV.nested
 
 ASV.nested %>% 
   transmute( Summary.1 = map(Step.1.low.reads, ~ how.many(ASVtable = .,round = "2.Low.nReads"))) %>% 
@@ -266,30 +269,28 @@ ASV.nested %>%
   dplyr::select(-Summary.1) -> ASV.summary 
 
 ```
-
-
+<br>
+<br>
 
 
 ## Cleaning Process 3: **Full clearance from Positive control influence**
 
-Removing the Hashes that belong to the positive controls. First, for each Hash that appeared in the positive controls, determine whether a sequence is a true positive or a true environment. For each Hash, we will calculate, maximum, mean and total number of reads in both positive and samples, and then we will use the following decission tree:
+Removing the Hashes that belong to the positive controls. First, for each Hash that appeared in the positive controls, determine whether a sequence is a true positive or a true environment. For each Hash, we will calculate, maximum, mean and total number of reads in both positive and samples, and then we will use the following decision tree:
 
   * If all three statistics are higher in one of the groups, we will label it either of Environmental or Positive control influence.
   
-  * If there are conflicting results, we will use the Hashes. to see if they belong to either the maximum abundance of a Hash is in a positive, then it is a positive, otherwise is a real sequence from the environment.
+  * If there are conflicting results, we will use the Hashes to see if they belong to either group. if the maximum abundance of a Hash is in a positive, then it is a positive, otherwise is a real sequence from the environment.
 
 
-Now, for each Hash in each set of positives controls, calculate the proportion of reads that were missasigned - they appeared somewhere they were not expected.
+Now, for each Hash in each set of positives controls, calculate the proportion of reads that were mis-assigned - they appeared somewhere in the samples they were not expected.
 We will divide that process in two: first . A second step would be to create a column named proportion switched, which states the proportion of reads from one Hash that jumped from the environment to a positive control or viceversa. The idea is that any presence below a threshold can be arguably belong to tag jumping.
 
 ```{r real or positive}
-
-
 ASV.table %>% 
   filter (Hash %in% good.order) %>%
-  group_by(sample) %>% 
+  group_by(Sample_name, sample_id) %>% 
   mutate(tot.reads = sum(nReads)) %>% 
-  group_by(Hash,sample) %>% 
+  group_by(Hash,Sample_name) %>% 
   mutate(prop = nReads/tot.reads) %>% 
   group_by(Hash, source) %>% 
   summarise (max.  = max(prop),
@@ -320,24 +321,30 @@ ASV.table %>%
                                    TRUE                 ~ "Kept")) %>% 
   filter(second.origin == "Discarded") %>% 
   full_join(Hashes.to.remove.step2) -> Hashes.to.remove.step2
-
-Hashes.to.remove.step2 %>% 
-  bind_rows(tibble(Hash = c("01204d587a3c3752f426f2f6d813c0ff2b80ec8b",
-                            "acebcd5c491bb273f3e4d615cafad649"))) -> Hashes.to.remove.step2
- 
-
 ```
+<br>
+
+There were 4 hashes marked for removal:
+```
+5ffae7e8304f8eec6ba8d087502e140904c0147
+2e46f9be10f6c3fe32646ff7213f9a80843c7e41
+3d2237a26590dba4ca8ff8b0470b0b470dc746e9
+ff5e108c96a673075a040151a2e3fc99e065a752
+```
+
+
 IN order to train DADA2 to better distinguish when positive control sequences have arrived in the environment, we will keep the sequences in a csv file
 
 
 ```{r ASVs from positives}
 
 Hashes.to.remove.step2 %>% 
-  left_join(Hash.key) %>% 
+  left_join(all.hashes) %>% 
   select(Hash, Sequence) %>% 
-  write_csv("../Output/Hashes.to.remove.csv")
+  write_csv(here(outdir,"Hashes.to.remove.csv"))
 
 ```
+<br>
 
 ### Remove the positive control hashes from the composition of the ASVs
 
@@ -346,21 +353,28 @@ Hashes.to.remove.step2 %>%
 ASV.nested %>% 
   mutate(Step2.tibble = map (Step.1.low.reads, ~ filter(.,!Hash %in% Hashes.to.remove.step2$Hash) %>% ungroup)) -> ASV.nested
 
-saveRDS(ASV.nested, file = "../Input/Cleaning.before.Occ.model")
+saveRDS(ASV.nested, file = here(outdir, "Cleaning.before.Occ.model"))
 
-ASV.nested <- readRDS(file ="../Input/Cleaning.before.Occ.model")
+ASV.nested <- readRDS(file =here(outdir, "Cleaning.before.Occ.model"))
 
 ASV.nested %>% 
   transmute( Summary.1 = map(Step2.tibble, ~ how.many(ASVtable = .,round = "3.Positives"))) %>% 
   left_join(ASV.summary) %>% 
   mutate(Summary   = map2(Summary, Summary.1, bind_rows)) %>%
   dplyr::select(-Summary.1) -> ASV.summary 
-
-ASV.summary %>% 
-  unnest()
-
-
 ```
+<br>
+
+Check on how many samples / hashes were filtered out:
+```{r}
+View(ASV.summary %>% 
+  unnest(cols = c(Summary)))
+```
+<br>
+
+No hashes were removed from the samples -- I guess that means that the hashes in the controls were only in the controls. 
+
+<br>
 <br>
 
 ## Cleaning Process 5: **Dissimilarity between PCR replicates**
@@ -368,21 +382,28 @@ ASV.summary %>%
 So, a second way of cleaning the dataset is to remove samples for which the dissimilarity between PCR replicates exceeds the normal distribution of dissimilarities.
 Sometimes the preparation of a PCR replicate goes wrong for a number of reasons - that leads to a particular PCR replicate to be substantially different to the other 2. In that case, we will remove the PCR replicate that has higher dissimilarity with the other two.
 
-The process starts by adding the biological information to the ASV table, then diving the dataset by their biological replicate. This will also remove any sample that is not included in the metadata, eg coming from a different project.
-
+The process starts by *adding the biological information to the ASV table*, then diving the dataset by their biological replicate. This will also remove any sample that is not included in the metadata, eg coming from a different project.
+** to do: change separate line to get "original sample" and "replicate" columns. 
 ```{r dissimilarity between PCR replicates}
 
+# ASV.nested %>% 
+#   select(Miseq_run, Step3.tibble) %>% 
+#   unnest(Step3.tibble) %>%
+#   separate(Sample_name, into = "original_sample", sep = "\\.", remove = F) -> cleaned.tibble
+
 ASV.nested %>% 
-  select(Miseq_run, Step3.tibble) %>% 
-  unnest(Step3.tibble) %>%
-  separate(sample, into = "original_sample", sep = "\\.", remove = F) -> cleaned.tibble
+  select(MiSeqRun, Step2.tibble) %>% 
+  unnest(Step2.tibble) %>%
+  separate(sample_id, into = c("sample_name_2","original_sample_site", "original_sample_num","replicate"), sep = "-", remove = F) %>%
+  unite(col="original_sample",c(original_sample_site,original_sample_num), sep="_",remove=TRUE) %>% dplyr::select(-`sample_name_2`) -> cleaned.tibble
 ```
 
 
 ```{r quick check}
 # do all samples have a name
-cleaned.tibble %>% 
-  filter (sample == "")
+# cleaned.tibble %>% 
+#   filter (sample == "")
+
 # do all of them have an original sample
 cleaned.tibble %>% 
   filter(original_sample == "")
@@ -392,137 +413,129 @@ cleaned.tibble %>%
 # How many samples, how many Hashes
 cleaned.tibble %>%
   ungroup %>% 
-  summarise(n_distinct(sample), # 770
-            n_distinct(Hash))   # 4571
+  summarise(n_distinct(Sample_name), # 90
+            n_distinct(Hash))   # 1677
 
 # Let's check the levels of replication
 
 cleaned.tibble %>% 
   group_by(original_sample) %>% 
-  summarise(nrep = n_distinct(sample)) %>% 
-  #filter (nrep == 2) # 13
+  summarise(nrep = n_distinct(Sample_name)) %>% 
+  #filter (nrep == 2) # 0
   filter (nrep == 1) # 0 
 ```
-Ok, so there are 13 samples for which we only have 2 PCR replicates1.   We will get rid of those with only 1, as we can't estimate the PCR bias there. THis is 
 
-```{r remove single replicates}
+
+If there are any samples for which we only have 1-2 PCR replicates, get rid of those.
+
+```{r remove single replicates, eval=FALSE}
 discard.1 <- cleaned.tibble %>% 
   group_by(original_sample) %>% 
-  mutate(nrep = n_distinct(sample)) %>% 
+  mutate(nrep = n_distinct(replicate)) %>% 
   #filter (nrep == 2) # 25
-  filter (nrep == 1) %>% 
-  distinct(sample) %>% pull(sample)
+  filter (nrep == 1 | nrep == 2) %>% 
+  distinct(Sample_name) %>% pull(Sample_name)
 
 cleaned.tibble %>% 
-  filter(!sample %in% discard.1) -> cleaned.tibble
+  filter(!Sample_name %in% discard.1) -> cleaned.tibble
 ```
+<br>
 
-Anyway, let's have a visual representation of the dissimilarities between PCR replicates, biological replicates and everything else.
-
+And now, let's have a visual representation of the dissimilarities between PCR replicates, biological replicates and everything else. This requires the custom function `tibble_to_matrix`, called above.
 ```{r lets do the PCR replication}
 cleaned.tibble %>%
-  group_by (sample) %>%
+  group_by (Sample_name, sample_id) %>%
   mutate (Tot = sum(nReads),
           Row.sums = nReads / Tot) %>% 
   group_by (Hash) %>%
   mutate (Colmax = max (Row.sums),
           Normalized.reads = Row.sums / Colmax) -> cleaned.tibble
-tibble_to_matrix <- function (tb) {
-  
-  tb %>% 
-    group_by(sample, Hash) %>% 
-    summarise(nReads = sum(Normalized.reads)) %>% 
-    spread ( key = "Hash", value = "nReads", fill = 0) -> matrix_1
-    samples <- pull (matrix_1, sample)
-    matrix_1 %>% 
-      ungroup() %>% 
-    dplyr::select ( - sample) -> matrix_1
-    data.matrix(matrix_1) -> matrix_1
-    dimnames(matrix_1)[[1]] <- samples
-    vegdist(matrix_1) -> matrix_1
-}
 
 tibble_to_matrix (cleaned.tibble) -> all.distances.full
 
 # Do all samples have a name?
 summary(is.na(names(all.distances.full))) # Yes they do
 ```
+<br>
 
 Let's make the pairwise distances a long table
 ```{r}
-
 as_tibble(subset(melt(as.matrix(all.distances.full)))) -> all.distances.melted
 
-# Any mjor screw ups
+# Any mjor screw ups? No
 summary(is.na(all.distances.melted$value))
+```
+<br>
 
-# Now, create a three variables for all distances, they could be PCR replicates, BIOL replicates, or from the same site
+Join the distances dataframe to the metadata, so that distances can be grouped as PCR replicates, Biological replicates, or from the same site.
+```{r}
+all.distances.melted.meta <- all.distances.melted %>%
+  left_join(cleaned.tibble %>% 
+              ungroup() %>%
+              dplyr::select(Sample_name,original_sample) %>%
+              distinct(), by=c("Var1"="Sample_name")) %>%
+  separate(original_sample, into=c("Site1","Bio1"), remove=FALSE) %>%
+  rename("Sample_name1"=Var1, "Site_Bio1"=original_sample) %>%
+   left_join(cleaned.tibble %>% 
+              ungroup() %>%
+              dplyr::select(Sample_name,original_sample) %>%
+              distinct(), by=c("Var2"="Sample_name")) %>%
+  separate(original_sample, into=c("Site2","Bio2"), remove=FALSE) %>%
+  rename("Sample_name2"=Var2, "Site_Bio2"=original_sample)
+```
+<br>
 
-all.distances.melted %>%
-  separate (Var1, into = "Bottle1", sep = "\\.", remove = FALSE) %>%
-  separate (Bottle1, into = "Site1", remove = FALSE) %>%
-  separate (Var2, into ="Bottle2", sep = "\\.", remove = FALSE) %>%
-  separate (Bottle2, into = "Site2", remove = FALSE) %>%
-  mutate ( Day.site1 = str_sub(Bottle1, start = 1, end = -2),
-           Day.site2 = str_sub(Bottle2, start = 1, end = -2),
-           Distance.type = case_when( Bottle1 == Bottle2 ~ "PCR.replicates",
-                                      Day.site1 == Day.site2 ~ "Biol.replicates",
+Now, create a three variables for all distances, they could be PCR replicates, BIOL replicates, or from the same site
+```{r}
+all.distances.to.plot <- all.distances.melted.meta %>%
+  mutate ( Distance.type = case_when( Site_Bio1 == Site_Bio2 ~ "PCR.replicates",
                                       Site1 == Site2 ~ "Same Site",
                                       TRUE ~ "Different Site"
                                      )) %>%
-  dplyr::select(Sample1 = Var1, Sample2 = Var2 , value , Distance.type) %>%
-  filter (Sample1 != Sample2) -> all.distances.to.plot
+  dplyr::select(Sample_name1, Sample_name2 , value , Distance.type) %>%
+  filter (Sample_name1 != Sample_name2)
 
 # Checking all went well
 
 sapply(all.distances.to.plot, function(x) summary(is.na(x))) # good boi
+```
 
-all.distances.to.plot$Distance.type <- all.distances.to.plot$Distance.type  %>% fct_relevel( "PCR.replicates", "Biol.replicates", "Same Site")
+```{r}
+all.distances.to.plot$Distance.type <- all.distances.to.plot$Distance.type  %>% fct_relevel( "PCR.replicates", "Same Site","Different Site")
 
   ggplot (all.distances.to.plot ) +
   geom_histogram (aes (fill = Distance.type, x = value, after_stat(ndensity)), position = "dodge",  alpha = 0.9, bins = 50) +
   facet_wrap( ~ Distance.type) +
   labs (x = "Pairwise dissimilarity", y = "density" ,
         Distance.type = "Distance") +
+    ggtitle ("Dungeness instars run 1") +
     guides (fill = "none")
-ggsave("visual.anova.png", dpi = "retina")
+ggsave(here(outdir,"visual.anova.png"), dpi = "retina")
 ```
+<br>
 
-So our the distribution of dissimilarities is as we expected : lowest in technical replicates, then biological replicates and higher across our study system. Now let's see if there are any technical replicates that should be discarded due to their higher dissimilarity. We will calculate the distance from each PCR replicate to their group centroid, fit those distances to a normal distribution and discard values that are too high
+So our the distribution of dissimilarities is mostly we expected : lowest in technical replicates, then from individuals at the same site, and higher across our study system. It's interesting that distances between individuals at the same site and different sites are actually pretty similar. 
 
+Now let's see if there are any technical replicates that should be discarded due to their higher dissimilarity. We will calculate the distance from each PCR replicate to their group centroid, fit those distances to a normal distribution and discard values that are too high.
+
+First, calculate distances
 ```{r}
-# Instead of chosing based on the pw distances, we can do a similar thing using the distance to centroid
-
-# Find out which samples have only two pcr replicates
-cleaned.tibble %>% dplyr::select(-Miseq_run) %>% group_by(original_sample) %>% nest() -> nested.cleaning
+cleaned.tibble %>% dplyr::select(-MiSeqRun) %>% group_by(original_sample) %>% nest() -> nested.cleaning
 
 nested.cleaning %>% 
   mutate(matrix = map(data, tibble_to_matrix)) -> nested.cleaning
 nested.cleaning %>% mutate(ncomparisons = map(matrix, length)) -> nested.cleaning
- 
-  
-dist_to_centroid <- function (x,y) {
-  biol <- rep(y, length(x))
-  
-  if (length(biol) == 1) {
-    output = rep(x[1]/2,2)
-    names(output) <- attr(x, "Labels")
-  }else{ 
-    
-  dispersion <- betadisper(x, group = biol)
-  output = dispersion$distances
-  }
-  output
-    }
-
 
 nested.cleaning <- nested.cleaning %>% mutate (distances = map2(matrix, original_sample, dist_to_centroid))
 
 unlist (nested.cleaning$distances) -> all_distances
-
+```
+```{r echo=FALSE}
 hist(all_distances)
 ```
+<br>
 
+Then fit a normal distribution and identify outliers. *The outlier distribution is severely skewed, so I'm not sure a normal distribution is the correct one to use*.
 ```{r}
 #normparams <- fitdistr(all_pairwise_distances, "normal")$estimate
 normparams <- MASS::fitdistr(all_distances, "normal")$estimate                                      
@@ -531,54 +544,23 @@ probs <- pnorm(all_distances, normparams[1], normparams[2])
 outliers <- which(probs>0.95)
 
 discard <-names (all_distances[outliers])
-
-
-to_write_discarded <- as.data.frame(all_distances[outliers]) %>% rownames_to_column("sample") %>% dplyr::select(sample, 
-                                                                                                     distance_to_centroid = 2)
-to_write_discarded <- to_write_discarded %>% bind_rows(tibble(sample = discard.1,
-                                                              distance_to_centroid = NA))
-write_csv(to_write_discarded ,"../Output/discared_samples.csv")
-
-# Who passes this filter
-
-all_distances %>%
-  as.tibble() %>% 
-  mutate(sample = names(all_distances)) %>% 
-  filter(!sample %in% to_write_discarded$sample) %>% 
-  separate(sample, into = "event", sep = -3) %>% 
-  group_by(event) %>% 
-  summarise(cases = n()) %>% 
-  separate(event, into = c("Site", "Date"), remove = F) %>% 
-  filter(Date != "201703") %>% 
-  mutate(Date = lubridate::ymd(paste0(Date, "01"))) %>% 
-  mutate(Area = case_when(Site %in% c("CP", "LK", "FH") ~ "San Juan Island",
-                          TRUE                          ~ "Hood Canal"),
-         Site = fct_recode(Site, "Cattle Point" = "CP",
-                           "Lime Kiln" = "LK",
-                           "Friday Harbor" = "FH",
-                           "Twanoh" = "TW",
-                           "Potlatch"= "PO",
-                           "Lilliwaup" = "LL",
-                           "Triton Cove"= "TR",
-                           "Salsbury Park"= "SA")) -> Coverage.dataset 
-
-Coverage.dataset %>% 
-  ggplot()+
-  geom_raster(aes(x= Date, y = Site, fill = cases))+
-  geom_text(aes(x= Date, y = Site, label = cases)) +
-  facet_wrap(~Area, ncol = 1, scales = "free_y")
-  
-  
-  
-  
+print(discard)
 ```
 
+Write out the discarded samples. *I don't have any*
+```{r}
+to_write_discarded <- as.data.frame(all_distances[outliers]) %>% rownames_to_column("Sample_name") %>% dplyr::select(Sample_name, 
+                                                                                                     distance_to_centroid = 2)
+to_write_discarded <- to_write_discarded %>% bind_rows(tibble(Sample_name = discard,
+                                                              distance_to_centroid = NA))
+write_csv(to_write_discarded ,here(outdir,"discarded_samples.csv"))
+```
+<br>
+
 Finally, let's remove these samples from the dataset
-
 ```{r actual cleaning}
-
 ASV.nested %>% 
-  mutate(Step4.tibble = map (Step3.tibble,  ~ filter(.,! sample %in% to_write_discarded$sample))) -> ASV.nested
+  mutate(Step4.tibble = map (Step2.tibble,  ~ filter(.,! Sample_name %in% to_write_discarded$sample))) -> ASV.nested
 
 ASV.nested %>% 
   transmute(Summary.1 = map(Step4.tibble, ~ how.many(ASVtable = .,round = "5.PCR.dissimilarity"))) %>% 
@@ -593,9 +575,8 @@ ASV.nested %>%
 We will export the final cleaned table with four columns (Miseq_run, sample, Hash, nReads)
 
 ```{r}
-
 ASV.nested %>% 
-  select(Miseq_run, Step4.tibble) %>% 
+  select(MiSeqRun, Step4.tibble) %>% 
   unnest(Step4.tibble) %>% 
   mutate(nReads = as.integer(nReads)) %>% 
   write_csv(here(outdir,"ASV_table_clean.csv"))
@@ -604,33 +585,60 @@ ASV.nested %>%
   select(Step4.tibble) %>% 
   unnest(Step4.tibble) %>% 
   distinct(Hash) %>% 
-  left_join(Hash.key) %>% 
+  left_join(all.hashes) %>% 
   write_csv(here(outdir,"Hash_Key_clean.csv"))
 
 
 
-input <- read_csv(here(dada2_dir,"Hash_key.csv"))
-output <- here(outdir,"Hash_Key_clean.fasta")
+input <- read_csv(here(dada2_dir,"Hash_key_clean.csv"))
 
 write.fasta (sequences = as.list(input$Sequence),
              names = as.list(input$Hash),
-             file.out = output)
+             file.out = here(outdir,"Hash_Key_clean.fasta"))
 
 
 ```
+
+
+**For diet analysis**, we might expect a high proportion of prey items to be rare in the data, assuming the primer has a strong affinity for the predator DNA. This means a high proportion of "drop-outs" across PCR replicates, and therefore higher distance values across replicates. To be safe, let's write out the hashes from Step 2. We don't need to write out the hash key again.
+```{r}
+ASV.nested %>% 
+  select(MiSeqRun, Step2.tibble) %>% 
+  unnest(Step2.tibble) %>% 
+  mutate(nReads = as.integer(nReads)) %>% 
+  write_csv(here(outdir,"ASV_table_step2clean.csv"))
+
+ASV.nested %>% 
+  select(Step2.tibble) %>% 
+  unnest(Step2.tibble) %>%
+  distinct(Hash) %>% 
+  left_join(all.hashes) %>% 
+  write_csv(here(outdir,"Hash_Key_step2clean.csv"))
+
+input <- read_csv(here(dada2_dir,"Hash_key_step2clean.csv"))
+
+write.fasta (sequences = as.list(input$Sequence),
+             names = as.list(input$Hash),
+             file.out = here(outdir,"Hash_Key_step2clean.fasta"))
+```
+
+<br>
+
 
 ## Summary of the cleanup process
 
 ```{r last graph}
 
 ASV.summary %>% 
-  unnest() %>% 
+  unnest(cols=c(Summary)) %>% 
   ggplot(aes(x=Stage, y=number, fill = Stat))+
-    geom_line(aes(group = Miseq_run, color = Miseq_run))+
+    geom_line(aes(group = MiSeqRun, color = MiSeqRun))+
   facet_grid(Stat~., scales = "free")+
-  theme(axis.text.x = element_text(angle = 45, hjust =1))#,
+  theme(axis.text.x = element_text(angle = 45, hjust =1),
+        legend.position="none")
                                  
 
+ggsave(here(outdir,"denoising_reads_per_step.png"), dpi = "retina")
 
 ```
 
@@ -639,22 +647,37 @@ ASV.summary %>%
 ```{r}
 # Vector with desired order
 
-order.Sites <- c("Salsbury Park", "Triton Cove", "Lilliwaup", "Potlatch", "Twanoh", "Cattle Point", "Lime Kiln", "Friday Harbor")
+order.Sites <- c("CLAY", "KAY", "MARPT")
 
-ASV.nested %>% 
-  select(Miseq_run, Step4.tibble) %>% 
+filtered.ASV <- ASV.nested %>% 
+  select(Step4.tibble) %>% 
   unnest(Step4.tibble) %>% 
-  mutate(nReads = as.integer(nReads)) %>% 
-  group_by(sample) %>% 
-  summarise (nReads = sum(nReads)) %>% 
-  separate (sample, into = "event", sep = -3) -> midstep
+  separate(sample_id, into = c("sample_name_y","site", "sample_num","replicate"), sep = "-", remove = F) %>%
+  unite(col="sample",c(site,sample_num), sep="_",remove=FALSE) %>% dplyr::select(-`sample_name_y`) %>%
+  mutate(nReads = as.integer(nReads)) %>%
+  group_by(sample, site) %>%
+  summarise (nReads = sum(nReads))
     
 
-# As a table
-midstep %>% 
-  group_by(event) %>% 
+filtered.ASV %>% 
+  mutate(site = factor(site, levels = order.Sites)) %>% 
+  ggplot(aes(x = site, 
+             y = nReads/1000)) +
+  geom_boxplot(aes(group=site),outlier.alpha = 0.5) +
+  geom_point() +
+  labs(y = "# reads (x1000)", x = "") +
+  theme_bw() +
+  theme(legend.position = c(0.6, 0.2)) 
+ggsave(here(outdir,"denoising_reads_by_site.png"))
+```
+<br>
+
+The graph can also be written out as a table:
+```{r eval=FALSE}
+filtered.ASV %>% 
+  group_by(site) %>% 
   summarise (mean = mean(nReads), max = max(nReads), min = min(nReads), sd = sd(nReads)) %>% 
-transmute (event, data = paste0("(", round(mean,0), " +- ", round(sd,0), ")")) %>% 
+transmute (site, data = paste0("(", round(mean,0), " +- ", round(sd,0), ")")) %>% 
   right_join(Coverage.dataset) %>% 
   mutate( data = paste0(cases, " ", data)) %>% 
   arrange(Date) %>% 
@@ -666,30 +689,4 @@ transmute (event, data = paste0("(", round(mean,0), " +- ", round(sd,0), ")")) %
   kableExtra::kable() %>% 
   kableExtra::kable_styling() %>% 
   kableExtra::collapse_rows(1, valign = "top") 
-
-# As a graph
-midstep %>% 
-  right_join(Coverage.dataset) %>% 
-  group_by(event) %>% 
-  mutate(mean = mean(nReads),
-         sum = sum(nReads)) %>% 
-  mutate(Site = factor(Site, levels = order.Sites)) %>% 
-  ggplot(aes(x = Date, 
-             y = nReads)) +
-  geom_boxplot(aes(group=Date),outlier.alpha = 0.5) +
-  geom_point(aes(y = sum,
-                 size = cases,
-                 color = Area)) +
-  scale_y_continuous(labels = scales::comma) +
-  scale_x_date(labels = function(x){paste(lubridate::month(x, label = T),
-                      lubridate::year(x),
-                      sep= "'")}) +
-  labs(y = "#reads", x = "") +
-  
-  facet_wrap(~Site , nrow = 5,dir = "v", drop = T) +
-  theme_minimal() +
-  theme(axis.title.y = element_text(angle = 0,vjust = 0.5),
-        legend.position = c(0.6, 0.2)) 
-
 ```
-
