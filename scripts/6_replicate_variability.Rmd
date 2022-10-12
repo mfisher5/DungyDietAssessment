@@ -1,0 +1,209 @@
+---
+title: "Technical Replicates (part 1)"
+author: "M Fisher"
+date: '2022-10-11'
+output: html_document
+---
+# Description
+
+This script is adapted from [comm_var_braycurtis.Rmd](https://github.com/jdduprey/PCR.variation/blob/main/code/COMM_level/comm_var_braycurtis.Rmd), written by Helen Casendino, Joe Duprey, Kai Vennemann. 
+
+It "creates distributions of variability among technical (PCR) and biological (crab) replicates at the community level. As a metric for community variability, we apply the Bray-Curtis dissimilarity (BCD) from the vegdist() function in the vegan library.
+
+For the biological replicate level (variation between crabs within sampling event), there is no averaging across PCRs; i.e., we are collecting pairwise BC distances among A.1, A.2, A.3, B.1, B.2, etc. To avoid tabulating intra-crab PCR variation when looking at the bio replicate level, we will only harvest pairwise distances between communities in *different* crabs, i.e., take the pairwise distance between A.1 and B.1, B.2, B.3, but not between A.1 and A.2, A.3."
+
+Part 1 looks at differences between technical replicates from the dataset.
+
+
+# Set up
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This script requires the following packages...
+```{r dependencies, include=FALSE}
+library(tidyverse)
+library(ggrepel)
+library(here)
+library(magrittr)
+library(vegan)
+library(stringi)
+library(cowplot)
+```
+<br>
+
+And calls these custom functions.
+```{r}
+source(here('R','cvt_to_PCR_props.R'))
+source(here('R','find_PCR_BCDs.R'))
+source(here('R','find_bottle_BCDs.R'))
+source(here('R','find_pairwise_BCDs.R'))
+```
+<br>
+
+Specify user directories
+```{r}
+indir    <- 'data/dada2/run_2'
+outdir   <- 'results/run_2'
+```
+<br>
+
+What is the location / name of the metadata file for this sequencing run?
+```{r}
+run_metadat_file <- 'data/EGC_Willapa_Run2_samples.csv'
+```
+<br>
+
+And the run number and the marker
+```{r}
+run.num <- 2
+marker <- 'BF3'
+```
+<br>
+
+# Read in data
+
+The data should be in a .csv file with the following columns: `seq_run`,`site`,`bio`,`tech`,`hash`,`reads`. "Bio" refers to the biological replicate (crabs), and "tech" refers to the PCR technical replicate. 
+
+This file can be created using the ASV table output from DADA2, the DADA2 metadata file, and the sampling metadata. 
+```{r read in asvs1, include=FALSE}
+asv <- read_csv(here(indir, 'ASV_table.csv'))
+dada_metadat <- read_csv(here(indir, 'dada2.metadata.csv'))
+metadat <- read_csv(here(run_metadat_file))
+```
+<br>
+
+Format and combine the metadata info
+```{r read in metadat1, include=FALSE}
+dada_metadat %<>% dplyr::select(Sample_name, file1) %>%
+  # from the file name, get the sample ID
+  mutate(SampleID=str_remove(file1,"_L001_R1_001.fastq.fastq")) %>%
+  mutate(SampleID=str_remove(SampleID,paste0("Locus_",marker,"_"))) %>%
+  mutate(SampleID=ifelse(Sample_name < 10, str_sub(SampleID,start=1, end=-4), str_sub(SampleID,start=1, end=-5))) %>%
+  mutate(type=ifelse(grepl("Positive", SampleID) | grepl("PCRNegative",SampleID) | grepl("ENegative",SampleID), "Control","Sample")) %>%
+  # from the sample ID, get the site, crab ID (bio), and replicate (tech)=
+  separate(col=SampleID, into=c("bio","tech"), sep=-1,remove=FALSE) %>%
+  mutate(tech=as.numeric(as.factor(tolower(tech)))) %>%
+  mutate(bio=ifelse(type=="Sample",str_sub(bio,start=1,end=-2),SampleID),
+         tech=ifelse(type=="Sample",tech,NA)) %>%
+  dplyr::select(-file1)
+
+
+metadat <- left_join(metadat,dada_metadat,by=c("sample_id"="bio")) %>%
+  rename("bio"=sample_id,"site"=site_month)
+```
+<br>
+
+Add the ASV information
+```{r make dat1}
+dat <- left_join(asv,metadat,by=c("Sample_name","sample_id"="SampleID")) %>%
+  # remove controls
+  filter(!is.na(bio)) %>%
+  # format data
+  mutate(seq_run=run.num) %>%
+  rename(hash=Hash, reads=nReads) %>%
+  dplyr::select(seq_run,site,bio,tech,hash,reads)
+```
+<br>
+
+Some QC: check to make sure that each of the biological replicates has 2 or more PCR replicates. If not, remove that sample.
+```{r echo=FALSE}
+checkdat <- dat %>% group_by(bio) %>% summarise(nPCR=length(unique(tech)))
+if(any(checkdat$nPCR < 2)){
+  removedat <- filter(checkdat,nPCR<2)
+  message("removing the following sample(s) without PCR replicates: ", paste0(removedat$bio,collapse=","))
+  dat %<>% filter(!(bio %in% removedat$bio))
+  checkdat <- dat %>% group_by(bio) %>% summarise(nPCR=length(unique(tech)))
+  message("any remaining samples to remove? ", paste0(any(checkdat$nPCR < 2)))
+} else{"all biological replicates have at least two or more PCR replicates. data ready for processing."}
+```
+<br>
+
+# Variability across samples
+
+Among *all* replicates of *all* samples.
+```{r find_Pairwise_BCDs1}
+PCR_output <- find_pairwise_BCDs(dat)
+PCR_output[[2]]
+```
+<br>
+
+Use the pairwise Bray-Curtis distances to complete an NMDS
+```{r}
+pair.dist <- PCR_output[[1]]
+run.mat <- PCR_output[[3]]
+```
+<br>
+
+```{r}
+run.nmds <- metaMDS(comm=run.mat,autotransform = FALSE, distance="bray", weakties=TRUE,maxit=1000, try=40, trymax=400)
+```
+<br>
+
+Format NMDS scores
+```{r}
+#extract NMDS scores (x and y coordinates)
+run.scores = as.data.frame(scores(run.nmds)$sites)
+#add columns to data frame 
+run.scores$Sample = rownames(run.scores)
+run.scores <- left_join(run.scores,dat %>% mutate(Sample=paste0(bio,"_",tech)) %>%
+                                                    dplyr::select(Sample,site,bio,tech))
+run.scores <- run.scores %>% distinct()
+```
+<br>
+
+plot with ggplot
+```{r fig.height=8, fig.width=10}
+ggplot(run.scores, aes(x = NMDS1, y = NMDS2)) + 
+    geom_point(size = 4, aes(col = site))+ 
+  geom_text_repel(aes(label=Sample), size=3, col="black", max.overlaps=20) +
+    labs(x = "NMDS1", colour = "Group", y = "NMDS2", shape = "Type")  + 
+  theme_bw()
+```
+<br>
+
+
+## Variation among technical replicates.
+
+The find_PCR_BCDs function computes the pairwise Bray-Curtis dissimilarities (BCDs) among technical replicates within each biological sample, stores all obtained values in a numeric vector, and plots those values in a histogram. The function allows the user to specify which sequence runs should be analyzed (by default, all will be used), hence the seq_runs vector parameter. Note that we first convert reads into proportions (by PCR) before calculating BCDs.
+
+```{r find_PCR_BCDs1}
+PCR_output <- find_PCR_BCDs(dat)
+```
+<br>
+
+```{r echo=FALSE, fig.width=7,fig.height=4}
+PCR_output[[2]]
+```
+<br>
+
+
+For my data, I want to know which BCDs are associated with which sample (bio) and site. I've adapted the function above to allow this:
+```{r}
+pairwise.dat <- PCR_output[[3]]
+colnames(pairwise.dat)
+```
+<br>
+
+```{r echo=FALSE, fig.width=7,fig.height=4}
+ggplot(data=pairwise.dat, aes(x=bio, y=bcd, col=site)) +
+    geom_point(shape=8) +
+  stat_summary(geom = "point",fun = "mean",col = "black",shape=21,size=3) +
+    labs(x="Samples", y="Pairwise Bray-Curtis Dissimilarities", title=paste0("PCR Variation, Run ", run.num)) +
+    theme_bw() + theme(axis.text.x=element_text(angle=90,vjust=0.5,hjust=1))
+```
+<br>
+<br>
+
+
+## Step 3: Quantify variation among biological replicates.
+
+Here we create a function that computes the pairwise Bray-Curtis dissimilarities among replicates from separate bottles (but from same sampling event). We do not average across PCRs. Note that we first convert reads into proportions (by PCR) before calculating BCDs.
+
+```{r eval=FALSE, find_bottle_BCDs1}
+bottle_output <- find_bottle_BCDs(dat.bf3)
+```
+<br>
+<br>
+
