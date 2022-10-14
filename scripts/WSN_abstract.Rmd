@@ -1,0 +1,345 @@
+---
+title: "Analysis for WSN abstract"
+author: "M Fisher"
+date: '2022-10-11'
+output: 
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+# Description
+
+Summarize the following from the sequencing run:
+
+1. Prey diversity:
+  a. alpha diversity - what proportion of reads were identified down to genus or species? 
+  b. beta diversity - What was the unique number of taxa identified per site/month? per site?
+  
+2. Prey identification:
+  a. what proportion of crab from each site had eaten a given phylum / class?
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(ggrepel)
+library(cowplot)
+library(vegan)
+library(magrittr)
+
+# User inputs
+indir   <- 'data/blast'
+run.num <- 1
+marker  <- 'lerayXT'
+```
+```{r data, include=FALSE}
+dat <- read_csv(here(indir, 'lerayXT_r1_sample_taxonomy_filtered.csv'))
+
+dat %<>% mutate(Site=ifelse(Site=="KAY" & Sample_num > 18, "KAY-shell",Site))
+```
+<br>
+
+For this script, I'm going to remove identifications that with too little taxonomic depth (information at family or below is missing), and IDs that may have made it through filtering (rank is specific but all other taxonomic info is missing)
+```{r echo=TRUE}
+dat.filter <- dat %>%
+  filter (rank %in% c("family","species","genus")) %>%
+  filter (!(is.na(phylum) & is.na(class) & is.na(family) & is.na(order) & is.na(genus)))
+```
+<br>
+
+And let's check the number of crab / site with 1,2 and 3 replicates retained.
+```{r}
+dat.filter %>%
+  group_by(Site) %>% summarise(`Crab count`=length(unique(crab_id)))
+```
+<br>
+```{r}
+tmpdat <- dat.filter %>%
+  group_by(Site, crab_id) %>% summarise(nreps=length(unique(Replicate)),.groups = "drop")
+with(tmpdat, table(Site,nreps))
+```
+<br>
+Good, most crab have all three replicates retained after filtering.
+
+<br>
+<br>
+
+# Prey Diversity
+
+### Alpha div
+
+What is the species richness ($\alpha$ diversity) at each site, for **species?** Richness per crab is simply the species richness / total crab from site.
+```{r}
+prey.freq.site <- dat.filter %>%
+  filter(rank=="species") %>%
+  group_by(Site) %>%
+  summarise(ncrab=length(unique(crab_id)),
+            richness=length(unique(species)),
+            richness.per.crab=richness/ncrab)
+prey.freq.site
+```
+
+<br>
+
+
+What is the species richness ($\alpha$ diversity) at each site, for **genus?**
+```{r}
+dat.filter %>%
+  filter(rank %in% c("genus","species")) %>%
+  group_by(Site) %>%
+  summarise(ncrab=length(unique(crab_id)),
+            richness=length(unique(genus)),
+            richness.per.crab=richness/ncrab)
+```
+
+<br>
+
+### Beta div
+
+What is the species richness ($\beta$ diversity) for species? (the ratio between regional and local species diversity)
+Note that for this sequencing run only, I include *Hemigrapsus sp* and *Mya sp* to species level. 
+```{r}
+prey.sp.site.mat <- dat.filter %>%
+  filter(rank=="species") %>%
+  dplyr::select(Site, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="Site", names_from="taxon",values_from="presence", values_fill=0)
+
+betadiver(prey.sp.site.mat, method="w")
+prey.sp.site.mat$Site
+
+```
+The greater the similarity in community composition between multiple communities, the lower the value of β-diversity for that set of communities.
+
+Beta diversity is greater between distant sites (Kayak Point v. Clayton Beach v. March Point) than it is between neighboring sites (Kayak Point eelgrass v. shell).
+
+<br>
+
+
+### nMDS
+
+```{r}
+crab.sp.mat <- dat.filter %>%
+  filter(rank=="species") %>%
+  dplyr::select(crab_id, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="crab_id", names_from="taxon",values_from="presence", values_fill=0)
+crabs <- crab.sp.mat$crab_id
+crab.sp.mat <- as.matrix(crab.sp.mat %>% dplyr::select(-crab_id))
+rownames(crab.sp.mat) <- crabs
+
+z <- metaMDS(comm=crab.sp.mat, autotransform=FALSE,distance="bray",k=2,maxit=1000,try=40,trymax=100)
+```
+<br>
+
+```{r}
+stressplot(z)
+```
+<br>
+
+Disclaimer that **the stress is at 0.2, which is potentially misleading**.
+
+
+```{r}
+#extract NMDS scores (x and y coordinates)
+z.scores = as.data.frame(scores(z)$sites)
+#add columns to data frame 
+z.scores$Sample = rownames(z.scores)
+z.scores <- left_join(z.scores,dat.filter %>% dplyr::select(crab_id,Site),by=c("Sample"="crab_id"))
+z.scores <- z.scores %>% distinct()
+```
+```{r fig.height=5, fig.width=8}
+ggplot(z.scores, aes(x = NMDS1, y = NMDS2)) + 
+    geom_point(size = 4, aes(col = Site))+ 
+  geom_text_repel(aes(label=Sample), size=3, col="black", max.overlaps=20) +
+    labs(x = "NMDS1", colour = "Group", y = "NMDS2", shape = "Type")  + 
+  theme_bw()
+```
+
+lol what a mess.
+<br>
+
+
+# Prey Identification
+
+## Overall
+
+```{r}
+taxa_summary <- dat.filter %>%
+  mutate(total_reads=sum(dat.filter$nReads),
+         total_crab=length(unique((dat.filter$crab_id)))) %>%
+  group_by(taxon, rank,class,phylum) %>% 
+  summarise(n_crab=length(unique(crab_id)),
+            prop_crab=n_crab/total_crab,
+            n_reads=sum(nReads),
+            prop_reads=n_reads/total_reads) %>%
+  distinct() %>% arrange(n_crab)
+```
+I've removed the species that only showed up in one crab. That's a total of `r length(unique(taxa_summary %>% filter(n_crab==1) %>% pull(taxon)))` unique taxa.
+
+```{r fig.height=8,fig.width=9}
+plotdat <- taxa_summary %>%
+  filter(n_crab > 1) %>%
+  dplyr::select(-prop_crab,-n_reads) %>%
+  arrange(n_crab) %>%    # First sort by val. This sort the dataframe but NOT the factor levels
+  mutate(taxon=factor(taxon, levels=taxon))
+plotdat %>%
+  pivot_longer(cols=c(n_crab,prop_reads),names_to="metric",values_to="value") %>%
+  mutate(metric=ifelse(metric=="n_crab","Crab Count","Prop Sequence Reads")) %>%
+  ggplot(aes(y=value,x=factor(taxon, levels=plotdat$taxon))) +
+  facet_grid(cols=vars(metric),scales="free") +
+  geom_col(aes(fill=rank)) +
+  coord_flip() + theme_bw() + theme(axis.title=element_blank(),
+                                    strip.text=element_text(size=12),
+                                    axis.text.x=element_text(size=12),
+                                    axis.text.y=element_text(size=10))
+```
+```{r fig.height=5, fig.width=9}
+plot1 <- dat.filter %>%
+  group_by(phylum) %>%
+  summarise(n_crab=length(unique(crab_id)),
+            n_taxon=length(unique(taxon))) %>%
+  ggplot(aes(y=n_taxon,x=n_crab, col=phylum)) +
+  geom_point() +
+  geom_text_repel(aes(label=phylum), size=3, col="black", max.overlaps=30) +
+  labs(x="Number of crab",y="Number unique taxa") +
+  theme_bw() + theme(axis.text.x=element_text(size=10),
+                                    axis.text.y=element_text(size=10),
+                     legend.position="none")
+plot2 <- dat.filter %>%
+  filter(rank=="species") %>%
+  group_by(phylum) %>%
+  summarise(n_crab=length(unique(crab_id)),
+            n_taxon=length(unique(taxon))) %>%
+  ggplot(aes(y=n_taxon,x=n_crab, col=phylum)) +
+  geom_point() +
+  geom_text_repel(aes(label=phylum), size=3, col="black", max.overlaps=30) +
+  labs(x="Number of crab",y="Number unique species") +
+  theme_bw() + theme(axis.text.x=element_text(size=10),
+                                    axis.text.y=element_text(size=10),
+                     legend.position="none")
+plot_grid(plot1,plot2,ncol=2)
+```
+<br>
+
+
+save this summary
+```{r eval=FALSE, echo=TRUE}
+write_csv(taxa_summary,here(indir, 'lerayXT_r1_taxonomy_summary.csv'))
+```
+<br>
+<br>
+
+## By site
+```{r}
+site.totals <- dat.filter %>% group_by(Site) %>% 
+  summarise(total_reads=sum(nReads),
+         total_crab=length(unique(crab_id)))
+taxa_summary_bysite <- dat.filter %>%
+  group_by(taxon, rank, Site) %>% 
+  summarise(n_crab=length(unique(crab_id)),
+            n_reads=sum(nReads)) %>%
+  left_join(site.totals,by="Site") %>%
+  mutate(prop_crab=n_crab/total_crab,
+         prop_reads=n_reads/total_reads) %>%
+  distinct() %>% arrange(n_crab)
+```
+```{r fig.height=7,fig.width=9}
+plotdat <- taxa_summary_bysite %>%
+  filter(n_crab > 1) %>%
+  dplyr::select(-n_crab,-n_reads) %>%
+  arrange(prop_crab) %>%    # First sort by val. This sort the dataframe but NOT the factor levels
+  mutate(taxon=factor(taxon, levels=unique(taxon)))
+plotdat %>%
+  ggplot(aes(y=prop_crab,x=factor(taxon, levels=unique(plotdat$taxon)))) +
+  facet_grid(cols=vars(Site),scales="free") +
+  geom_col(aes(fill=rank)) +
+  labs(x="Prop Crab per Site") +
+  ylim(c(0,1)) +
+  coord_flip() + theme_bw() + theme(axis.title=element_blank(),
+                                    strip.text=element_text(size=12),
+                                    axis.text.x=element_text(size=12),
+                                    axis.text.y=element_text(size=10))
+```
+<br>
+
+save this summary
+```{r eval=FALSE, echo=TRUE}
+write_csv(taxa_summary_bysite,here(indir, 'lerayXT_r1_taxonomy_summary_by_site.csv'))
+```
+<br>
+
+What about at higher orders of taxonomy? For only those identifications to species.
+
+```{r}
+site.totals.sp <- dat.filter %>% filter(rank=="species") %>%
+  group_by(Site) %>% 
+  summarise(total_reads=sum(nReads),
+         total_crab=length(unique(crab_id)))
+class_summary_bysite <- dat.filter %>%
+  filter(rank=="species") %>%
+  group_by(class, Site) %>% 
+  summarise(n_crab=length(unique(crab_id)),
+            n_reads=sum(nReads)) %>%
+  left_join(site.totals.sp,by="Site") %>%
+  mutate(prop_crab=n_crab/total_crab,
+         prop_reads=n_reads/total_reads) %>%
+  distinct() %>% arrange(n_crab)
+```
+```{r fig.height=7,fig.width=8}
+plotdat <- class_summary_bysite %>%
+  dplyr::select(class,Site,n_crab,prop_reads) %>%
+  arrange(n_crab) %>%    # First sort by val. This sort the dataframe but NOT the factor levels
+  mutate(class=factor(class, levels=unique(class)))
+plotdat %>%
+  pivot_longer(cols=c(n_crab,prop_reads),names_to="metric",values_to="value") %>%
+  mutate(metric=ifelse(metric=="n_crab","Crab Count","Prop Sequence Reads")) %>%
+  ggplot(aes(y=value,x=factor(class, levels=unique(plotdat$class)))) +
+  facet_grid(cols=vars(metric),scales="free") +
+  geom_col(aes(fill=Site), position="dodge") +
+  ggtitle("Classes") +
+  coord_flip() + theme_bw() + theme(axis.title=element_blank(),
+                                    strip.text=element_text(size=12),
+                                    axis.text.x=element_text(size=12),
+                                    axis.text.y=element_text(size=10))
+```
+<br>
+```{r}
+phylum_summary_bysite <- dat.filter %>%
+  filter(rank=="species") %>%
+  group_by(phylum, Site) %>% 
+  summarise(n_crab=length(unique(crab_id)),
+            n_reads=sum(nReads)) %>%
+  left_join(site.totals.sp,by="Site") %>%
+  mutate(prop_crab=n_crab/total_crab,
+         prop_reads=n_reads/total_reads) %>%
+  distinct() %>% arrange(n_crab)
+```
+```{r fig.height=5,fig.width=7}
+plotdat <- phylum_summary_bysite %>%
+  dplyr::select(phylum,Site,n_crab,prop_reads) %>%
+  arrange(n_crab) %>%    # First sort by val. This sort the dataframe but NOT the factor levels
+  mutate(class=factor(phylum, levels=unique(phylum)))
+plotdat %>%
+  pivot_longer(cols=c(n_crab,prop_reads),names_to="metric",values_to="value") %>%
+  mutate(metric=ifelse(metric=="n_crab","Crab Count","Prop Sequence Reads")) %>%
+  ggplot(aes(y=value,x=factor(phylum, levels=unique(plotdat$class)))) +
+  facet_grid(cols=vars(metric),scales="free") +
+  geom_col(aes(fill=Site), position="dodge") +
+  ggtitle("Phyla") +
+  coord_flip() + theme_bw() + theme(axis.title=element_blank(),
+                                    strip.text=element_text(size=12),
+                                    axis.text.x=element_text(size=12),
+                                    axis.text.y=element_text(size=10))
+```
+<br>
+
+What's going on with the "NA" phylum?
+```{r}
+unique(dat.filter %>% filter(is.na(phylum)) %>% pull(taxon))
+```
+
+Some larger algae, some single-celled algae
