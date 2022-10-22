@@ -20,7 +20,7 @@ Describe the current diet of juvenile Dungeness crab -> use existing literature 
 
 **Table 1.** Sample sizes for each site.
 
-![table-1-img]()
+![table-1-img](https://github.com/mfisher5/DungyDietAssessment/blob/main/data/imgs/choose_seq_run_2_opt1.png?raw=true)
 
 <span style="color: red;">Tentative plan</span>: Variability in prey species among individual crab and between sites are both high. Individual crab tend to have a high degree of species richness, and I didn’t see much “saturation” in the observed species / families either overall or at individual sites. As a result, I would aim for samples which provide even coverage across the three different bays, and if possible, across habitat types within bays. This would provide a broader diet portfolio that is more generally applicable to the northern Puget Sound – maybe resulting in a sensitivity analysis that isn’t potentially specific to the prey available at one site? Especially if juveniles are essentially scavengers of whatever is there.
 
