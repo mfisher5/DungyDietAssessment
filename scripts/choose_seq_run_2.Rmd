@@ -1,0 +1,597 @@
+---
+title: "Choose Seq Run 2 Samples"
+author: "M Fisher"
+date: '2022-10-21'
+output: 
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+# Description
+
+Pick samples for the next sequencing run! Maximum = 30 crab stomachs
+
+A reminder of the project goal:
+>  Examine the risk to Dungeness crab instars (age 0+ juveniles) from climate-driven changes in estuarine prey availability. 
+
+And a general flowchart for the methods:
+Describe the current diet of juvenile Dungeness crab -> use existing literature to come up with scenarios of the potential effects of climate change on prey abundance (also, to gather prey energy density info) ->  use bioenergetic models to explore the (lack of?) sensitivity of crab instars to climate change impacts on prey availability.
+
+**Table 1.** Sample sizes for each site.
+
+![table-1-img]()
+
+<span style="color: red;">Tentative plan</span>: Variability in prey species among individual crab and between sites are both high. Individual crab tend to have a high degree of species richness, and I didn’t see much “saturation” in the observed species / families either overall or at individual sites. As a result, I would aim for samples which provide even coverage across the three different bays, and if possible, across habitat types within bays. This would provide a broader diet portfolio that is more generally applicable to the northern Puget Sound – maybe resulting in a sensitivity analysis that isn’t potentially specific to the prey available at one site? Especially if juveniles are essentially scavengers of whatever is there.
+
+Alternatively, I could max out the samples that I have at 1-2 sites, and try to reach a point of saturation. This could help me explore the degree to which crab in the same location may diversify their diet, justifying low sensitivity by a willingness to switch prey??
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(ggrepel)
+library(cowplot)
+library(vegan)
+library(magrittr)
+
+# User inputs
+indir   <- 'data/blast'
+run.num <- 1
+marker  <- 'lerayXT'
+```
+```{r data, include=FALSE}
+dat <- read_csv(here(indir, 'lerayXT_r1_sample_taxonomy_filtered.csv'))
+
+dat %<>% mutate(Site=ifelse(Site=="KAY" & Sample_num > 18, "KAY-shell",Site))
+```
+<br>
+
+
+# Site descriptions
+
+*working on it...*
+
+
+# Preliminary Results
+
+To inform sample choice, look at the following from the run 1 data: 
+
+1. $\alpha$ and $\beta$ diversity
+
+2. species richness per crab
+
+3. nMDS among all samples
+
+4. saturation point for species
+
+5. saturation point for higher taxonomic levels
+
+6. which classes / families are represented at which sites? (just out of curiosity)
+
+
+For this analysis, I removed any identifications that with too little taxonomic depth (information at family or below is missing). What are the sample sizes for this data set?
+```{r}
+dat.filter <- dat %>%
+  filter (rank %in% c("family","species","genus")) %>%
+  filter (!(is.na(phylum) & is.na(class) & is.na(family) & is.na(order) & is.na(genus)))
+
+dat.filter %>%
+  group_by(Site) %>% summarise(`Crab count`=length(unique(crab_id)))
+```
+<br>
+
+## diversity
+
+### $\alpha$
+
+What is the overall species richness at each site? 
+```{r}
+dat.filter %>%
+  filter(rank=="species") %>%
+  group_by(Site) %>%
+  summarise(`crab count`=length(unique(crab_id)),
+            richness=length(unique(species)))
+```
+<br>
+
+### $\beta$ 
+
+
+What is the ratio between regional and local species diversity? The greater the similarity in community composition between multiple communities, the lower the value of β-diversity for that set of communities.
+```{r}
+prey.sp.site.mat <- dat.filter %>%
+  filter(rank=="species") %>%
+  dplyr::select(Site, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="Site", names_from="taxon",values_from="presence", values_fill=0)
+
+betadiver(prey.sp.site.mat, method="w")
+mat.key <- prey.sp.site.mat$Site
+names(mat.key) <- seq(1,4)
+mat.key
+```
+<br>
+
+### per crab
+
+
+What is the distribution of species richness per crab?
+```{r message=FALSE, fig.height=5, fig.width=10}
+plot.hist <- dat.filter %>%
+  filter(rank=="species") %>%
+  group_by(Site, crab_id) %>%
+  summarise(richness=length(unique(species))) %>%
+  ggplot() + geom_histogram(aes(x=richness, fill=Site), binwidth=2) +
+  labs(x="species richness", y="crab count") +
+  theme_bw()
+plot.density<- dat.filter %>%
+  filter(rank=="species") %>%
+  filter(Site != "MARPT") %>%
+  group_by(Site, crab_id) %>%
+  summarise(richness=length(unique(species))) %>%
+  ggplot() + geom_density(aes(x=richness, fill=Site), alpha=0.5) +
+  labs(x="species richness") +
+  theme_bw()
+plot_grid(plot.hist,plot.density, ncol=2)
+```
+<br>
+
+
+## nMDS
+
+Run on a presence/absence matrix.
+```{r}
+crab.sp.mat <- dat.filter %>%
+  filter(rank=="species") %>%
+  dplyr::select(crab_id, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="crab_id", names_from="taxon",values_from="presence", values_fill=0)
+crabs <- crab.sp.mat$crab_id
+crab.sp.mat <- as.matrix(crab.sp.mat %>% dplyr::select(-crab_id))
+rownames(crab.sp.mat) <- crabs
+```
+```{r echo=TRUE}
+z <- metaMDS(comm=crab.sp.mat, autotransform=FALSE,distance="bray",k=2,maxit=1000,try=40,trymax=100)
+```
+
+
+```{r fig.height=4, fig.width=5}
+stressplot(z)
+```
+<br>
+
+```{r fig.height=5, fig.width=8}
+#extract NMDS scores (x and y coordinates)
+z.scores = as.data.frame(scores(z)$sites)
+#add columns to data frame 
+z.scores$Sample = rownames(z.scores)
+z.scores <- left_join(z.scores,dat.filter %>% dplyr::select(crab_id,Site),by=c("Sample"="crab_id"))
+z.scores <- z.scores %>% distinct()
+#plot
+ggplot(z.scores, aes(x = NMDS1, y = NMDS2)) + 
+    geom_point(size = 4, aes(col = Site))+ 
+  geom_text_repel(aes(label=Sample), size=3, col="black", max.overlaps=20) +
+    labs(x = "NMDS1", colour = "Group", y = "NMDS2", shape = "Type")  + 
+  theme_bw()
+```
+Disclaimer that **the stress is at 0.2, which is potentially misleading**.
+<br>
+<br>
+
+
+## saturation: species
+
+How many unique species are added per new crab?
+
+```{r fig.height=3, fig.width=4}
+all_sp <- c()
+added_sp <- data.frame(ncrab=as.numeric(),
+                       nsp=as.numeric())
+for(i in seq(1,length(unique(dat.filter$crab_id)))){
+  new_sp <- dat.filter %>%
+    filter(crab_id==unique(dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,species) %>%
+    distinct() %>%
+    filter(!(species %in% all_sp)) %>%
+    pull(species)
+    all_sp <- c(all_sp, new_sp)
+  added_sp <- added_sp %>% bind_rows(data.frame(ncrab=i, nsp=length(all_sp)))
+}
+
+ggplot(added_sp,aes(x=ncrab,y=nsp)) +
+  geom_point() + 
+  labs(y="total prey species",x="number of crab") + theme_classic()
+``` 
+<br>
+
+What does a breakdown look like for Kayak Point (n=10) and Clayton Beach (n=11)?
+```{r fig.height=3, fig.width=6}
+# kayak pt eelgrass
+site.dat.filter <- dat.filter %>% filter(Site=="KAY")
+all_sp_site <- c()
+added_sp_site <- data.frame(ncrab=as.numeric(),
+                       nsp=as.numeric())
+for(i in seq(1,length(unique(site.dat.filter$crab_id)))){
+  new_sp <- site.dat.filter %>%
+    filter(crab_id==unique(site.dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,species) %>%
+    distinct() %>%
+    filter(!(species %in% all_sp_site)) %>%
+    pull(species)
+    all_sp_site <- c(all_sp_site, new_sp)
+  added_sp_site <- added_sp_site %>% bind_rows(data.frame(ncrab=i, nsp=length(all_sp_site)))
+}
+plot.kay <- ggplot(added_sp_site,aes(x=ncrab,y=nsp)) +
+  geom_point() +  
+  ylim(c(5,55)) +
+  labs(y="total prey species",x="number of crab") + ggtitle("Kayak Point") + theme_classic()
+
+# clayton
+site.dat.filter <- dat.filter %>% filter(Site=="CLAY")
+all_sp_site <- c()
+added_sp_site <- data.frame(ncrab=as.numeric(),
+                       nsp=as.numeric())
+for(i in seq(1,length(unique(site.dat.filter$crab_id)))){
+  new_sp <- site.dat.filter %>%
+    filter(crab_id==unique(site.dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,species) %>%
+    distinct() %>%
+    filter(!(species %in% all_sp_site)) %>%
+    pull(species)
+    all_sp_site <- c(all_sp_site, new_sp)
+  added_sp_site <- added_sp_site %>% bind_rows(data.frame(ncrab=i, nsp=length(all_sp_site)))
+}
+plot.clay <- ggplot(added_sp_site,aes(x=ncrab,y=nsp)) +
+  geom_point() + 
+  ylim(c(5,55)) +
+  labs(y="total prey species",x="number of crab") + ggtitle("Clayton Beach") + theme_classic()
+
+plot_grid(plot.kay,plot.clay,ncol=2)
+``` 
+
+
+<br>
+
+## saturation: higher taxonomy
+
+### Overall
+
+```{r}
+## family
+all_fam <- c()
+added_fam <- data.frame(ncrab=as.numeric(),
+                       nfam=as.numeric())
+for(i in seq(1,length(unique(dat.filter$crab_id)))){
+  new_fam <- dat.filter %>%
+    filter(crab_id==unique(dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,family) %>%
+    distinct() %>%
+    filter(!(family %in% all_fam)) %>%
+    pull(family)
+    all_fam <- c(all_fam, new_fam)
+  added_fam <- added_fam %>% bind_rows(data.frame(ncrab=i, nfam=length(all_fam)))
+}
+## order
+all_ord <- c()
+added_ord <- data.frame(ncrab=as.numeric(),
+                       nord=as.numeric())
+for(i in seq(1,length(unique(dat.filter$crab_id)))){
+  new_ord <- dat.filter %>%
+    filter(crab_id==unique(dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,order) %>%
+    distinct() %>%
+    filter(!(order %in% all_ord)) %>%
+    pull(order)
+    all_ord <- c(all_ord, new_ord)
+  added_ord <- added_ord %>% bind_rows(data.frame(ncrab=i, nord=length(all_ord)))
+}
+## class
+all_class <- c()
+added_class <- data.frame(ncrab=as.numeric(),
+                       nclass=as.numeric())
+for(i in seq(1,length(unique(dat.filter$crab_id)))){
+  new_class <- dat.filter %>%
+    filter(crab_id==unique(dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,class) %>%
+    distinct() %>%
+    filter(!(class %in% all_class)) %>%
+    pull(class)
+    all_class <- c(all_class, new_class)
+  added_class <- added_class %>% bind_rows(data.frame(ncrab=i, nclass=length(all_class)))
+}
+## phylum
+all_phylum <- c()
+added_phylum <- data.frame(ncrab=as.numeric(),
+                       nphylum=as.numeric())
+for(i in seq(1,length(unique(dat.filter$crab_id)))){
+  new_phylum <- dat.filter %>%
+    filter(crab_id==unique(dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,phylum) %>%
+    distinct() %>%
+    filter(!(phylum %in% all_phylum)) %>%
+    pull(phylum)
+    all_phylum <- c(all_phylum, new_phylum)
+  added_phylum <- added_phylum %>% bind_rows(data.frame(ncrab=i, nphylum=length(all_phylum)))
+}
+```
+```{r fig.height=4, fig.width=10}
+p1 <- ggplot(added_fam,aes(x=ncrab,y=nfam)) +
+  geom_point() + 
+  labs(y="total families",x="number of crab") + theme_classic()
+p2 <- ggplot(added_ord,aes(x=ncrab,y=nord)) +
+  geom_point() + 
+  labs(y="total orders",x="") + theme_classic()
+p3 <- ggplot(added_class,aes(x=ncrab,y=nclass)) +
+  geom_point() + 
+  labs(y="total classes",x="number of crab") + theme_classic()
+p4 <- ggplot(added_phylum,aes(x=ncrab,y=nphylum)) +
+  geom_point() + 
+  labs(y="total phyla",x="") + theme_classic()
+cowplot::plot_grid(p1,p2,p3,p4,ncol=4)
+```
+<br>
+
+### By site
+
+I just look at orders and phyla here.
+
+```{r}
+kay.dat.filter <- dat.filter %>% filter(Site=="KAY")
+## order
+all_order <- c()
+added_order <- data.frame(ncrab=as.numeric(),
+                       norder=as.numeric())
+for(i in seq(1,length(unique(kay.dat.filter$crab_id)))){
+  new_order <- kay.dat.filter %>%
+    filter(crab_id==unique(kay.dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,order) %>%
+    distinct() %>%
+    filter(!(order %in% all_order)) %>%
+    pull(order)
+    all_order <- c(all_order, new_order)
+  added_order <- added_order %>% bind_rows(data.frame(ncrab=i, norder=length(all_order)))
+}
+
+kp1 <- ggplot(added_order,aes(x=ncrab,y=norder)) +
+  geom_point() + 
+  ylim(c(0,max(added_order$norder)+2)) +
+  labs(y="total orders",x="") + ggtitle("Kayak Pt - Eelgrass") + theme_classic()
+
+kay.dat.filter <- dat.filter %>% filter(Site=="KAY-shell")
+## order
+all_order <- c()
+added_order <- data.frame(ncrab=as.numeric(),
+                       norder=as.numeric())
+for(i in seq(1,length(unique(kay.dat.filter$crab_id)))){
+  new_order <- kay.dat.filter %>%
+    filter(crab_id==unique(kay.dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,order) %>%
+    distinct() %>%
+    filter(!(order %in% all_order)) %>%
+    pull(order)
+    all_order <- c(all_order, new_order)
+  added_order <- added_order %>% bind_rows(data.frame(ncrab=i, norder=length(all_order)))
+}
+
+kp2 <- ggplot(added_order,aes(x=ncrab,y=norder)) +
+  geom_point() + 
+  ylim(c(0,max(added_order$norder)+2)) +
+  labs(y="",x="") + ggtitle("Kayak Pt - Shell") + theme_classic()
+
+kay.dat.filter <- dat.filter %>% filter(Site=="KAY-shell" | Site=="KAY")
+## order
+all_order <- c()
+added_order <- data.frame(ncrab=as.numeric(),
+                       norder=as.numeric())
+for(i in seq(1,length(unique(kay.dat.filter$crab_id)))){
+  new_order <- kay.dat.filter %>%
+    filter(crab_id==unique(kay.dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,order) %>%
+    distinct() %>%
+    filter(!(order %in% all_order)) %>%
+    pull(order)
+    all_order <- c(all_order, new_order)
+  added_order <- added_order %>% bind_rows(data.frame(ncrab=i, norder=length(all_order)))
+}
+
+kp3 <- ggplot(added_order,aes(x=ncrab,y=norder)) +
+  geom_point() + 
+  ylim(c(0,max(added_order$norder)+2)) +
+  labs(y="",x="") + ggtitle("Kayak Pt - All") + theme_classic()
+```
+```{r}
+## phyla
+
+kay.dat.filter <- dat.filter %>% filter(Site=="KAY")
+all_phylum <- c()
+added_phylum <- data.frame(ncrab=as.numeric(),
+                       nphylum=as.numeric())
+for(i in seq(1,length(unique(kay.dat.filter$crab_id)))){
+  new_phylum <- kay.dat.filter %>%
+    filter(crab_id==unique(kay.dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,phylum) %>%
+    distinct() %>%
+    filter(!(phylum %in% all_phylum)) %>%
+    pull(phylum)
+    all_phylum <- c(all_phylum, new_phylum)
+  added_phylum <- added_phylum %>% bind_rows(data.frame(ncrab=i, nphylum=length(all_phylum)))
+}
+
+kp4 <- ggplot(added_phylum,aes(x=ncrab,y=nphylum)) +
+  geom_point() + 
+  ylim(c(0,max(added_phylum$nphylum)+2)) +
+  labs(y="total phyla",x="number of crab") + theme_classic()
+
+kay.dat.filter <- dat.filter %>% filter(Site=="KAY-shell")
+all_phylum <- c()
+added_phylum <- data.frame(ncrab=as.numeric(),
+                       nphylum=as.numeric())
+for(i in seq(1,length(unique(kay.dat.filter$crab_id)))){
+  new_phylum <- kay.dat.filter %>%
+    filter(crab_id==unique(kay.dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,phylum) %>%
+    distinct() %>%
+    filter(!(phylum %in% all_phylum)) %>%
+    pull(phylum)
+    all_phylum <- c(all_phylum, new_phylum)
+  added_phylum <- added_phylum %>% bind_rows(data.frame(ncrab=i, nphylum=length(all_phylum)))
+}
+
+kp5 <- ggplot(added_phylum,aes(x=ncrab,y=nphylum)) +
+  geom_point() + 
+  ylim(c(0,max(added_phylum$nphylum)+2)) +
+  labs(y="",x="number of crab") + theme_classic()
+
+kay.dat.filter <- dat.filter %>% filter(Site=="KAY-shell" | Site=="KAY")
+all_phylum <- c()
+added_phylum <- data.frame(ncrab=as.numeric(),
+                       nphylum=as.numeric())
+for(i in seq(1,length(unique(kay.dat.filter$crab_id)))){
+  new_phylum <- kay.dat.filter %>%
+    filter(crab_id==unique(kay.dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,phylum) %>%
+    distinct() %>%
+    filter(!(phylum %in% all_phylum)) %>%
+    pull(phylum)
+    all_phylum <- c(all_phylum, new_phylum)
+  added_phylum <- added_phylum %>% bind_rows(data.frame(ncrab=i, nphylum=length(all_phylum)))
+}
+
+kp6 <- ggplot(added_phylum,aes(x=ncrab,y=nphylum)) +
+  geom_point() + 
+  ylim(c(0,max(added_phylum$nphylum)+2)) +
+  labs(y="",x="number of crab") + theme_classic()
+```
+````{r fig.height=6, fig.width=8}
+plot_grid(kp1,kp2,kp3,kp4,kp5,kp6,ncol=3)
+```
+
+<br>
+
+```{r}
+clay.dat.filter <- dat.filter %>% filter(Site=="CLAY")
+## order
+all_order <- c()
+added_order <- data.frame(ncrab=as.numeric(),
+                       norder=as.numeric())
+for(i in seq(1,length(unique(clay.dat.filter$crab_id)))){
+  new_order <- clay.dat.filter %>%
+    filter(crab_id==unique(clay.dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,order) %>%
+    distinct() %>%
+    filter(!(order %in% all_order)) %>%
+    pull(order)
+    all_order <- c(all_order, new_order)
+  added_order <- added_order %>% bind_rows(data.frame(ncrab=i, norder=length(all_order)))
+}
+
+cl1 <- ggplot(added_order,aes(x=ncrab,y=norder)) +
+  geom_point() + 
+  ylim(c(0,max(added_order$norder)+2)) +
+  labs(y="total orders",x="number of crab") + ggtitle("Clayton Beach") + theme_classic()
+
+all_phylum <- c()
+added_phylum <- data.frame(ncrab=as.numeric(),
+                       nphylum=as.numeric())
+for(i in seq(1,length(unique(clay.dat.filter$crab_id)))){
+  new_phylum <- clay.dat.filter %>%
+    filter(crab_id==unique(clay.dat.filter$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,phylum) %>%
+    distinct() %>%
+    filter(!(phylum %in% all_phylum)) %>%
+    pull(phylum)
+    all_phylum <- c(all_phylum, new_phylum)
+  added_phylum <- added_phylum %>% bind_rows(data.frame(ncrab=i, nphylum=length(all_phylum)))
+}
+
+cl2 <- ggplot(added_phylum,aes(x=ncrab,y=nphylum)) +
+  geom_point() + 
+  ylim(c(0,max(added_phylum$nphylum)+2)) +
+  labs(y="total phyla",x="number of crab") + ggtitle("") + theme_classic()
+```
+```{r fig.height=3, fig.width=6}
+plot_grid(cl1,cl2,ncol=2)
+```
+
+
+## Prey ID
+
+just for fun...
+
+
+```{r fig.height=7,fig.width=9, message=FALSE}
+site.totals.sp <- dat.filter %>% filter(rank=="species") %>%
+  group_by(Site) %>% 
+  summarise(total_crab=length(unique(crab_id)))
+class_summary_bysite <- dat.filter %>%
+  filter(rank=="species") %>%
+  dplyr::select(Site,crab_id,class,phylum) %>%
+  pivot_longer(cols=c(class,phylum), names_to="rank", values_to="taxonomy") %>%
+  group_by(Site, rank, taxonomy) %>% 
+  summarise(n_crab=length(unique(crab_id))) %>%
+  left_join(site.totals.sp,by="Site") %>%
+  mutate(prop_crab=n_crab/total_crab) %>%
+  distinct() %>% arrange(n_crab)
+
+plotdat <- class_summary_bysite %>%
+  arrange(n_crab) %>%    # First sort by val. This sort the dataframe but NOT the factor levels
+  mutate(taxonomy=factor(taxonomy, levels=unique(taxonomy)))
+plotdat %>%
+  ggplot(aes(y=prop_crab,x=factor(taxonomy, levels=unique(plotdat$taxonomy)))) +
+  facet_wrap(~rank,scales="free") +
+  geom_col(aes(fill=Site), position="dodge") +
+  coord_flip() + theme_bw() + theme(axis.title=element_blank(),
+                                    strip.text=element_text(size=12),
+                                    axis.text.x=element_text(size=12),
+                                    axis.text.y=element_text(size=10))
+```
+<br>
+
+And what were the most common taxa across all sites?
+```{r fig.height=5,fig.width=7, message=FALSE}
+taxa_summary <- dat.filter %>%
+  mutate(total_reads=sum(dat.filter$nReads),
+         total_crab=length(unique((dat.filter$crab_id)))) %>%
+  group_by(taxon, rank,class,phylum) %>% 
+  summarise(n_crab=length(unique(crab_id)),
+            prop_crab=n_crab/total_crab,
+            n_reads=sum(nReads),
+            prop_reads=n_reads/total_reads) %>%
+  distinct() %>% arrange(n_crab)
+plotdat <- taxa_summary %>%
+  filter(n_crab > 5) %>%
+  dplyr::select(-prop_crab,-n_reads) %>%
+  arrange(n_crab) %>%    # First sort by val. This sort the dataframe but NOT the factor levels
+  mutate(taxon=factor(taxon, levels=taxon))
+plotdat %>%
+  pivot_longer(cols=c(n_crab,prop_reads),names_to="metric",values_to="value") %>%
+  mutate(metric=ifelse(metric=="n_crab","Crab Count","Prop Sequence Reads")) %>%
+  ggplot(aes(y=value,x=factor(taxon, levels=plotdat$taxon))) +
+  facet_grid(cols=vars(metric),scales="free") +
+  geom_col(aes(fill=rank)) +
+  coord_flip() + theme_bw() + theme(axis.title=element_blank(),
+                                    strip.text=element_text(size=12),
+                                    axis.text.x=element_text(size=12),
+                                    axis.text.y=element_text(size=10))
+```
+
+
+
+
