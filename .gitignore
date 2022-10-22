@@ -8,3 +8,4 @@ data/blast/*.fasta
 data/blast/*.csv
 
 scripts/*.html
+scripts/explore_results/*.html
