@@ -52,6 +52,68 @@ dat %<>% mutate(Site=ifelse(Site=="KAY" & Sample_num > 18, "KAY-shell",Site))
 # Site descriptions
 
 *working on it...*
+```{r}
+sample_sites <- read.csv("sample_sites.csv") %>%
+  mutate(funding=ifelse(Ferriss_Site=="NPS2" & !is.na(Ferriss_Site),"Y","N"))
+uw <- data.frame(Site="UW",Lat=47.655046,Lon=-122.303380)
+```
+```{r basemap}
+## generate basemap from google maps
+# ggmap::register_google(key = "zd76vn8aM0DwO-ImFMVHUvNwIdk=")
+# myLocation <- c(-123.2, 47.5, -121.8, 49)
+# ps <- get_stamenmap(bbox=myLocation,
+#                     maptype="terrain-background", crop=FALSE, force=TRUE)
+# saveRDS(ps, "PhD/Field/PMEP_App/PugetSoundN_terrain_background.rds")
+```
+
+```{r eval=FALSE}
+ps <- readRDS("PugetSoundN_terrain_background.rds")
+cl <- c("#1d457f","#009474")
+
+sample_sites <- dplyr::select(sample_sites, Site, Lon, Lat, Seascape) %>% distinct() %>%
+  filter(Seascape != "Mixed-Clam")
+sample_sites$Site <- c("Padilla Bay","Port Susan Bay","Samish Bay","Drayton Harbor")
+sample_sites$Seascape <- c(rep("Preserve",2),rep("Mixed Use",2))
+
+ps_sites <- ggmap(ps) +
+  geom_point(data=sample_sites, aes(x=Lon,y=Lat, col=Seascape), size=6) + 
+  geom_point(data=uw, aes(x=Lon,y=Lat),pch=18,col='black',size=3) +
+  geom_label_repel(data=sample_sites, aes(x=Lon,y=Lat, label=Site),
+                   nudge_x = rep(-123,4),
+                   nudge_y = c(0,0,0.1,0),
+                   direction='x',
+                   segment.colour = 'black',
+                   force=1, segment.size=0.5, size=4, show.legend=FALSE) +
+  ylab("Latitude") + xlab("Longitude") +
+  scale_color_manual(values=cl) +
+  theme(axis.title=element_text(size=14),
+        axis.text=element_text(size=12),
+        legend.title=element_text(size=14),
+        legend.text=element_text(size=12)) +
+  ggsn::scalebar(x.min = -123.2, x.max = -121.8,
+                 y.min = 49,  y.max = 49.8, 
+                 dist = 10, dist_unit = "km", 
+                 st.size = 3.5, st.bottom = FALSE,
+                 border.size = 0.5, st.dist=0.03,
+                 transform=TRUE, model = 'WGS84')
+
+usa <- map_data("state") %>%
+  filter(region %in% c("washington","oregon","california","nevada","idaho","montana"))
+
+usa_map <- ggplot() +
+  geom_polygon(data = usa, aes(x=long, y = lat, group = group), fill="grey50",col="grey30", size=0.25) +
+  geom_rect(aes(xmin=-123.2,xmax=-121.8,ymin=47.5,ymax=49),col='red', alpha=0, size=0.5) +
+  coord_fixed(xlim = c(-126, -116), ylim = c(38, 50)) +
+  theme_void() + theme(panel.border=element_rect(color="black",fill=NA),
+                       panel.background=element_rect(fill="white"))
+
+
+ps_inset <- ps_sites +
+  inset(ggplotGrob(usa_map), xmin = -121.68, xmax =-122.08, 
+        ymin = 47.07, ymax = 47.87)
+```
+<br>
+<br>
 
 
 # Preliminary Results
@@ -60,22 +122,25 @@ To inform sample choice, look at the following from the run 1 data:
 
 1. $\alpha$ and $\beta$ diversity
 
-2. species richness per crab
+2. taxonomic distinctness (vegan doc)[https://search.r-project.org/CRAN/refmans/vegan/html/taxondive.html]
 
-3. nMDS among all samples
+3. species richness per crab
 
-4. saturation point for species
+4. nMDS among all samples
 
-5. saturation point for higher taxonomic levels
+5. saturation point for species
 
-6. which classes / families are represented at which sites? (just out of curiosity)
+6. saturation point for higher taxonomic levels
+
+7. which classes / families are represented at which sites? (just out of curiosity)
 
 
 For this analysis, I removed any identifications that with too little taxonomic depth (information at family or below is missing). What are the sample sizes for this data set?
 ```{r}
 dat.filter <- dat %>%
   filter (rank %in% c("family","species","genus")) %>%
-  filter (!(is.na(phylum) & is.na(class) & is.na(family) & is.na(order) & is.na(genus)))
+  filter (!(is.na(phylum) & is.na(class) & is.na(family) & is.na(order) & is.na(genus))) %>%
+  filter (species!="Homo sapiens")
 
 dat.filter %>%
   group_by(Site) %>% summarise(`Crab count`=length(unique(crab_id)))
@@ -101,18 +166,70 @@ dat.filter %>%
 
 What is the ratio between regional and local species diversity? The greater the similarity in community composition between multiple communities, the lower the value of β-diversity for that set of communities.
 ```{r}
-prey.sp.site.mat <- dat.filter %>%
+prey.sp.site.df <- dat.filter %>%
   filter(rank=="species") %>%
   dplyr::select(Site, taxon) %>% distinct() %>%
   mutate(presence=1) %>%
   pivot_wider(id_cols="Site", names_from="taxon",values_from="presence", values_fill=0)
 
-betadiver(prey.sp.site.mat, method="w")
-mat.key <- prey.sp.site.mat$Site
+betadiver(prey.sp.site.df, method="w")
+mat.key <- prey.sp.site.df$Site
 names(mat.key) <- seq(1,4)
 mat.key
 ```
 <br>
+
+### distinctness
+
+Taxonomic distinctness = the averaged taxonomic distances among species or individuals in the community (Clarke & Warwick 1998, 2001). In this context, I'll find the distinctness in prey assemblages between crab (with presence/absence data, both distinctness and diversity reduce to the same index, $\Delta^{+}$, Clarke & Warwick (1998)). 
+
+$\Delta^(+)$ per site:
+```{r message=FALSE, warning=FALSE}
+# taxonomic distances
+sp.taxonomy <- dat.filter %>% #  row for each species, and columns for classification at higher levels
+  filter(rank=="species") %>%
+  dplyr::select(phylum,class,order,family,genus,species) %>% distinct() %>%
+  rename("Phylum"=phylum, "Class"=class,"Order"=order,"Family"=family,"Genus"=genus) %>%
+  filter((!is.na(Phylum) & !is.na(Class) & !is.na(Order)) & !is.na(Family) & !is.na(Genus))
+x <- as.data.frame(sp.taxonomy %>% dplyr::select(Genus,Family,Order,Class,Phylum))
+rownames(x) <- sp.taxonomy$species
+sp.dist.mat <- taxa2dist(x, varstep = FALSE, check = TRUE, labels=rownames(x))
+
+# presence / absence matrix
+prey.sp.site.df <- dat.filter %>%
+  filter(rank=="species") %>%
+  filter(species %in% sp.taxonomy$species) %>%
+  dplyr::select(Site, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="Site", names_from="taxon",values_from="presence", values_fill=0)
+
+prey.sp.site.mat <- as.data.frame(prey.sp.site.df %>% dplyr::select(-Site))
+rownames(prey.sp.site.mat) <- prey.sp.site.df$Site
+
+
+# calculate distance
+site.taxdist <- taxondive(comm=prey.sp.site.mat, dis=sp.dist.mat, match.force=TRUE)
+round(site.taxdist$Dplus,2)
+```
+<br>
+
+Standard deviation of $\Delta^(+)$
+```{r}
+round(site.taxdist$sd.Dplus,3)
+```
+<br>
+
+
+Some QC graphs for above...
+
+```{r fig.height=5, fig.width=3}
+plot(hclust(sp.dist.mat), hang = -1)
+```
+```{r fig.height=3, fig.width=3}
+plot(site.taxdist)
+```
+<br>
+
 
 ### per crab
 
@@ -138,8 +255,56 @@ plot_grid(plot.hist,plot.density, ncol=2)
 ```
 <br>
 
+What is the distribution of taxonomic distinctness, per crab? 
+```{r message=FALSE}
+# taxonomic distances
+# calculated above
+
+# presence / absence matrix
+prey.sp.crab.df <- dat.filter %>%
+  filter(rank=="species") %>%
+  filter(species %in% sp.taxonomy$species) %>%
+  dplyr::select(crab_id, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="crab_id", names_from="taxon",values_from="presence", values_fill=0)
+prey.sp.crab.mat <- as.data.frame(prey.sp.crab.df %>% dplyr::select(-crab_id))
+rownames(prey.sp.crab.mat) <- prey.sp.crab.df$crab_id
+
+
+
+# calculate distance
+crab.taxdist <- taxondive(comm=prey.sp.crab.mat, dis=sp.dist.mat, match.force = TRUE)
+ggplot(data.frame(dist=crab.taxdist$Dplus, crab_id=names(crab.taxdist$Dplus)), aes(x=dist)) +
+  geom_histogram(binwidth=2) +
+  labs(x="Taxonomic distinctness (Delta-plus)",y="Crab count") + theme_bw()
+```
+<br>
+
+
+distribution by site.
+
+
+```{r fig.height=3, fig.width=6}
+crab.taxdist.df <- data.frame(dist=crab.taxdist$Dplus, crab_id=names(crab.taxdist$Dplus)) %>%
+  left_join(dat.filter %>% dplyr::select(crab_id,Site) %>% distinct(), by="crab_id")
+ggplot(crab.taxdist.df, aes(x=Site,y=dist)) +
+  geom_boxplot(aes(fill=Site)) + 
+  labs(x="Site",y="Distinctness") +
+  theme_bw()
+```
+<br>
+
+Some QC graphs for above...
+
+```{r fig.height=3, fig.width=4}
+plot(crab.taxdist)
+```
+<br>
+<br>
 
 ## nMDS
+
+### bray-curtis
 
 Run on a presence/absence matrix.
 ```{r}
@@ -154,11 +319,6 @@ rownames(crab.sp.mat) <- crabs
 ```
 ```{r echo=TRUE}
 z <- metaMDS(comm=crab.sp.mat, autotransform=FALSE,distance="bray",k=2,maxit=1000,try=40,trymax=100)
-```
-
-
-```{r fig.height=4, fig.width=5}
-stressplot(z)
 ```
 <br>
 
@@ -176,7 +336,21 @@ ggplot(z.scores, aes(x = NMDS1, y = NMDS2)) +
     labs(x = "NMDS1", colour = "Group", y = "NMDS2", shape = "Type")  + 
   theme_bw()
 ```
+<br>
 Disclaimer that **the stress is at 0.2, which is potentially misleading**.
+
+<br>
+
+Some QC plots for above...
+```{r fig.height=4, fig.width=5}
+stressplot(z)
+```
+<br>
+<br>
+
+### distinctness
+
+
 <br>
 <br>
 
@@ -534,7 +708,29 @@ plot_grid(cl1,cl2,ncol=2)
 ## Prey ID
 
 just for fun...
+```{r fig.height=7,fig.width=9, message=FALSE}
+total_crab <- length(unique(dat.filter %>% filter(rank=="species") %>% pull(crab_id)))
+class_summary <- dat.filter %>%
+  filter(rank=="species") %>%
+  dplyr::select(crab_id,class,phylum) %>%
+  pivot_longer(cols=c(class,phylum), names_to="rank", values_to="taxonomy") %>%
+  group_by(rank, taxonomy) %>% 
+  summarise(n_crab=length(unique(crab_id))) %>%
+  mutate(prop_crab=n_crab/total_crab) %>%
+  distinct() %>% arrange(n_crab)
 
+plotdat <- class_summary %>%
+  arrange(n_crab) %>%    # First sort by val. This sort the dataframe but NOT the factor levels
+  mutate(taxonomy=factor(taxonomy, levels=unique(taxonomy)))
+plotdat %>%
+  ggplot(aes(y=prop_crab,x=factor(taxonomy, levels=unique(plotdat$taxonomy)))) +
+  facet_wrap(~rank,scales="free") +
+  geom_col() +
+  coord_flip() + theme_bw() + theme(axis.title=element_blank(),
+                                    strip.text=element_text(size=12),
+                                    axis.text.x=element_text(size=12),
+                                    axis.text.y=element_text(size=10))
+```
 
 ```{r fig.height=7,fig.width=9, message=FALSE}
 site.totals.sp <- dat.filter %>% filter(rank=="species") %>%

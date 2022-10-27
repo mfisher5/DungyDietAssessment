@@ -1,0 +1,222 @@
+---
+title: "Sampling Data"
+author: "Mary Fisher"
+output: 
+  html_document:
+      toc: yes
+      toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(here)
+library(tidyverse)
+library(ggplot2)
+library(ggmap)
+library(ggspatial)
+library(ggrepel)
+library(janitor)
+library(vegan)
+library(labdsv)
+library(scales)
+library(ggfortify)
+```
+
+# Map of Sampling Sites
+
+```{r include=FALSE}
+# read in data
+dat <- read.csv(here('data','metadata','sampling_data.csv'))
+
+# basemap
+base.map <- readRDS(here('data','metadata',"PugetSoundN_terrain_background.rds"))
+wa.map <- map_data("state") %>%
+  filter(region=="washington")
+
+
+# colors for map points
+cl <- c("darkgreen","darkturquoise","darkgoldenrod4")
+```
+<br>
+```{r}
+dat[,c(1,2,6)]
+
+dat <- dat %>% unite("Site_N", c(Site,N), remove=FALSE)
+```
+<br>
+
+```{r fig.width=10, fig.height=10}
+ggmap(base.map) +
+  geom_point(data=dat, aes(x=Longitude,y=Latitude, col=Habitat), stroke=3, size=4, pch=1) + 
+  geom_label_repel(data=dat, aes(x=Longitude,y=Latitude, label=Site,segment.colour=Habitat),
+                   force=1, force_pull=0.25, segment.size=1, size=4, min.segment.length=0.1, show.legend=FALSE) +
+  ylab("Latitude") + xlab("Longitude") +
+  scale_color_manual(aesthetics=c("color","segment.color"), values=cl) +
+  theme(axis.title=element_text(size=14),
+        axis.text=element_text(size=12),
+        legend.title=element_text(size=14),
+        legend.text=element_text(size=12)) +
+  coord_cartesian(xlim = c(-122.9, -122), ylim = c(48, 48.75))
+```
+<br>
+
+```{r fig.width=10, fig.height=10}
+dat.part <- filter(dat, Site %in% c("Kayak Point","March Point", "Clayton Beach"))
+ggmap(base.map) +
+  geom_point(data=dat.part, aes(x=Longitude,y=Latitude, col=Habitat), stroke=3, size=4, pch=1) + 
+  geom_label_repel(data=dat.part, aes(x=Longitude,y=Latitude, label=Site,segment.colour=Habitat),
+                   force=1, force_pull=0.25, segment.size=1, size=4, min.segment.length=0.1, show.legend=FALSE) +
+  ylab("Latitude") + xlab("Longitude") +
+  scale_color_manual(aesthetics=c("color","segment.color"), values=cl) +
+  theme(axis.title=element_text(size=14),
+        axis.text=element_text(size=12),
+        legend.title=element_text(size=14),
+        legend.text=element_text(size=12)) +
+  coord_cartesian(xlim = c(-122.9, -122), ylim = c(48, 48.75))
+```
+<br>
+*The number after the sites is the sample size!*
+<br>
+<br>
+
+# Group Sites by Habitat
+
+Based on 30m transects (5 quadrats per transect at 0m, 7.5m, 15m, 22.5m, 30m)
+
+Habitat data looks at: 
+
+1. substrate % cover -- of sand, cobble, and shell / shell hash. total % cover per quadrat adds to 100%
+2. *Z marina* and algae % cover -- the number of 5x5 squares in the quadrat that contain one or more rooted eelgrass shoots / algae. converted to a % by dividing by 25 (total number of squares)
+3. *Z marina* shoot density -- the number of rooted shoots per square, for the 5 diagonal squares in the quadrat. lower bound of zero, no upper bound. 
+
+I've only finished this for a handful of the sites in the map above. 
+```{r include=FALSE}
+dat <- read.csv(here('data','eelgrass_survey_data.csv')) %>% clean_names()
+```
+```{r}
+dat[,1:3]
+```
+<br>
+
+
+## NMDS
+
+#### Substrate + Vegetation
+
+By quadrat
+```{r}
+dat_mat <- as.matrix(dat[,4:33])
+```
+```{r echo=TRUE}
+all.nmds <- metaMDS(dat_mat,k=2,trymax=100)
+```
+<br>
+
+By average / coefficient of variation
+```{r}
+dat_mat <- as.matrix(dat[,34:42])
+```
+```{r echo=TRUE}
+all.nmds <- metaMDS(dat_mat,k=2,trymax=100)
+```
+<br>
+
+
+## PCA
+
+The % cover values for substrate, eelgrass, and algae are all percentages (ranging from 0 to 1). However, the density data needs to be rescaled.
+```{r echo=TRUE}
+density_rescaled <- dat[,grep("density",colnames(dat))] %>%
+  dplyr::select(-cv_marina_density) %>%
+  mutate(across(.fns=rescale, to = c(0, 1)))
+```
+```{r}
+dat_rescaled     <- dat %>%
+  dplyr::select(-c(grep("density",colnames(dat)))) %>%
+  bind_cols(density_rescaled) %>%
+  bind_cols(dplyr::select(dat,cv_marina_density)) %>%
+  dplyr::select(colnames(dat))
+```
+<br>
+
+#### Substrate + Vegetation
+
+By quadrat
+```{r}
+dat_mat <- as.matrix(dat_rescaled[,4:33])
+```
+```{r echo=TRUE}
+alldat.pca <- prcomp(x=dat_mat)
+```
+```{r}
+autoplot(alldat.pca, data = dat, colour = 'site', size=5,
+         loadings = TRUE, loadings.colour = 'blue',
+         loadings.label = TRUE, loadings.label.size = 2, main="Substrate/Vegetation Data") + theme_bw()
+```
+<br>
+
+By average / coefficient of variation
+```{r}
+dat_mat <- as.matrix(dat_rescaled[,c(34:42)])
+```
+```{r echo=TRUE}
+alldat.means.pca <- prcomp(x=dat_mat)
+```
+```{r}
+autoplot(alldat.means.pca, data = dat, colour = 'site', size=5,
+         loadings = TRUE, loadings.colour = 'blue',
+         loadings.label = TRUE, loadings.label.size = 2, main="Substrate/Vegetation Summary Stats") + theme_bw()
+```
+<br>
+
+
+#### Substrate only
+
+```{r}
+sdat_mat <- as.matrix(dat[,4:18])
+substrate.pca <- prcomp(x=sdat_mat)
+
+autoplot(substrate.pca, data = dat, colour = 'site', size=5,
+         loadings = TRUE, loadings.colour = 'blue',
+         loadings.label = TRUE, loadings.label.size = 2, main="Substrate, all data") + theme_bw()
+```
+<br>
+**Not Included: the Padilla Bay NERR Sites are most similar to Clayton Beach with respect to substrate type (mostly sand, sandy mud).**
+<br>
+
+```{r}
+sdat_mat <- as.matrix(dat[,34:36])
+substrate.pca <- prcomp(x=sdat_mat)
+
+autoplot(substrate.pca, data = dat, colour = 'site', size=5,
+         loadings = TRUE, loadings.colour = 'blue',
+         loadings.label = TRUE, loadings.label.size = 2, main="Substrate, summary stats") + theme_bw()
+```
+
+<br>
+
+
+#### Vegetation only
+```{r}
+edat_mat <- as.matrix(dat_rescaled[,19:28])
+eelgrass.pca <- prcomp(x=edat_mat)
+
+autoplot(eelgrass.pca, data = dat, colour = 'site', size=5,
+         loadings = TRUE, loadings.colour = 'blue',
+         loadings.label = TRUE, loadings.label.size = 2, main="Eelgrass / Algae, all data") + theme_bw()
+```
+<br>
+
+Not Included: The Padilla Bay NERR Sites are most similar to Clayton Beach with respect to eelgrass density (high) and algae cover (low to zero).
+<br>
+
+```{r}
+edat_mat <- as.matrix(dat_rescaled[,37:42])
+eelgrass.pca <- prcomp(x=edat_mat)
+
+autoplot(eelgrass.pca, data = dat, colour = 'site', size=5,
+         loadings = TRUE, loadings.colour = 'blue',
+         loadings.label = TRUE, loadings.label.size = 2, main="Eelgrass / Algae, summary stats") + theme_bw()
+```
+

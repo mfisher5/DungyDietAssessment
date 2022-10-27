@@ -6,6 +6,10 @@ data/dada2/cleaned_hash_key*
 data/dada2/*.rds
 data/blast/*.fasta
 data/blast/*.csv
+data/results/*
+data/metadata/*.rds
+.Rhistory
+**/.Rhistory
 
 scripts/*.html
 scripts/explore_results/*.html
