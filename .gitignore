@@ -7,6 +7,8 @@ data/dada2/*.rds
 data/blast/*.fasta
 data/blast/*.csv
 data/results/*
+data/blast/**/*.fasta
+data/blast/**/*.csv
 data/metadata/*.rds
 .Rhistory
 **/.Rhistory

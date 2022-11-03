@@ -13,13 +13,14 @@ output:
 Summarize the following from the sequencing run:
 
 1. Prey diversity:
-  a. alpha diversity - what proportion of reads were identified down to genus or species? 
+  a. alpha diversity - what proportion of reads were identified down to genus or species? overall and per crab
   b. beta diversity - What was the unique number of taxa identified per site/month? per site?
-  c. nMDS
-  d. 
+  c. taxonomic distinctness (vegan doc)[https://search.r-project.org/CRAN/refmans/vegan/html/taxondive.html]
+  d. nMDS
   
 2. Prey identification:
   a. what proportion of crab from each site had eaten a given phylum / class?
+  b. what proportion of crab from each site had eaten a given group of species, based on common names?
 
 
 ```{r setup, include=FALSE}
@@ -44,13 +45,18 @@ dat %<>% mutate(Site=ifelse(Site=="KAY" & Sample_num > 18, "KAY-shell",Site))
 ```
 <br>
 
-For this analysis, I removed any identifications that with too little taxonomic depth (information at family or below is missing). What are the sample sizes for this data set?
+For this analysis, I removed any identifications that with too little taxonomic depth (information at family or below is missing). I also want to make sure that no human DNA or off-target ("too small") DNA made it through my filtering.
 ```{r}
 dat.filter <- dat %>%
   filter (rank %in% c("family","species","genus")) %>%
   filter ( !(is.na(class) & is.na(order))) %>%
-  filter (species!="Homo sapiens" | is.na(species))
+  filter (species!="Homo sapiens" | is.na(species) | !(grepl("Amoeba",species)))
 
+```
+
+
+What are the final sample sizes for this data set?
+```{r}
 dat.filter %>%
   group_by(Site) %>% summarise(`Crab count`=length(unique(crab_id)))
 ```
@@ -65,6 +71,40 @@ with(tmpdat, table(Site,nreps))
 <br>
 Good, most crab have all three replicates retained after filtering.
 
+I'm interested in two versions of the final filtered data set: one including only species-level taxonomy (**species**), and one including taxa that are unique to a given site (**unique taxa**). For example, if a taxon is only identified down to genus, and that genus is found in another ID at the same site, it will be removed; but if it is not found in another ID at the same site, it is retained. I'll save this as a separate dataset.
+```{r}
+species_gen <- dat.filter %>% 
+  filter(rank=="species") %>%
+  dplyr::select(Site, genus) %>%
+  distinct() %>%
+  mutate(genus_in_speciesdat=1)
+
+species_fam <- dat.filter %>% 
+  filter(rank=="species") %>%
+  dplyr::select(Site, family) %>%
+  distinct() %>%
+  mutate(family_in_speciesdat=1)
+
+taxa.dat <- dat.filter %>%
+  left_join(species_gen,by=c("Site","genus")) %>%
+  left_join(species_fam,by=c("Site","family")) %>%
+  filter(rank=="species" | (rank=="genus" & is.na(genus_in_speciesdat)) | (rank=="family" & is.na(family_in_speciesdat))) %>%
+  dplyr::select(-genus_in_speciesdat,-family_in_speciesdat)
+```
+```{r echo=TRUE}
+write_csv(taxa.dat, (here(indir, 'lerayXT_r1_sample_taxonomy_filtered_SiteUniqueTaxa.csv')))
+```
+<br>
+
+And I'll save a list of the species / taxa to look up common names:
+```{r}
+taxa_list <- taxa.dat %>% dplyr::select(rank,taxon,phylum,class,order,family,genus,species) %>% distinct()
+species_list <- dat.filter %>% dplyr::select(rank,taxon,phylum,class,order,family,genus,species) %>% distinct()
+```
+```{r echo=TRUE}
+write_csv(taxa_list, here('data','results','lerayXT_r1_taxa_common_names.csv'))
+write_csv(species_list, here('data','results','lerayXT_r1_species_common_names.csv'))
+```
 <br>
 <br>
 
@@ -78,8 +118,8 @@ prey.freq.site <- dat.filter %>%
   filter(rank=="species") %>%
   group_by(Site) %>%
   summarise(ncrab=length(unique(crab_id)),
-            richness=length(unique(species)),
-            richness.per.crab=richness/ncrab)
+            species.richness=length(unique(species)),
+            richness.per.crab=species.richness/ncrab)
 length(dat.filter %>%
   filter(rank=="species") %>% dplyr::select(species) %>% distinct() %>% pull(species))
 prey.freq.site
@@ -88,30 +128,15 @@ prey.freq.site
 <br>
 
 
-What is the $\alpha$ diversity at each site, inclusive of identifications that only go to genus? I've removed any genus-level identifications that are within the same genus as an existing species-level identification. For example, if I have one ID for *Botrylloides violaceus* then I won't keep a second ID for *Botrylloides*. 
+What is the $\alpha$ diversity at each site, for unique taxa?
 ```{r message=FALSE}
-# get list of all genuses (geni?) at each site that have species-level IDs
-genusOFspecies <- dat.filter %>%
-  filter(rank=="species") %>%
-  dplyr::select(Site,genus) %>% distinct() %>%
-  filter(!is.na(genus)) %>% mutate(genus.exists=1)
+length(taxa.dat %>% dplyr::select(taxon) %>% distinct() %>% pull(taxon))
 
-removedat <- dat.filter %>%
-  left_join(genusOFspecies,by=c("Site","genus")) %>%
-  filter(genus.exists==1) %>%
-  filter(rank=="genus") %>% dplyr::select(-genus.exists)
-  
-dat.filtertax <- anti_join(dat.filter,removedat)
-  
-
-length(dat.filtertax %>%
-  filter(rank=="species" | rank=="genus") %>% dplyr::select(taxon) %>% distinct() %>% pull(taxon))
-
-dat.filtertax %>%
+taxa.dat %>%
   group_by(Site) %>%
   summarise(ncrab=length(unique(crab_id)),
-            richness=length(unique(taxon)),
-            richness.per.crab=richness/ncrab)
+            taxa.richness=length(unique(taxon)),
+            taxa.richness.per.crab=taxa.richness/ncrab)
 ```
 
 <br>
