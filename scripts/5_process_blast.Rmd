@@ -49,7 +49,7 @@ dada_dir <- 'data/dada2'
 
 Files containing Blast output.
 ```{r}
-blast_filenames     <- c('hash_key_clean_blast_2022-10-07.fasta')
+blast_filenames     <- c('hash_key_clean_blast_2022-11-03.fasta')
 ```
 <br>
 

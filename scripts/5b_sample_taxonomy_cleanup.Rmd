@@ -104,7 +104,7 @@ blast.dat.filter %>% group_by(Site,missing_rm) %>%
   pivot_longer(cols=c(phashes,preads),names_to="metric",values_to="proportion") %>%
   ggplot(aes(x=Site,y=proportion, fill=as.factor(missing_rm))) + geom_col() + facet_wrap(~metric) +
   labs(x="Site",y="Proportion of Hashes / Reads") +
-  scale_fill_manual(values=c("cornflowerblue","black"), name="Missing Tax") +
+  scale_fill_manual(values=c("darkseagreen4","black"), name="Missing Tax") +
   theme_classic()
 ```
 <br>
@@ -150,6 +150,21 @@ blast.dat.filter %>% filter(missing_rm==0) %>%
 ```
 
 <br>
+
+Is there a relationships between the *total reads* in a sample, and the *proportion of predator DNA*?
+```{r fig.height=4, fig.width=6}
+blast.dat.filter %>% filter(missing_rm==0) %>%
+  group_by(Site,crab_id,predator_rm) %>%
+  summarise(nreads=sum(nReads)) %>%
+  left_join(crab.totals,by=c("crab_id")) %>%
+  mutate(preads=nreads/total_reads) %>%
+  filter(predator_rm==0) %>%
+  dplyr::select(Site,crab_id,preads, total_reads) %>%
+  ggplot(aes(x=total_reads,y=preads), size=3, col="darkseagreen4") + geom_point() +
+  labs(x="Total Reads in Sample",y="Proportion Reads Not Predator") +
+  theme_classic()
+```
+<br>
 <br>
 
 ### Bacterial, fungal etc. DNA
@@ -165,7 +180,7 @@ There is also one genus of protists, and a genus of amoebas (not shown above).
 These are the bacterial / fungal / amoeba / (human) taxa to remove: 
 ```{r}
 to_remove_phyla <- c("Ascomycota", "Bacteroidota","Basidiomycota","Discosea","Oomycota","Proteobacteria","Tubulinea")
-to_remove_taxa <- c("Primates")
+to_remove_taxa <- c("Primates", "Homo sapiens","Amoebozoa sp.")
 
 blast.dat.filter %<>% 
   mutate(target_rm=ifelse(predator_rm==0 & (phylum %in% to_remove_phyla | taxon %in% to_remove_taxa), 1, 0))
@@ -206,7 +221,7 @@ summary_dat <- blast.dat.filter %>%
   filter(value==1) %>%
   dplyr::select(Site,crab_id,Sample_name,sample_id,Replicate,Hash,nReads,reason,rank,taxon)
 
-write.csv(summary_dat, here(outdir, paste0(marker,"_","r",run.num,"sample_taxonomy_filtering_summary.csv")))
+write.csv(summary_dat, here(outdir, paste0(marker,"_","r",run.num,"_sample_taxonomy_filtering_summary.csv")))
 ```
 <br>
 
