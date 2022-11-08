@@ -45,13 +45,10 @@ dat %<>% mutate(Site=ifelse(Site=="KAY" & Sample_num > 18, "KAY-shell",Site))
 ```
 <br>
 
-For this analysis, I removed any identifications that with too little taxonomic depth (information at family or below is missing). I also want to make sure that no human DNA or off-target ("too small") DNA made it through my filtering.
+For this analysis, I removed any identifications that with too little taxonomic depth (information at family or below is missing.
 ```{r}
 dat.filter <- dat %>%
-  filter (rank %in% c("family","species","genus")) %>%
-  filter ( !(is.na(class) & is.na(order))) %>%
-  filter (species!="Homo sapiens" | is.na(species) | !(grepl("Amoeba",species)))
-
+  filter (rank %in% c("family","species","genus"))
 ```
 
 
@@ -91,7 +88,7 @@ taxa.dat <- dat.filter %>%
   filter(rank=="species" | (rank=="genus" & is.na(genus_in_speciesdat)) | (rank=="family" & is.na(family_in_speciesdat))) %>%
   dplyr::select(-genus_in_speciesdat,-family_in_speciesdat)
 ```
-```{r echo=TRUE}
+```{r echo=TRUE, eval=FALSE}
 write_csv(taxa.dat, (here(indir, 'lerayXT_r1_sample_taxonomy_filtered_SiteUniqueTaxa.csv')))
 ```
 <br>
@@ -99,7 +96,12 @@ write_csv(taxa.dat, (here(indir, 'lerayXT_r1_sample_taxonomy_filtered_SiteUnique
 And I'll save a list of the species / taxa to look up common names:
 ```{r}
 taxa_list <- taxa.dat %>% dplyr::select(rank,taxon,phylum,class,order,family,genus,species) %>% distinct()
-species_list <- dat.filter %>% dplyr::select(rank,taxon,phylum,class,order,family,genus,species) %>% distinct()
+species_list <- dat.filter %>% filter(rank=="species") %>%
+  dplyr::select(Site,crab_id,taxon,rank,phylum,class,order,family,genus,species) %>% 
+  group_by(taxon,rank,phylum,class,order,family,genus,species) %>%
+  summarise(n_sites=length(unique(Site)),
+         n_crab=length(unique(crab_id))) %>%
+  arrange(n_crab)
 ```
 ```{r echo=TRUE}
 write_csv(taxa_list, here('data','results','lerayXT_r1_taxa_common_names.csv'))
@@ -119,7 +121,7 @@ prey.freq.site <- dat.filter %>%
   group_by(Site) %>%
   summarise(ncrab=length(unique(crab_id)),
             species.richness=length(unique(species)),
-            richness.per.crab=species.richness/ncrab)
+            mean.richness.per.crab=species.richness/ncrab)
 length(dat.filter %>%
   filter(rank=="species") %>% dplyr::select(species) %>% distinct() %>% pull(species))
 prey.freq.site
@@ -136,15 +138,14 @@ taxa.dat %>%
   group_by(Site) %>%
   summarise(ncrab=length(unique(crab_id)),
             taxa.richness=length(unique(taxon)),
-            taxa.richness.per.crab=taxa.richness/ncrab)
+            mean.richness.per.crab=taxa.richness/ncrab)
 ```
 
 <br>
 
 ### Beta div
 
-What is the species richness ($\beta$ diversity) for species? (the ratio between regional and local species diversity)
-Note that for this sequencing run only, I include *Hemigrapsus sp* and *Mya sp* to species level. 
+What is the $\beta$ diversity for species? (the ratio between regional and local species diversity)
 ```{r}
 prey.sp.site.mat <- dat.filter %>%
   filter(rank=="species") %>%
@@ -162,9 +163,26 @@ Beta diversity is greater between distant sites (Kayak Point v. Clayton Beach v.
 
 <br>
 
+What is the $\beta$ diversity for taxa?
+```{r}
+taxa.sp.site.mat <- taxa.dat %>%
+  dplyr::select(Site, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="Site", names_from="taxon",values_from="presence", values_fill=0)
+
+betadiver(taxa.sp.site.mat, method="w")
+taxa.sp.site.mat$Site
+
+```
+
+<br>
+The same pattern holds as above.
+<br>
+
 
 ### nMDS
 
+**For Species**
 ```{r}
 crab.sp.mat <- dat.filter %>%
   filter(rank=="species") %>%
@@ -179,7 +197,7 @@ z <- metaMDS(comm=crab.sp.mat, autotransform=FALSE,distance="bray",k=2,maxit=100
 ```
 <br>
 
-```{r}
+```{r fig.height=4,fig.width=5}
 stressplot(z)
 ```
 <br>
@@ -205,12 +223,13 @@ ggplot(z.scores, aes(x = NMDS1, y = NMDS2)) +
 
 lol what a mess.
 <br>
+<br>
 
 
 ## Saturation
 
 ### Overall
-How many unique taxa are added per new crab?
+How many unique species are added per new crab?
 ```{r fig.height=3, fig.width=4}
 all_sp <- c()
 added_sp <- data.frame(ncrab=as.numeric(),
@@ -230,31 +249,6 @@ for(i in seq(1,length(unique(dat.filter$crab_id)))){
 ggplot(added_sp,aes(x=ncrab,y=nsp)) +
   geom_point() + 
   labs(y="total prey species",x="number of crab") + theme_classic()
-```
-<br>
-
-what if we look at just Clayton Beach or Kayak Point?
-```{r fig.height=3, fig.width=4}
-claydat <- filter(dat.filter, Site=="CLAY")
-all_sp <- c()
-added_sp <- data.frame(site=as.character(),
-                       ncrab=as.numeric(),
-                       nsp=as.numeric())
-for(i in seq(1,length(unique(claydat$crab_id)))){
-  new_sp <- claydat %>%
-    filter(crab_id==unique(claydat$crab_id)[i]) %>%
-    filter(rank=="species") %>%
-    dplyr::select(crab_id,species) %>%
-    distinct() %>%
-    filter(!(species %in% all_sp)) %>%
-    pull(species)
-    all_sp <- c(all_sp, new_sp)
-  added_sp <- added_sp %>% bind_rows(data.frame(ncrab=i, nsp=length(all_sp)))
-}
-
-ggplot(added_sp,aes(x=ncrab,y=nsp)) +
-  geom_point() + 
-  labs(y="total prey species",x="number of crab") + ggtitle("Clayton Beach") + theme_classic()
 ```
 <br>
 
@@ -343,10 +337,35 @@ p4 <- ggplot(added_phylum,aes(x=ncrab,y=nphylum)) +
   labs(y="total phyla",x="number of crab") + theme_classic()
 cowplot::plot_grid(p1,p2,p3,p4,ncol=4)
 ```
+<br>
 
 <br>
 
 ### By site
+
+```{r fig.height=3, fig.width=4}
+claydat <- filter(dat.filter, Site=="CLAY")
+all_sp <- c()
+added_sp <- data.frame(site=as.character(),
+                       ncrab=as.numeric(),
+                       nsp=as.numeric())
+for(i in seq(1,length(unique(claydat$crab_id)))){
+  new_sp <- claydat %>%
+    filter(crab_id==unique(claydat$crab_id)[i]) %>%
+    filter(rank=="species") %>%
+    dplyr::select(crab_id,species) %>%
+    distinct() %>%
+    filter(!(species %in% all_sp)) %>%
+    pull(species)
+    all_sp <- c(all_sp, new_sp)
+  added_sp <- added_sp %>% bind_rows(data.frame(ncrab=i, nsp=length(all_sp)))
+}
+
+ggplot(added_sp,aes(x=ncrab,y=nsp)) +
+  geom_point() + 
+  labs(y="total prey species",x="number of crab") + ggtitle("Clayton Beach") + theme_classic()
+```
+
 
 ```{r fig.height=4, fig.width=5}
 clay.dat.filter <- dat.filter %>% filter(Site=="CLAY")
@@ -549,33 +568,40 @@ plot_grid(kp1,kp2,kp3,ncol=3)
 
 # Prey Identification
 
-## Overall
-
-```{r}
-taxa_summary <- dat.filter %>%
-  mutate(total_reads=sum(dat.filter$nReads),
-         total_crab=length(unique((dat.filter$crab_id)))) %>%
-  group_by(taxon, rank,class,phylum) %>% 
-  summarise(n_crab=length(unique(crab_id)),
-            prop_crab=n_crab/total_crab,
-            n_reads=sum(nReads),
-            prop_reads=n_reads/total_reads) %>%
-  distinct() %>% arrange(n_crab)
+For this section, I'm reading in a species-level data set that has been filtered for random nonspecific species (e.g., "cultured zooplankton") and for non-native species that have no history of invasion in the area.
+```{r echo=TRUE}
+taxa_summary <- read_csv(here('data','results','lerayXT_r1_species_filtered_common_names.csv'))
 ```
+<br>
+<br>
+
+## Overall
+```{r message=FALSE}
+reads_summary <- dat.filter %>%
+  filter(taxon %in% taxa_summary$taxon) %>%
+  group_by(rank,taxon) %>%
+  summarise(n_reads=sum(nReads))
+
+taxa_summary <- taxa_summary %>%
+  left_join(reads_summary, by=c("rank","taxon"))
+```
+<br>
+
 I've removed the species that only showed up in one crab. That's a total of `r length(unique(taxa_summary %>% filter(n_crab==1) %>% pull(taxon)))` unique taxa.
 
 ```{r fig.height=8,fig.width=9}
 plotdat <- taxa_summary %>%
   filter(n_crab > 1) %>%
-  dplyr::select(-prop_crab,-n_reads) %>%
+  mutate(`Mean Reads / Crab`=n_reads/n_crab) %>%
   arrange(n_crab) %>%    # First sort by val. This sort the dataframe but NOT the factor levels
   mutate(taxon=factor(taxon, levels=taxon))
 plotdat %>%
-  pivot_longer(cols=c(n_crab,prop_reads),names_to="metric",values_to="value") %>%
-  mutate(metric=ifelse(metric=="n_crab","Crab Count","Prop Sequence Reads")) %>%
+  pivot_longer(cols=c(n_crab,n_reads, `Mean Reads / Crab`),names_to="metric",values_to="value") %>%
+  mutate(metric=ifelse(metric=="n_crab","Crab Count",
+                       ifelse(metric=="n_reads","Total Reads", metric))) %>%
   ggplot(aes(y=value,x=factor(taxon, levels=plotdat$taxon))) +
   facet_grid(cols=vars(metric),scales="free") +
-  geom_col(aes(fill=rank)) +
+  geom_col() +
   coord_flip() + theme_bw() + theme(axis.title=element_blank(),
                                     strip.text=element_text(size=12),
                                     axis.text.x=element_text(size=12),
@@ -593,26 +619,18 @@ plot1 <- dat.filter %>%
   theme_bw() + theme(axis.text.x=element_text(size=10),
                                     axis.text.y=element_text(size=10),
                      legend.position="none")
-plot2 <- dat.filter %>%
-  filter(rank=="species") %>%
+plot2 <- taxa_summary %>%
   group_by(phylum) %>%
-  summarise(n_crab=length(unique(crab_id)),
+  summarise(n_crab=sum(n_crab),
             n_taxon=length(unique(taxon))) %>%
   ggplot(aes(y=n_taxon,x=n_crab, col=phylum)) +
   geom_point() +
   geom_text_repel(aes(label=phylum), size=3, col="black", max.overlaps=30) +
-  labs(x="Number of crab",y="Number unique species") +
+  labs(x="Number of crab",y="Number unique (filtered) species") +
   theme_bw() + theme(axis.text.x=element_text(size=10),
                                     axis.text.y=element_text(size=10),
                      legend.position="none")
 plot_grid(plot1,plot2,ncol=2)
-```
-<br>
-
-
-save this summary
-```{r eval=FALSE, echo=TRUE}
-write_csv(taxa_summary,here(indir, 'lerayXT_r1_taxonomy_summary.csv'))
 ```
 <br>
 <br>
