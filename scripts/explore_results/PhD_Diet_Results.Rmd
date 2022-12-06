@@ -1,0 +1,303 @@
+---
+title: "Dungeness Diet Results 1"
+author: "M Fisher"
+date: "2022-12-03"
+output: html_document
+---
+
+# Description
+
+Summary document to produce all results figures / information for tables. Currently, figures are:
+
+1. Prey diversity metrics:
+  a. alpha diversity - what proportion of reads were identified down to genus or species? overall, and range per crab
+  b. alpha diversity x stomach fullness, per crab. 
+  c. beta diversity - What was the unique number of taxa identified per per site?
+  d. taxonomic distinctness (vegan doc)[https://search.r-project.org/CRAN/refmans/vegan/html/taxondive.html]
+
+2. nMDS plot **check the distance metric here**
+
+3. Frequency of class occurrence (as number of crabs)
+
+
+Although the script is designed to work with taxa at any level, it currently uses a *species-only prey data set* (i.e., any taxa that could not be identified down to species were removed). The required inputs are: the filtered blast output (see script 5b), and a species "dictionary" in which all questionable prey IDs have been manually searched and removed.
+
+Before generating figures / tables, the script will apply a second filter to the blast output so that it only includes species verified in the species "dictionary."
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(ggrepel)
+library(cowplot)
+library(vegan)
+library(magrittr)
+
+# User inputs
+blastdir   <- 'data/blast'
+resultsdir <- 'data/results'
+run.nums <- c(1)
+marker  <- 'lerayXT'
+```
+```{r data, include=FALSE}
+## data from blast ##
+for(i in seq(1,length(run.nums))) {
+if(i==1){
+    blastdat <- read_csv(here(blastdir, paste0(marker,"_","r",run.nums[i],"_sample_taxonomy_filtered.csv")))
+  } else{
+    blastdat <- bind_rows(blastdat,
+                          read_csv(here(blastdir, paste0(marker,"_","r",run.nums[i],"_sample_taxonomy_filtered.csv"))))
+  }
+}
+
+## filtered species with common names ##
+for(i in seq(1,length(run.nums))) {
+if(i==1){
+    spdict <- read_csv(here(resultsdir, paste0(marker,"_","r",run.nums[i],"_species_filtered_common_names.csv")))
+  } else{
+    spdict <- bind_rows(spdict,
+                          read_csv(here(resultsdir, paste0(marker,"_","r",run.nums[i],"_species_filtered_common_names.csv"))))
+  }
+}
+
+dat <- blastdat %>%
+  filter(taxon %in% spdict$taxon) %>%
+  mutate(Site=ifelse(Site=="KAY" & Sample_num > 18, "KAY-shell",Site)) %>%
+  mutate(Site=ifelse(Site=="CLAY","LAR",Site)) %>%
+  left_join(spdict)
+```
+<br>
+
+What are the final sample sizes for this data set?
+```{r}
+dat %>%
+  group_by(Site) %>% summarise(`Crab count`=length(unique(crab_id)))
+```
+<br>
+
+# Prey Diversity
+
+### Alpha div
+
+What is the species richness ($\alpha$ diversity) at each site? Richness per crab is simply the species richness / total crab from site.
+```{r}
+richness.site <- dat %>%
+  group_by(Site) %>%
+  summarise(ncrab=length(unique(crab_id)),
+            species.richness=length(unique(taxon)))
+richness.site
+```
+<br>
+
+what is the species richness ($\alpha$ diversity) per crab?
+```{r message=FALSE}
+richness.crab <- dat %>%
+  group_by(Site,crab_id) %>%
+  summarise(species.richness=length(unique(taxon))) %>% 
+  mutate(Site=ifelse(Site=="LAR","Larrabee",ifelse(Site=="KAY","Kayak \nPoint 1",
+                                                    ifelse(Site=="KAY-shell","Kayak \nPoint 2",
+                                                           ifelse(Site=="MARPT","March \nPoint")))))
+```
+```{r}
+message("species richness per crab ranges from ", min(richness.crab$species.richness), " to ", max(richness.crab$species.richness))
+```
+```{r}
+p.alpha <- ggplot(richness.crab, aes(x=Site,y=species.richness)) +
+  geom_boxplot() +
+  labs(y="N. Species",x="") +
+  scale_y_continuous(limits=c(0,max(richness.crab$species.richness)+2), expand=c(0,0)) +
+  theme_bw()
+p.alpha
+```
+<br>
+
+Save plot.
+```{r echo=TRUE}
+png(here('figs','fig1_alpha-div.png'), res=200, height=600,width=800)
+p.alpha
+dev.off()
+```
+<br>
+
+### Alpha div x Stomach Fullness
+```{r message=FALSE}
+### stomach fullness data ###
+crabdat <- read_csv(here('data','metadata','crab_metadat.csv')) %>%
+  filter(sample_id %in% dat$crab_id) %>%
+  rename(crab_id=sample_id)
+
+richness.crab <- richness.crab %>%
+  left_join(crabdat)
+```
+```{r}
+p.alpha2 <- ggplot(richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=species.richness)) +
+  geom_boxplot() +
+  labs(y="N. Species",x="Stomach Fullness") +
+  scale_y_continuous(limits=c(0,max(richness.crab$species.richness)+2), expand=c(0,0)) +
+  theme_bw()
+p.alpha2
+```
+<br>
+
+Save plot.
+```{r echo=TRUE}
+png(here('figs','fig1b_alpha-div-fullness.png'), res=200, height=600,width=800)
+p.alpha2
+dev.off()
+```
+<br>
+<br>
+
+### Beta diversity
+
+What is the $\beta$ diversity for species? (the ratio between regional and local species diversity) The greater the similarity in community composition between multiple communities, the lower the value of β-diversity for that set of communities.
+```{r}
+prey.sp.site.mat <- dat %>%
+  dplyr::select(Site, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="Site", names_from="taxon",values_from="presence", values_fill=0)
+
+bdiv <- as.matrix(betadiver(prey.sp.site.mat, method="w")) 
+colnames(bdiv) <-c(prey.sp.site.mat$Site); rownames(bdiv) <- c(prey.sp.site.mat$Site)
+bdiv
+```
+Beta diversity is greater between distant sites (Kayak Point v. Clayton Beach v. March Point) than it is between neighboring sites (Kayak Point eelgrass v. shell).
+
+<br>
+<br>
+
+### Distinctness
+
+
+*Taxonomic distinctness* is the averaged taxonomic distances among species or individuals in the community (Clarke & Warwick 1998, 2001). These figures display the distinctness in prey assemblages between crab at the same site (with presence/absence data, both distinctness and diversity reduce to the same index, $\Delta^{+}$, Clarke & Warwick (1998)). 
+
+Note that this metric can only be run for those species which have their full taxonomy available:
+```{r}
+tmpn <- length(unique(dat %>% filter(!is.na(phylum) & !is.na(class) & !is.na(order) & !is.na(family) & !is.na(genus)) %>% pull(taxon)))
+message('taxonomic distinctness calculated for ', tmpn, ' species; this represents ', round(tmpn/length(unique(dat$taxon)),2)*100, '% of all species in the dataset.')
+```
+<br>
+
+$\Delta^(+)$ per site:
+```{r message=FALSE, warning=FALSE}
+# taxonomic distances
+sp.taxonomy <- dat %>%
+  dplyr::select(phylum,class,order,family,genus,species) %>% distinct() %>%
+  rename("Phylum"=phylum, "Class"=class,"Order"=order,"Family"=family,"Genus"=genus) %>%
+  filter((!is.na(Phylum) & !is.na(Class) & !is.na(Order)) & !is.na(Family) & !is.na(Genus))
+x <- as.data.frame(sp.taxonomy %>% dplyr::select(Genus,Family,Order,Class,Phylum))
+rownames(x) <- sp.taxonomy$species
+sp.dist.mat <- taxa2dist(x, varstep = FALSE, check = TRUE, labels=rownames(x))
+
+# presence / absence matrix
+prey.sp.site.df <- dat %>%
+  filter(species %in% sp.taxonomy$species) %>%
+  dplyr::select(Site, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="Site", names_from="taxon",values_from="presence", values_fill=0)
+
+prey.sp.site.mat <- as.data.frame(prey.sp.site.df %>% dplyr::select(-Site))
+rownames(prey.sp.site.mat) <- prey.sp.site.df$Site
+
+
+# calculate distance
+site.taxdist <- taxondive(comm=prey.sp.site.mat, dis=sp.dist.mat, match.force=TRUE)
+site.taxdist.df <- data.frame(site=names(site.taxdist$Species),
+                              nsp=site.taxdist$Species,
+                              dplus=site.taxdist$Dplus,
+                              dplus.sd=site.taxdist$sd.Dplus) %>%
+  mutate(site=ifelse(site=="KAY","Kayak\nPoint 1",ifelse(site=="KAY-shell", "Kayak\nPoint 2",
+                                                        ifelse(site=="LAR","Larrabee",
+                                                               ifelse(site=="MARPT","March\nPoint",NA)))))
+```
+```{r fig.width=5, fig.height=4}
+pd1 <- ggplot(site.taxdist.df, aes(x=site,y=dplus, col=nsp)) +
+  geom_point() +
+  geom_errorbar(aes(ymin=dplus-dplus.sd,ymax=dplus+dplus.sd), width=0.5) +
+  scale_y_continuous(limits=c(75,100)) +
+  labs(x="Site",y="Distinctness", title="Taxonomic Distinctness",subtitle="*calculated from 86% of species in data set") +
+  scale_color_gradient(low = "plum2", high = "coral4", na.value = NA, name="Species\n Count") +
+  theme_bw()
+
+pd1
+```
+
+<br>
+
+Save plot.
+```{r echo=TRUE}
+png(here('figs','fig2_distinctness.png'), res=200, height=600,width=800)
+pd1
+dev.off()
+```
+<br>
+<br>
+
+# nMDS
+
+Run on a presence/absence matrix, using the Jaccard dissimilarity index.
+```{r}
+crab.sp.mat <- dat %>%
+  dplyr::select(crab_id, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="crab_id", names_from="taxon",values_from="presence", values_fill=0)
+crabs <- crab.sp.mat$crab_id
+crab.sp.mat <- as.matrix(crab.sp.mat %>% dplyr::select(-crab_id))
+rownames(crab.sp.mat) <- crabs
+```
+```{r eval=FALSE, echo=TRUE}
+z <- metaMDS(comm=crab.sp.mat, autotransform=FALSE,distance="jaccard",k=2,maxit=1000,try=40,trymax=100)
+```
+```{r include=FALSE}
+z <- metaMDS(comm=crab.sp.mat, autotransform=FALSE,distance="jaccard",k=2,maxit=1000,try=40,trymax=100)
+```
+```{r}
+message('stress: ', round(z$stress,3))
+```
+<br>
+
+```{r fig.height=5, fig.width=8}
+#extract NMDS scores (x and y coordinates)
+z.scores = as.data.frame(scores(z)$sites)
+#add columns to data frame 
+z.scores$Sample = rownames(z.scores)
+z.scores <- left_join(z.scores,dat %>% dplyr::select(crab_id,Site),by=c("Sample"="crab_id"))
+z.scores <- z.scores %>% distinct() %>%
+  mutate(Site=ifelse(Site=="KAY","Kayak\nPoint 1",ifelse(Site=="KAY-shell", "Kayak\nPoint 2",
+                                                        ifelse(Site=="LAR","Larrabee",
+                                                               ifelse(Site=="MARPT","March\nPoint",NA)))))
+
+#make hulls
+hull.data <- bind_rows((a <- z.scores[z.scores$Site == "Kayak\nPoint 1", ][chull(z.scores[z.scores$Site == 
+    "Kayak\nPoint 1", c("NMDS1", "NMDS2")]), ]),
+    (b <- z.scores[z.scores$Site == "Kayak\nPoint 2", ][chull(z.scores[z.scores$Site == 
+    "Kayak\nPoint 2", c("NMDS1", "NMDS2")]), ]),  # hull values for grp B
+    (c <- z.scores[z.scores$Site == "Larrabee", ][chull(z.scores[z.scores$Site == 
+    "Larrabee", c("NMDS1", "NMDS2")]), ]),
+    (d <- z.scores[z.scores$Site == "March\nPoint", ][chull(z.scores[z.scores$Site == 
+    "March\nPoint", c("NMDS1", "NMDS2")]), ]))
+
+#plot
+my.nmds <- ggplot(z.scores, aes(x = NMDS1, y = NMDS2)) + 
+  geom_point(size = 4, aes(col = Site))+ 
+  geom_polygon(data=hull.data,aes(x=NMDS1,y=NMDS2,fill=Site,group=Site),alpha=0.30) + # add the convex hulls
+  
+  labs(x = "NMDS1", colour = "Site", y = "NMDS2")  + 
+  theme_bw()
+my.nmds
+```
+<br>
+
+<br>
+
+Save plot.
+```{r echo=TRUE}
+png(here('figs','fig3_nmds.png'), res=200, height=900,width=1000)
+my.nmds
+dev.off()
+```
+<br>

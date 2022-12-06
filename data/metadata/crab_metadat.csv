@@ -1,0 +1,77 @@
+sample_id,estuary,sampling_location,sampling_date,CW_mm,CH_mm,stomach_fullness,feces,sequenced
+MARPT_01,Padilla Bay,March Point,8/21/2021,15.6,11.45,2,yes,yes
+MARPT_02,Padilla Bay,March Point,8/21/2021,11.45,9.35,1,NA,yes
+MARPT_03,Padilla Bay,March Point,8/21/2021,12.5,11.43,2,yes,yes
+MARPT_04,Padilla Bay,March Point,8/21/2021,9.37,8.32,1,no,yes
+MARPT_05,Padilla Bay,March Point,8/21/2021,13.53,10.42,0.5,no,yes
+MARPT_06,Padilla Bay,March Point,8/21/2021,11.44,8.35,1.5,yes,yes
+MARPT_07,Padilla Bay,March Point,8/21/2021,15.61,12.48,0.5,yes,yes
+MARPT_08,Padilla Bay,March Point,8/21/2021,8.33,9.39,2,no,yes
+MARPT_09,Padilla Bay,March Point,8/21/2021,13.51,10.43,2,yes,yes
+MARPT_10,Padilla Bay,March Point,8/21/2021,6.26,6.24,1,yes,yes
+MARPT_11,Padilla Bay,March Point,8/21/2021,7.3,6.25,1,no,yes
+MARPT_12,Padilla Bay,March Point,8/21/2021,7.3,6.27,1,no,yes
+MARPT_13,Padilla Bay,March Point,8/21/2021,6.29,6.25,1,yes,no
+MARPT_14,Padilla Bay,March Point,8/21/2021,13,10,1,no,no
+MARPT_15,Padilla Bay,March Point,8/21/2021,10.5,8.6,2,yes,no
+MARPT_16,Padilla Bay,March Point,8/21/2021,12.5,11,2,yes,no
+MARPT_17,Padilla Bay,March Point,8/21/2021,13,10.5,1,yes,no
+CLAY_01,Samish Bay,Larrabee,8/11/2021,11.46,10.39,0.5,no,yes
+CLAY_02,Samish Bay,Larrabee,8/11/2021,10.44,8.35,2,yes,yes
+CLAY_03,Samish Bay,Larrabee,8/11/2021,6.32,6.26,0.5,yes,yes
+CLAY_04,Samish Bay,Larrabee,8/11/2021,7.3,7.28,0.5,yes,yes
+CLAY_05,Samish Bay,Larrabee,8/11/2021,6.25,6.29,1,no,yes
+CLAY_06,Samish Bay,Larrabee,8/11/2021,8.36,7.31,2,no,yes
+CLAY_07,Samish Bay,Larrabee,8/11/2021,6.5,6.5,2,no,yes
+CLAY_08,Samish Bay,Larrabee,8/11/2021,6,5.5,1,no,yes
+CLAY_09,Samish Bay,Larrabee,8/11/2021,7.5,6.5,1,yes,yes
+CLAY_10,Samish Bay,Larrabee,8/11/2021,7,6.5,0,no,yes
+CLAY_11,Samish Bay,Larrabee,8/11/2021,10,8.5,2,yes,no
+CLAY_12,Samish Bay,Larrabee,8/11/2021,7.5,7,0.5,no,no
+CLAY_13,Samish Bay,Larrabee,8/11/2021,13,11,1,yes,no
+CLAY_14,Samish Bay,Larrabee,8/11/2021,9,7.5,1,no,no
+CLAY_15,Samish Bay,Larrabee,8/11/2021,6.5,7,1,no,no
+CLAY_16,Samish Bay,Larrabee,8/11/2021,12.5,9,0,no,no
+CLAY_17,Samish Bay,Larrabee,8/11/2021,7,7.5,1.5,no,no
+CLAY_18,Samish Bay,Larrabee,8/11/2021,7.5,6.5,1.5,no,no
+CLAY_19,Samish Bay,Larrabee,8/11/2021,7,6.5,1.5,no,no
+CLAY_20,Samish Bay,Larrabee,8/11/2021,7.5,7,1.5,no,no
+CLAY_21,Samish Bay,Larrabee,8/11/2021,9.5,9,2,no,no
+KAY_01,Port Susan,Kayak Point 1,7/23/2021,6.5,6.5,0.5,no,yes
+KAY_02,Port Susan,Kayak Point 1,,9,8,1,no,yes
+KAY_03,Port Susan,Kayak Point 1,,9.5,8.5,1,no,yes
+KAY_04,Port Susan,Kayak Point 1,,9,8.5,0,yes,yes
+KAY_05,Port Susan,Kayak Point 1,,10.5,8.5,1,yes,yes
+KAY_06,Port Susan,Kayak Point 1,,10.5,8.5,2,yes,yes
+KAY_07,Port Susan,Kayak Point 1,,9,8.5,1,no,yes
+KAY_08,Port Susan,Kayak Point 1,,10.5,9,2,yes,yes
+KAY_09,Port Susan,Kayak Point 1,8/5/2021,10,8.5,1,yes,yes
+KAY_10,Port Susan,Kayak Point 1,8/6/2021,6.5,6.5,1,yes,yes
+KAY_11,Port Susan,Kayak Point 1,8/19/2021,9.2,9,0.5,yes,yes
+KAY_12,Port Susan,Kayak Point 1,8/19/2021,8.8,7.8,0.5,yes,no
+KAY_13,Port Susan,Kayak Point 1,8/19/2021,9,7.5,0.5,yes,no
+KAY_14,Port Susan,Kayak Point 1,8/20/2021,10,8,0,no,no
+KAY_15,Port Susan,Kayak Point 1,8/19/2021,5,5.2,NA,yes,no
+KAY_16,Port Susan,Kayak Point 1,8/19/2021,7.5,7.8,NA,no,no
+KAY_17,Port Susan,Kayak Point 1,8/19/2021,6.5,6.8,NA,no,no
+KAY_18,Port Susan,Kayak Point 2,8/6/2021,10,8,2,yes,yes
+KAY_19,Port Susan,Kayak Point 2,8/6/2021,10.2,8.5,1,no,yes
+KAY_20,Port Susan,Kayak Point 2,8/6/2021,6.8,6.8,1,yes,yes
+KAY_21,Port Susan,Kayak Point 2,8/6/2021,9.5,8,1.5,no,yes
+KAY_22,Port Susan,Kayak Point 2,8/6/2021,8.2,8,0.5,yes,yes
+KAY_23,Port Susan,Kayak Point 2,8/6/2021,9.5,9.5,NA,yes,yes
+KAY_24,Port Susan,Kayak Point 2,8/6/2021,6.2,6,NA,yes,yes
+KAY_25,Port Susan,Kayak Point 2,8/6/2021,11.5,10,NA,no,yes
+KAY_26,Port Susan,Kayak Point 2,8/6/2021,6.2,6.2,NA,no,yes
+KAY_27,Port Susan,Kayak Point 2,8/6/2021,9,8,NA,no,yes
+KAY_28,Port Susan,Kayak Point 2,8/6/2021,9.8,8.5,NA,yes,yes
+KAY_29,Port Susan,Kayak Point 2,8/6/2021,9,8.8,NA,no,yes
+PBNERR_01,Padilla Bay,PBNERR 1,8/7/2021,13.5,10.2,2,no,yes
+PBNERR_02,Padilla Bay,PBNERR 2,8/8/2021,9,7.5,1,no,yes
+PBNERR_03,Padilla Bay,PBNERR 2,8/8/2021,14,10.5,1,yes,no
+PBNERR_04,Padilla Bay,PBNERR 3,8/18/2021,5.2,5,0.5,no,yes
+PBNERR_05,Padilla Bay,PBNERR 3,8/18/2021,10,8.5,0.5,no,no
+PBNERR_06,Padilla Bay,PBNERR 2,8/8/2021,7.5,7,0.5,no,no
+PBNERR_07,Padilla Bay,PBNERR 3,8/18/2021,13.2,10.2,NA,yes,no
+SAMT_01,Samish Bay,Oyster Creek,8/9/2021,7.2,7,1,yes,yes
+SAMT_02,Samish Bay,Oyster Creek,8/10/2021,10,8,0.5,no,yes

@@ -1,0 +1,135 @@
+---
+title: "Dungeness Diet Appendix"
+author: "M Fisher"
+date: "2022-12-03"
+output: html_document
+---
+
+# Description
+
+Summary document to produce all figures for the appendix. Currently, figures are:
+
+1. Percent hashes and percent reads removed for (1) missing data, (2) predator DNA, (3) overall.
+2. Variability between technical replicates, by crab
+3. Alpha diversity x read depth per crab
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(ggrepel)
+library(cowplot)
+library(vegan)
+library(magrittr)
+
+# User inputs
+indir   <- 'data/blast'
+run.nums <- c(1)
+marker  <- 'lerayXT'
+blastdir  <- 'data/blast'
+```
+<br>
+
+# Data Filtering
+
+## % Removed
+```{r message=FALSE, dat_premoved}
+## filtering summary dataframe - produced in script 5b ##
+for(i in seq(1,length(run.nums))){
+  if(i==1){
+    summary_dat <- read_csv(here(blastdir, paste0(marker,"_","r",run.nums[i],"_sample_taxonomy_filtering_summary.csv")))
+  } else{
+    summary_dat <- bind_rows(summary_dat,
+                               read_csv(here(blastdir, paste0(marker,"_","r",run.nums[i],"_sample_taxonomy_filtering_summary.csv"))))
+  }
+}
+```
+```{r message=FALSE}
+crab.totals <-summary_dat %>%
+  group_by(sample_id) %>% summarise(total_hashes=length(unique(Hash)), total_reads=sum(nReads))
+
+## all retained ##
+plotdat.sum <- summary_dat %>%
+  mutate(retained=ifelse(reason=="retained",1,0)) %>%
+  group_by(sample_id,retained) %>%
+  summarise(nreads=sum(nReads),
+            nhashes=sum(length(unique(Hash))), .groups="drop") %>%
+  left_join(crab.totals,by=c("sample_id")) %>%
+  mutate(phashes=1-(nhashes/total_hashes),
+         preads=1-(nreads/total_reads)) %>%
+  dplyr::select(sample_id,retained,phashes,preads) %>%
+  pivot_longer(cols=c(phashes,preads),names_to="metric",values_to="proportion") %>%
+  rename(removed=retained) %>%
+  pivot_longer(cols=c(removed),names_to="filter_type",values_to="value")
+               
+## predator DNA ##
+plotdat.reason <- summary_dat %>%
+  mutate(predatorDNA=ifelse(reason=="predator DNA",1,0)) %>%
+  group_by(sample_id,predatorDNA) %>%
+  summarise(nreads=sum(nReads),
+            nhashes=sum(length(unique(Hash))), .groups="drop") %>%
+  left_join(crab.totals,by=c("sample_id")) %>%
+  mutate(phashes=nhashes/total_hashes,
+         preads=nreads/total_reads) %>%
+  dplyr::select(sample_id,predatorDNA,phashes,preads) %>%
+  pivot_longer(cols=c(phashes,preads),names_to="metric",values_to="proportion")%>%
+  pivot_longer(cols=c(predatorDNA),names_to="filter_type",values_to="value")
+
+plotdat <- bind_rows(plotdat.sum,plotdat.reason) %>%
+  mutate(filter_type=ifelse(filter_type=="predatorDNA","Predator DNA","Overall Removed")) %>%
+  mutate(metric=ifelse(metric=="phashes","Prop. Hashes","Prop. Reads"))
+plotdat$filter_type <- factor(plotdat$filter_type, levels=c("Predator DNA","Overall Removed"))
+```
+
+First, by sample. 
+```{r}
+## combined plot ##
+p.filter <- ggplot(plotdat,aes(x=sample_id,y=proportion, fill=as.factor(value))) + geom_col() + facet_grid(cols=vars(metric),rows=vars(filter_type), drop=TRUE) +
+  labs(x="Sample (Replicates)",y="Proportion of Hashes / Reads") +
+  scale_fill_manual(values=c("darkseagreen4","dodgerblue4"), name="") +
+  theme_classic() + theme(axis.text.x=element_blank())
+p.filter
+```
+<br>
+
+Save plot.
+```{r echo=TRUE}
+png(here('figs','SuppA_Fig1-filtering.png'), res=200,width=3000,height=1000)
+p.filter
+dev.off()
+```
+<br>
+
+Then, as a histogram. 
+```{r}
+p.filter2 <- ggplot(plotdat %>% filter(value==1),aes(x=proportion,fill=filter_type)) +
+  geom_histogram() +
+  facet_grid(rows=vars(metric)) +
+  labs(y="N. Samples (Replicates)",x="") +
+  scale_fill_manual(values=c("brown4","grey60"), name="") +
+  scale_y_continuous(expand=c(0,0)) +
+  theme_classic()
+```
+<br>
+
+Save plot.
+```{r echo=TRUE}
+png(here('figs','SuppA_Fig1-filtering-histogram.png'), res=200,width=1000,height=800)
+p.filter2
+dev.off()
+```
+<br>
+<br>
+
+# PCR Replicates
+## Variability
+
+
+
+
+
+
