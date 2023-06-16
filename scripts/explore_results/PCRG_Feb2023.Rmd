@@ -1,0 +1,267 @@
+---
+title: "PCRG Feb Updates"
+author: "M Fisher"
+date: "2023-02-01"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(ggrepel)
+library(cowplot)
+library(vegan)
+library(magrittr)
+
+# User inputs
+blastdir   <- 'data/blast'
+resultsdir <- 'data/results'
+run.nums <- c(1)
+marker  <- 'lerayXT'
+```
+```{r data, include=FALSE}
+## data from blast ##
+for(i in seq(1,length(run.nums))) {
+if(i==1){
+    blastdat <- read_csv(here(blastdir, paste0(marker,"_","r",run.nums[i],"_sample_taxonomy_filtered.csv")))
+  } else{
+    blastdat <- bind_rows(blastdat,
+                          read_csv(here(blastdir, paste0(marker,"_","r",run.nums[i],"_sample_taxonomy_filtered.csv"))))
+  }
+}
+
+## filtered species with common names ##
+for(i in seq(1,length(run.nums))) {
+if(i==1){
+    spdict <- read_csv(here(resultsdir, paste0(marker,"_","r",run.nums[i],"_species_filtered_common_names.csv")))
+  } else{
+    spdict <- bind_rows(spdict,
+                          read_csv(here(resultsdir, paste0(marker,"_","r",run.nums[i],"_species_filtered_common_names.csv"))))
+  }
+}
+
+dat <- blastdat %>%
+  filter(taxon %in% spdict$taxon) %>%
+  mutate(Site=ifelse(Site=="KAY" & Sample_num > 18, "KAY-shell",Site)) %>%
+  mutate(Site=ifelse(Site=="CLAY","LAR",Site)) %>%
+  left_join(spdict)
+```
+<br>
+
+What are the final sample sizes for this data set?
+```{r}
+dat %>%
+  group_by(Site) %>% summarise(`Crab count`=length(unique(crab_id)))
+```
+
+
+# Prey Diversity
+
+### Alpha div
+
+What is the species richness ($\alpha$ diversity) at each site? Richness per crab is simply the species richness / total crab from site.
+```{r}
+richness.site <- dat %>%
+  group_by(Site) %>%
+  summarise(ncrab=length(unique(crab_id)),
+            species.richness=length(unique(taxon)))
+richness.site
+```
+
+How is ($\alpha$ diversity) distributed across the taxa?
+```{r message=FALSE}
+richness.phyla.site <- dat %>%
+  filter(!is.na(phylum)) %>%
+  group_by(Site, phylum) %>%
+  summarise(species.richness=length(unique(taxon)))  %>%
+  mutate(Site=ifelse(Site=="LAR","Larrabee",ifelse(Site=="KAY","Kayak Point 1",
+                                                    ifelse(Site=="KAY-shell","Kayak Point 2",
+                                                           ifelse(Site=="MARPT","March Point")))))
+richness.phyla <- dat %>%
+  filter(!is.na(phylum)) %>%
+  group_by(phylum) %>%
+  summarise(species.richness=length(unique(taxon))) %>%
+  arrange(species.richness)
+
+porder <- unique(richness.phyla$phylum)
+
+richness.phyla <- richness.phyla %>%
+  mutate(Site="Overall") %>%
+  bind_rows(richness.phyla.site)
+
+richness.phyla$phylum <- factor(richness.phyla$phylum, levels=porder)
+```
+```{r fig.height=7,fig.width=5}
+tmplot <- ggplot(richness.phyla, aes(y=phylum,x=species.richness, fill=Site)) +
+  geom_col(position="dodge") +
+  labs(x="Species Richness",y="Phylum") +
+  scale_fill_manual(values=c("cyan4","darkblue","darkorange","coral3","gray30")) +
+  theme_bw() + theme(panel.grid.major.y=element_blank())
+tmplot
+
+png(here('figs','pcrg_phyla-all-crab.png'), res=200, height=800,width=800)
+tmplot
+dev.off()
+```
+
+
+### Alpha div x Stomach Fullness
+```{r message=FALSE}
+richness.crab <- dat %>%
+  group_by(Site,crab_id) %>%
+  summarise(species.richness=length(unique(taxon))) %>% 
+  mutate(Site=ifelse(Site=="LAR","Larrabee",ifelse(Site=="KAY","Kayak \nPoint 1",
+                                                    ifelse(Site=="KAY-shell","Kayak \nPoint 2",
+                                                           ifelse(Site=="MARPT","March \nPoint")))))
+```
+```{r message=FALSE}
+### stomach fullness data ###
+crabdat <- read_csv(here('data','metadata','crab_metadat.csv')) %>%
+  filter(sample_id %in% dat$crab_id) %>%
+  rename(crab_id=sample_id)
+
+richness.crab <- richness.crab %>%
+  left_join(crabdat) %>%
+  filter(!is.na(stomach_fullness)) %>% filter(stomach_fullness != "0")
+  
+```
+```{r}
+p.alpha2 <- ggplot(richness.crab, aes(x=as.factor(stomach_fullness),y=species.richness)) +
+  geom_boxplot() +
+  labs(y="N. Species",x="Stomach Fullness") +
+  scale_y_continuous(limits=c(0,max(richness.crab$species.richness)+2), expand=c(0,0)) +
+  theme_bw()
+p.alpha2
+```
+<br>
+
+Save plot.
+```{r echo=TRUE}
+png(here('figs','fig1b_alpha-div-fullness.png'), res=200, height=600,width=800)
+p.alpha2
+dev.off()
+```
+<br>
+
+
+
+# nMDS
+
+Run on a presence/absence matrix, using the Jaccard dissimilarity index.
+```{r}
+crab.sp.mat <- dat %>%
+  dplyr::select(crab_id, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="crab_id", names_from="taxon",values_from="presence", values_fill=0)
+crabs <- crab.sp.mat$crab_id
+crab.sp.mat <- as.matrix(crab.sp.mat %>% dplyr::select(-crab_id))
+rownames(crab.sp.mat) <- crabs
+```
+```{r eval=FALSE, echo=TRUE}
+z <- metaMDS(comm=crab.sp.mat, autotransform=FALSE,distance="jaccard",k=2,maxit=1000,try=40,trymax=100)
+```
+```{r include=FALSE}
+z <- metaMDS(comm=crab.sp.mat, autotransform=FALSE,distance="jaccard",k=2,maxit=1000,try=40,trymax=100)
+```
+```{r}
+message('stress: ', round(z$stress,3))
+```
+<br>
+
+```{r fig.height=5, fig.width=8}
+#extract NMDS scores (x and y coordinates)
+z.scores = as.data.frame(scores(z)$sites)
+#add columns to data frame 
+z.scores$Sample = rownames(z.scores)
+z.scores <- left_join(z.scores,dat %>% dplyr::select(crab_id,Site),by=c("Sample"="crab_id"))
+z.scores <- z.scores %>% distinct() %>%
+  mutate(Site=ifelse(Site=="KAY","Kayak Point 1",ifelse(Site=="KAY-shell", "Kayak Point 2",
+                                                        ifelse(Site=="LAR","Larrabee",
+                                                               ifelse(Site=="MARPT","March Point",NA)))))
+
+#make hulls
+hull.data <- bind_rows((a <- z.scores[z.scores$Site == "Kayak Point 1", ][chull(z.scores[z.scores$Site == 
+    "Kayak Point 1", c("NMDS1", "NMDS2")]), ]),
+    (b <- z.scores[z.scores$Site == "Kayak Point 2", ][chull(z.scores[z.scores$Site == 
+    "Kayak Point 2", c("NMDS1", "NMDS2")]), ]),  # hull values for grp B
+    (c <- z.scores[z.scores$Site == "Larrabee", ][chull(z.scores[z.scores$Site == 
+    "Larrabee", c("NMDS1", "NMDS2")]), ]),
+    (d <- z.scores[z.scores$Site == "March Point", ][chull(z.scores[z.scores$Site == 
+    "March Point", c("NMDS1", "NMDS2")]), ]))
+
+#plot
+my.nmds <- ggplot(z.scores, aes(x = NMDS1, y = NMDS2)) + 
+  geom_point(size = 2, aes(col = Site))+ 
+  geom_polygon(data=hull.data,aes(x=NMDS1,y=NMDS2,fill=Site,group=Site),alpha=0.10) + # add the convex hulls
+  labs(x = "NMDS1", colour = "Site", y = "NMDS2")  + 
+  scale_color_manual(values=c("cyan4","darkblue","darkorange","coral3")) +
+  scale_fill_manual(values=c("cyan4","darkblue","darkorange","coral3")) +
+  theme_bw() + theme(legend.text=element_text(size=12),
+                     legend.title=element_blank(),
+                     axis.text=element_blank())
+my.nmds
+```
+<br>
+
+<br>
+
+Save plot.
+```{r echo=TRUE}
+png(here('figs','pcrg_nmds.png'), res=200, height=800,width=1200)
+my.nmds
+dev.off()
+```
+<br>
+<br>
+
+
+# Prey identity
+
+### frequency of all prey groups
+
+### common prey across all sites
+
+Note that I removed March Point data, which comes from only two crab. With the March Point data, there was only one common species across all sites. 
+
+```{r message=FALSE}
+# get total crab per site & sites to include in data set.
+crab.per.site <- dat %>% group_by(Site) %>% summarise(total_crab=length(unique(crab_id))) %>% ungroup()
+my.sites <- crab.per.site$Site[which(crab.per.site$Site != "MARPT")]
+
+# summarise proportion crab per prey ID
+crab.per.prey <- dat %>% group_by(Site,taxon,phylum,class,order) %>% 
+  summarise(ncrab=length(unique(crab_id))) %>%
+  left_join(crab.per.site, by="Site") %>%
+  mutate(pcrab=ncrab/total_crab)
+
+ubiq.sp <- dat %>% dplyr::select(Site,taxon) %>%
+  distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(names_from=Site,values_from=presence, values_fill=0) %>%
+  mutate(total_sites=rowSums(across(c(seq(2,(length(my.sites)+1)))))) %>%
+  filter(total_sites>=length(my.sites)) %>%
+  left_join(crab.per.prey, by="taxon")
+```
+
+```{r}
+tmplot <- ggplot(ubiq.sp %>% filter(Site %in% my.sites) %>%
+  mutate(Site=ifelse(Site=="KAY","Kayak Point 1",ifelse(Site=="KAY-shell", "Kayak Point 2",
+                                                        ifelse(Site=="LAR","Larrabee",
+                                                               ifelse(Site=="MARPT","March Point",NA))))) %>%
+    mutate(taxon=ifelse(taxon=="Nannochloris sp. MBTD-CMFRI-S048","Nannochloris sp.",taxon)) %>%
+             filter(taxon != "Micromonas pusilla"), aes(x=pcrab,y=taxon,fill=Site)) +
+  geom_col(position="dodge") +
+  labs(x="Prop Crab at Site",y="",subtitle="Species present at all sites") +
+  scale_fill_manual(values=c("cyan4","darkblue","darkorange")) + theme_bw() + theme(axis.text.y=element_text(size=11),
+                                                                                legend.text=element_text(size=12),
+                                                                                legend.title=element_blank())
+
+tmplot
+png(here('figs','pcrg_ubiq_sp.png'), res=200, height=800,width=1300)
+tmplot
+dev.off()
+
+```

@@ -47,7 +47,7 @@ output_dir <- "data/cutadapt"
 meta_output_dir <- "data"
 
 # which lane of sequencing is being analyzed?
-run <- 1
+run <- 2
 
 # which primer was used for this lane?
 run_primer <- "LerayXT"
@@ -96,6 +96,7 @@ rfilenames <- list.files(path = here(fastq_dir),
 ```
 <br>
 
+### run 1
 Grab the sample IDs and sample numbers ("name") from the filenames, arrange them in order of sample number, and combine the datasets.
 ```{r}
 fdat <- data.frame(file1=ffilenames) %>%
@@ -143,6 +144,84 @@ Save file
 ```{r}
 write_csv(sequencingmetafile, here(meta_output_dir, paste0("metadata-cutadapt-input-run-", run, ".csv")))
 ```
+
+### run 2
+Grab the sample IDs and sample numbers ("name") from the filenames, arrange them in order of sample number, and combine the datasets.
+```{r}
+
+
+separate(file, into=c("site","sample_label","sample_num"), sep="_") %>%
+  mutate(sample_num=ifelse(grepl("Control",site) | grepl("NONE",site), sample_label,sample_num),
+         sample_label=ifelse(grepl("Control",site) | grepl("NONE",site), NA, sample_label))
+
+
+fdat <- data.frame(file1=ffilenames) %>%
+  # create sample name / sample ID from file name, without file suffix
+  mutate(file1.t=str_remove(file1,"_L001_R1_001.fastq.gz")) %>%
+  separate(file1.t, into=c("site","sample_label","Sample_name"), sep="_") %>%
+  unite(col="sample_label",site,sample_label,sep="-") %>%
+  mutate(Sample_name=str_remove(Sample_name,"S"))
+
+fdat %<>% filter(!is.na(Sample_name)) %>%
+  bind_rows(fdat %>% filter(is.na(Sample_name)) %>%
+                       separate(col=sample_label, into=c("sample_label","Sample_name"), sep=-4) %>%
+                      mutate(Sample_name=str_remove(Sample_name,"-S")))
+
+
+rdat <- data.frame(file2=rfilenames) %>%
+  # create sample name / sample ID from file name, without file suffix
+  mutate(file2.t=str_remove(file2,"_L001_R2_001.fastq.gz")) %>%
+  separate(file2.t, into=c("site","sample_label","Sample_name"), sep="_") %>%
+  unite(col="sample_label",site,sample_label,sep="-") %>%
+  mutate(Sample_name=str_remove(Sample_name,"S"))
+
+rdat %<>% filter(!is.na(Sample_name)) %>%
+  bind_rows(rdat %>% filter(is.na(Sample_name)) %>%
+                       separate(col=sample_label, into=c("sample_label","Sample_name"), sep=-4) %>%
+                      mutate(Sample_name=str_remove(Sample_name,"-S")))
+
+
+sequencingmetafile <- full_join(fdat,rdat,by=c("Sample_name","sample_label")) %>%
+  dplyr::select(Sample_name,file1,file2)
+```
+<br>
+
+Add primer information
+```{r}
+sequencingmetafile %<>%
+  mutate(primer=run_primer) %>%
+  left_join(primer_seqs, by="primer") %>%
+  mutate(Locus=primer,
+         PrimerF=primerF,
+         PrimerR=primerR) %>%
+  dplyr::select(Sample_name,file1,file2,PrimerF,PrimerR,Locus)
+```
+<br>
+
+Save file for cutadapt
+```{r}
+write_csv(sequencingmetafile, here(meta_output_dir, paste0("metadata-cutadapt-input-run-", run, ".csv")))
+```
+
+
+Save general metadata file
+```{r}
+meta.out <- full_join(fdat,rdat,by=c("Sample_name","sample_label")) %>%
+  dplyr::select(-file2,-file1)
+
+fix.meta <- meta.out %>% filter(grepl("SIN",sample_label) | grepl("SAMT",sample_label)) %>%
+  group_by(sample_label) %>% mutate(n=order(Sample_name)) %>%
+  mutate(tech=letters[n]) %>%
+  unite(col=sample_label,sample_label,tech,sep="-") %>% dplyr::select(-n)
+
+meta.out %<>% filter(!(grepl("SIN",sample_label) | grepl("SAMT",sample_label))) %>%
+  bind_rows(fix.meta) %>%
+  separate(sample_label, into=c("site","crab_num","replicate"),sep="-", remove=FALSE) %>%
+  mutate(locus=run_primer)
+```
+```{r}
+write_csv(meta.out, here(meta_output_dir, paste0("DCRB_Run", run, "_samples.csv")))
+```
 <br>
 <br>
 
@@ -151,7 +230,7 @@ write_csv(sequencingmetafile, here(meta_output_dir, paste0("metadata-cutadapt-in
 
 folder for output from bash script
 ```{r}
-outputfolder <- paste0(here(output_dir))
+outputfolder <- paste0(here(output_dir,paste0("run_",run)))
 dir.create(outputfolder)
 
 paramsfile <- paste0(outputfolder,"/params.txt")
@@ -166,7 +245,7 @@ sequencingmetadatafile <- paste0(here(meta_output_dir, paste0("metadata-cutadapt
 
 full file path to fastq files
 ```{r}
-fastqfolder <- paste0(here(fastq_dir))
+fastqfolder <- paste0(here(fastq_dir,paste0("run_",run)))
 ```
 <br>
 
@@ -184,11 +263,13 @@ tibble(values = as.character(params2), names = c("fastqfolder", "sequencingmetad
 
 # Cutadapt wrapper
 
+## run 1
+
 Run the following in the terminal. This wrapper script will print some parameter values to the terminal (see below) before running the core *cutadapt* script, which is `run.cutadapt.sh`. Note that output from `run.cutadapt.sh` will be saved into a log file, instead of printed to the terminal. 
 ```{bash run_cutadapt, eval=FALSE}
 cd ~/Documents/DungyDietAssessment
 
- bash scripts/1_cutadapt_wrapper.sh "C:/Users/mfisher5/Documents/DungyDietAssessment/data/cutadapt/params.txt"
+ bash scripts/1_cutadapt_wrapper.sh "C:/Users/mfisher5/Documents/DungyDietAssessment/data/cutadapt/run_1/params.txt"
 ```
 
 output: 
@@ -204,4 +285,32 @@ and trimmed fastq files will be saved into this folder:
 C:/Users/mfisher5/Documents/DungyDietAssessment/data/cutadapt
 ---
 ---
+```
+
+## run 2
+
+Run the following in the terminal. This wrapper script will print some parameter values to the terminal (see below) before running the core *cutadapt* script, which is `run.cutadapt.sh`. Note that output from `run.cutadapt.sh` will be saved into a log file, instead of printed to the terminal. 
+```{bash run_cutadapt, eval=FALSE}
+cd ~/Documents/DungyDietAssessment
+
+ bash scripts/1_cutadapt_wrapper.sh "C:/Users/mfisher5/Documents/DungyDietAssessment/data/cutadapt/run_1/params.txt"
+```
+
+
+### 2023-06-15
+output: 
+```
+/c/Users/mfisher5/Documents/DungyDietAssessment
+fastqfolder,sequencingmetadatafile,outputfolder,minlength
+C:/Users/mfisher5/Documents/DungyDietAssessment/data/raw/run_2,C:/Users/mfisher5/Documents/DungyDietAssessment/data/metadata-cutadapt-input-run-2.csv,C:/Users/mfisher5/Documents/DungyDietAssessment/data/cutadapt/run_2,100
+awk: cmd. line:1: fatal: cannot open file ` ' for reading (No such file or directory)
+fastq files will be read in from this folder:
+C:/Users/mfisher5/Documents/DungyDietAssessment/data/raw/run_2
+---
+and trimmed fastq files will be saved into this folder:
+C:/Users/mfisher5/Documents/DungyDietAssessment/data/cutadapt/run_2
+---
+---
+now running cutadapt script... output will be saved to a log file.
+
 ```

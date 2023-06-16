@@ -1,6 +1,6 @@
 data/raw/*
-data/cutadapt/noprimers/*.fastq
-data/cutadapt/noprimers_filtered/*.fastq.gz
+data/cutadapt/**/*.fastq
+data/cutadapt/**/*.fastq.gz
 data/dada2/hash_key*
 data/dada2/cleaned_hash_key*
 data/dada2/*.rds

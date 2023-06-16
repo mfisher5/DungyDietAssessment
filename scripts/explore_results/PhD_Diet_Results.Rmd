@@ -10,14 +10,19 @@ output: html_document
 Summary document to produce all results figures / information for tables. Currently, figures are:
 
 1. Prey diversity metrics:
-  a. alpha diversity - what proportion of reads were identified down to genus or species? overall, and range per crab
-  b. alpha diversity x stomach fullness, per crab. 
-  c. beta diversity - What was the unique number of taxa identified per per site?
-  d. taxonomic distinctness (vegan doc)[https://search.r-project.org/CRAN/refmans/vegan/html/taxondive.html]
+
+  - alpha diversity - what proportion of reads were identified down to genus or species? overall, and range per crab
+  - alpha diversity x stomach fullness, per crab. 
+  - beta diversity - What was the unique number of taxa identified per per site?
+  - taxonomic distinctness (vegan doc)[https://search.r-project.org/CRAN/refmans/vegan/html/taxondive.html]
+  - species richness within each phyla
 
 2. nMDS plot **check the distance metric here**
 
-3. Frequency of class occurrence (as number of crabs)
+3.  frequency (as number of crabs) of prey species
+
+  - top common prey
+  - unique common prey per site
 
 
 Although the script is designed to work with taxa at any level, it currently uses a *species-only prey data set* (i.e., any taxa that could not be identified down to species were removed). The required inputs are: the filtered blast output (see script 5b), and a species "dictionary" in which all questionable prey IDs have been manually searched and removed.
@@ -122,6 +127,39 @@ p.alpha
 dev.off()
 ```
 <br>
+
+How is ($\alpha$ diversity) distributed across the taxa?
+```{r message=FALSE}
+richness.phyla.site <- dat %>%
+  filter(!is.na(phylum)) %>%
+  group_by(Site, phylum) %>%
+  summarise(species.richness=length(unique(taxon)))  %>%
+  mutate(Site=ifelse(Site=="LAR","Larrabee",ifelse(Site=="KAY","Kayak Point 1",
+                                                    ifelse(Site=="KAY-shell","Kayak Point 2",
+                                                           ifelse(Site=="MARPT","March Point")))))
+richness.phyla <- dat %>%
+  filter(!is.na(phylum)) %>%
+  group_by(phylum) %>%
+  summarise(species.richness=length(unique(taxon))) %>%
+  arrange(species.richness)
+
+porder <- unique(richness.phyla$phylum)
+
+richness.phyla <- richness.phyla %>%
+  mutate(Site="Overall") %>%
+  bind_rows(richness.phyla.site)
+
+richness.phyla$phylum <- factor(richness.phyla$phylum, levels=porder)
+```
+```{r fig.height=7,fig.width=5}
+ggplot(richness.phyla, aes(y=phylum,x=species.richness, fill=Site)) +
+  geom_col(position="dodge") +
+  labs(x="Species Richness",y="Phylum") +
+  scale_fill_manual(values=c("cyan4","darkblue","darkorange","coral3","gray30")) +
+  theme_bw() + theme(panel.grid.major.y=element_blank())
+```
+<br>
+
 
 ### Alpha div x Stomach Fullness
 ```{r message=FALSE}
@@ -237,6 +275,10 @@ dev.off()
 <br>
 <br>
 
+
+<br>
+<br>
+
 # nMDS
 
 Run on a presence/absence matrix, using the Jaccard dissimilarity index.
@@ -300,4 +342,81 @@ png(here('figs','fig3_nmds.png'), res=200, height=900,width=1000)
 my.nmds
 dev.off()
 ```
+<br>
+<br>
+
+
+# Prey identity
+
+### common prey across all sites
+
+Note that I removed March Point data, which comes from only two crab. With the March Point data, there was only one common species across all sites. 
+
+```{r message=FALSE}
+# get total crab per site & sites to include in data set.
+crab.per.site <- dat %>% group_by(Site) %>% summarise(total_crab=length(unique(crab_id))) %>% ungroup()
+my.sites <- crab.per.site$Site[which(crab.per.site$Site != "MARPT")]
+
+# summarise proportion crab per prey ID
+crab.per.prey <- dat %>% group_by(Site,taxon,phylum,class,order) %>% 
+  summarise(ncrab=length(unique(crab_id))) %>%
+  left_join(crab.per.site, by="Site") %>%
+  mutate(pcrab=ncrab/total_crab)
+
+ubiq.sp <- dat %>% dplyr::select(Site,taxon) %>%
+  distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(names_from=Site,values_from=presence, values_fill=0) %>%
+  mutate(total_sites=rowSums(across(c(seq(2,(length(my.sites)+1)))))) %>%
+  filter(total_sites>=length(my.sites)) %>%
+  left_join(crab.per.prey, by="taxon")
+```
+```{r}
+ggplot(ubiq.sp %>% filter(Site %in% my.sites) %>%
+  mutate(Site=ifelse(Site=="KAY","Kayak Point 1",ifelse(Site=="KAY-shell", "Kayak Point 2",
+                                                        ifelse(Site=="LAR","Larrabee",
+                                                               ifelse(Site=="MARPT","March Point",NA))))), aes(x=pcrab,y=taxon,fill=Site)) +
+  geom_col(position="dodge") +
+  labs(x="Prop Crab at Site",y="Species",subtitle="Ubiquitous species") +
+  scale_fill_manual(values=c("cyan4","darkblue","coral3")) + theme_bw()
+```
+<br>
+
+### common prey unique to sites
+
+```{r}
+out <- crab.per.prey %>% split(f=~Site)
+
+
+keep.sp <- map(seq_along(out), ~ anti_join(out[[.x]], 
+          bind_rows(out[-.x]), by = 'taxon') %>% 
+             pull(taxon))
+
+
+for(i in seq(1,length(out))){
+  tmp.out <- out[[i]]
+  tmp.keep <- keep.sp[[i]]
+  if(i==1){
+  new.out <- tmp.out %>% filter(taxon %in% tmp.keep)
+  } else{new.out <- new.out %>% bind_rows(tmp.out %>% filter(taxon %in% tmp.keep))}
+}
+
+new.out.filter <- new.out %>% filter(ncrab>1)
+new.out.filter
+```
+<br>
+
+Diving into the Arthropods...
+```{r}
+dat %>% filter(phylum=="Arthropoda") %>%
+  dplyr::select(taxon, phylum,class,order,genus,species,Site) %>%
+  distinct() %>%
+  left_join(crab.per.prey) %>%
+  ggplot(aes(x=order,y=pcrab, fill=Site)) +
+  geom_col(position="dodge") +
+  facet_wrap(~class, scales="free_x", ncol=4) + theme(panel.spacing.x=unit(0.1, "lines"),
+                                                      strip.background = element_blank(),
+                                                      strip.placement = "outside")
+```
+<br>
 <br>

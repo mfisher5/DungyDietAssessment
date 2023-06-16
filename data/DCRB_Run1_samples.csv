@@ -1,4 +1,4 @@
-Sample_name,Sample_label,Site,Sample_num,Replicate,Locus
+Sample_name,sample_label,site,crab_num,tech,locus
 1,KAY-01-a,KAY,1,a,LerayXT
 2,KAY-01-b,KAY,1,b,LerayXT
 3,KAY-01-c,KAY,1,c,LerayXT

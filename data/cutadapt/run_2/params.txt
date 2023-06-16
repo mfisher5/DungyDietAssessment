@@ -1,0 +1,2 @@
+fastqfolder,sequencingmetadatafile,outputfolder,minlength
+C:/Users/mfisher5/Documents/DungyDietAssessment/data/raw/run_2,C:/Users/mfisher5/Documents/DungyDietAssessment/data/metadata-cutadapt-input-run-2.csv,C:/Users/mfisher5/Documents/DungyDietAssessment/data/cutadapt/run_2,100

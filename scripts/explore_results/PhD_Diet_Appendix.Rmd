@@ -86,7 +86,7 @@ plotdat$filter_type <- factor(plotdat$filter_type, levels=c("Predator DNA","Over
 ```
 
 First, by sample. 
-```{r}
+```{r fig.height=6, fig.width=12}
 ## combined plot ##
 p.filter <- ggplot(plotdat,aes(x=sample_id,y=proportion, fill=as.factor(value))) + geom_col() + facet_grid(cols=vars(metric),rows=vars(filter_type), drop=TRUE) +
   labs(x="Sample (Replicates)",y="Proportion of Hashes / Reads") +
