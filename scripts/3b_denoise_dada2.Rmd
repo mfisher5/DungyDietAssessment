@@ -1,0 +1,382 @@
+---
+title: "Denoise & Decontaminate ASVs"
+author: "M Fisher via Ramon Gallego"
+date: '2023-06-19'
+output: html_document
+---
+
+After running the demultiplexer_for_dada2 (http://github.com/ramongallego/demultiplexer_for_dada2), we have to denoise the whole dataset. We will do this by:
+  
+   * **Full clearance from Positive control influence**. THis process also takes advantage of the known composition of the positive controls. Each ASV found in the positive controls with a higher abundace in them than in the rest of the samples will be labelled as  **Positive** and removed from the environmental dataset. The output will be a dataset with the same number of samples as before but with fewer ASVs.
+  
+
+The following 4 processes have been used by the Kelly Lab to clean up data, but were not used for this data set:
+
+
+  * **Estimation of *Tag-jumping* or indices *cross-talk* **. We run multiple samples on each MiSeq run. These are identified by two sets of molecular barcodes. There is the potential of some sequences to be assigned to the wrong sample, which is a bummer. To estimate how many reads did this, on each MiSeq run we added some samples whose composition is known and extremely unlikely to be present in the enviromental samples studied. AS a result of this **Tag-jumping**, some of the positive control sequences might show in the environmental samples and viceversa. In our case, these positive controls are made of either Kangaroo or Ostrich (and Alligator). The process consists on, for each run, to model the compositon observed on the positive controls and substract it from the environmental samples from that run. The output will be a dataset with the same number of samples as before, but with fewer reads of certain sequences (ASVs)
+  
+  * **Discarding samples with extremely low number of reads**. Sometimes the number of reads sequenced from a particular replicate are really low, and hence the relative proportions of ASVs would be skewed. 
+
+  * **Occupancy modelling** . The Kelly Lab doesn't advise occupancy modelling at this step anymore.
+  
+  * **Dissimilarity between PCR replicates**. The workflow that leads to the sequencing of a particular sample is subject to many stochatic processes, and it is not unlikely that the composition retrieved is very different for the original community. A way to ensure that this difference is minimal is through the separate analysis of each PCR replicate. We used that approach and modeled the dissimilarity between each PCr replicate and the group centroid. This way of modeling the dissimilarity allows us to discard those PCR replicate that won't fit the normal distribution of dissimilarities. The output of this procedure will be a dataset with the same number of **Hashes** as before but with fewer **samples**.
+  
+  
+  
+
+# Load the dataset and metadata
+
+
+
+```{r load libraries, include=FALSE}
+ knitr::opts_chunk$set()
+ library (here)
+ library (tidyverse)
+ library (vegan)
+ #library (MASS)
+ library (proxy)
+ library (reshape2)
+ library (seqinr)
+ library (patchwork)
+ library (magrittr)
+
+```
+
+
+Custom functions
+```{r}
+source(here('R','dist_to_centroid.R'))
+source(here('R','how_many.R'))
+source(here('R','tibble_to_matrix.R'))
+```
+
+
+User directories
+```{r set up }
+# directory with ASV table from dada2
+dada2_dir <- "data/dada2/run_2"
+# output directory
+outdir    <- "data/dada2/run_2"
+```
+
+User inputs
+```{r}
+# metadata file (with directory)
+metadat_file <- "data/DCRB_run2_samples.csv"
+```
+<br>
+
+We will fit the number of reads assigned to each sample to a normal distribution and discard those samples with a probability of ___% of not fitting in that distribution. 
+```{r}
+pfit <- 0.98
+```
+<br>
+<br>
+
+
+# Load data
+
+ASV table and starting hash key
+```{r}
+all.asvs <- read.csv(here(dada2_dir, "ASV_table.csv")) %>% mutate(MiSeqRun=1)
+all.hashes <- read.csv(here(dada2_dir, "Hash_key.csv")) %>% mutate(MiSeqRun=1)
+```
+<br>
+
+metadata
+```{r}
+all.metadata <- read.csv(here(metadat_file))
+```
+<br>
+
+filter metadata to only include samples which came out of dada2
+```{r}
+metadata <- all.metadata %>%
+  rename(sample_id=sample_label,Tag=Sample_name) %>% mutate(MiSeqRun=1,pri_index_name="Lib_B") %>%
+  mutate(Tag = paste0("Tag_",Tag)) %>%
+  dplyr::select(sample_id, pri_index_name, Tag, MiSeqRun)
+```
+<br>
+
+## Data Cleanup
+
+A few things we check for: That **no sample appears twice** in the metadata. That the metadata **uses Tag_01 instead of Tag_1** (so it can be sorted alphabetically). That **the structure** Site_YYYYMM[A-C].[1-3] **is the same** across the dataset.
+
+```{r data cleaning}
+
+# Check that no sample appears more than once in the metadata
+
+metadata %>% 
+  group_by(sample_id) %>%
+  summarise(tot = n()) %>% 
+  arrange(desc(tot)) # Samples only appear once
+```
+
+In run 2, MARPT_14-c appears twice. This indicates that the same PCR 1 technical replicate was used twice, because the "b" technical replicate did not work. To avoid issues, rename sample 27 to MARPT_14-d. 
+
+
+```{r}
+# We should change Tag_1 for Tag_01
+
+metadata <- metadata %>%
+  mutate(Tag = ifelse(str_detect(Tag, "\\_[0-9]{1}$"), str_replace(Tag, "Tag_", "Tag_0"),Tag))
+
+```
+<br>
+
+The outputs of this process are a clean ASV table and a clean metadata file.
+
+
+# Decontaminate Data
+
+
+Before we modify our datasets on any way, first divide the dataset into positive control and environmental samples. Also create an ordered list of the Hashes present in the positive controls, for ease of plotting
+
+```{r split into two}
+ASV.table <- filter(all.asvs, MiSeqRun==1)
+ASV.table %<>%  mutate(source = ifelse(str_detect(sample_id, "Control|Positive\\+|Negative\\+"),"Positives","Samples"))
+
+ASV.table %>% 
+  filter (source == "Positives") %>% 
+  group_by(Hash) %>% 
+  summarise(tot = sum(nReads)) %>% 
+  arrange(desc(tot)) %>% 
+  pull(Hash) -> good.order
+
+
+```
+<br>
+
+create a nested table so we can run this analysis on each run independently. The nested table has three columns: MiSeqRun, Samples, Positives. The "Samples" column contains the ASV table for all samples in the given MiSeqRun. The "Positives" column contains the ASV table for all controls in the given MiSeqRun.
+
+```{r nesting the dataset}
+ASV.table %>% 
+  group_by(MiSeqRun, source) %>% 
+  nest() %>% 
+  pivot_wider(names_from = source, values_from =  data) -> ASV.nested 
+```
+<br>
+
+Let's use the custom function `how.many` to keep track of our cleaning process. This summary function just counts the number of distinct samples, hashes, and reads from an ASV table. The code applying the function maps it to each dataframe in the "Samples" column of the nested table. 
+```{r summary.file}
+ASV.nested %>% 
+  transmute(Summary = map(Samples, ~ how.many(ASVtable = .,round = 0)))  -> ASV.summary
+
+```
+<br>
+<br>
+
+## Cleaning Process 3: **Full clearance from Positive control influence**
+
+Removing the Hashes that belong to the positive controls. First, for each Hash that appeared in the positive controls, determine whether a sequence is a true positive or a true environment. For each Hash, we will calculate, maximum, mean and total number of reads in both positive and samples, and then we will use the following decision tree:
+
+  * If all three statistics are higher in one of the groups, we will label it either of Environmental or Positive control influence.
+  
+  * If there are conflicting results, we will use the Hashes to see if they belong to either group. if the maximum abundance of a Hash is in a positive, then it is a positive, otherwise is a real sequence from the environment.
+
+
+Now, for each Hash in each set of positives controls, calculate the proportion of reads that were mis-assigned - they appeared somewhere in the samples they were not expected.
+We will divide that process in two: first . A second step would be to create a column named proportion switched, which states the proportion of reads from one Hash that jumped from the environment to a positive control or viceversa. The idea is that any presence below a threshold can be arguably belong to tag jumping.
+
+```{r real or positive}
+ASV.table %>% 
+  filter (Hash %in% good.order) %>%
+  group_by(Sample_name, sample_id) %>% 
+  mutate(tot.reads = sum(nReads)) %>% 
+  group_by(Hash,Sample_name) %>% 
+  mutate(prop = nReads/tot.reads) %>% 
+  group_by(Hash, source) %>% 
+  summarise (max.  = max(prop),
+             mean. = mean(prop),
+             tot.  = sum(nReads)) %>% 
+  gather(contains("."), value = "number", key = "Stat") %>%
+  spread(key = "source", value = "number", fill = 0) %>% 
+  group_by(Hash, Stat) %>%
+  mutate(origin = case_when(Positives > Samples ~ "Positive.control",
+                            TRUE                ~ "Environment")) %>% 
+  group_by (Hash) %>%
+  mutate(tot = n_distinct(origin)) -> Hash.fate.step2
+
+Hash.fate.step2 %>% 
+  filter(tot == 1) %>% 
+  group_by(Hash) %>% 
+  summarise(origin = unique(origin)) %>% 
+  filter(origin == "Positive.control") -> Hashes.to.remove.step2
+
+ASV.table %>% 
+  group_by(source, Hash) %>% 
+  summarise(ocurrences =n()) %>% 
+  spread(key = source, value = ocurrences, fill = 0) %>% 
+  #left_join(Hashes.to.remove.step2) %>% 
+  #mutate(origin = case_when(is.na(origin) ~ "Kept",
+   #                         TRUE          ~ "Discarded")) %>% 
+  mutate(second.origin = case_when(Positives >= Samples ~ "Discarded",
+                                   TRUE                 ~ "Kept")) %>% 
+  filter(second.origin == "Discarded") %>% 
+  full_join(Hashes.to.remove.step2) -> Hashes.to.remove.step2
+```
+<br>
+
+There were 4 hashes marked for removal from run 1:
+```
+5ffae7e8304f8eec6ba8d087502e140904c0147
+2e46f9be10f6c3fe32646ff7213f9a80843c7e41
+3d2237a26590dba4ca8ff8b0470b0b470dc746e9
+ff5e108c96a673075a040151a2e3fc99e065a752
+```
+
+There were 22 hashes marked for removal from run 2:
+```
+ [1] "05ffae7e8304f8eec6ba8d087502e140904c0147" "274c8e6ae5e6a417c7d9d23a6e07cea5005516d0" "2e46f9be10f6c3fe32646ff7213f9a80843c7e41"
+ [4] "3b877aab36cfec9afde65b6fb7ca8bccb4f07236" "3bd45757984c4321ff62162ddf5dbbb19245b041" "3f32667eba5313dda2974d483bfcefb2081aa8c8"
+ [7] "4bcbd5f8b660b7c69f8e83f91d5c246ac9e27c7b" "4e2a0fbe5301b0202b1494f185694c6c7a8671a2" "59f3dc1659236f043ab1bbcf9f8b4167fd3b13cc"
+[10] "5da80e8bf6d32c84c9462d0bfce47c8db0074d18" "66a69875e08ccbb96fcb4ff9dbec842f4f29a020" "6bc93b2e3701300c6d46e4768655b3cbd48866ec"
+[13] "709e192ff9470b3f881650384eb8910931823d27" "7691ff9b30d2716aa16b35850ca1155a3797e3d9" "7ffe6b4806724aa859bb0910bd31da09e703b1df"
+[16] "a917c458cf109fdef7f2ac32525f4f143d1ed4fb" "c0f692ba394a16ec25cbc08a1265123fb571c6b7" "c80aa809f88c1f834a1759d6b10578472d737a47"
+[19] "deb50e0616606c06cec75c002ca31101bfe4657d" "e2998e4251d4c7e6b9669ec890a589a201036807" "e35fa7a74d89d55ebfb94614e2dc410eb2660c37"
+[22] "f7e174fa66c28807a274f47528919399b7577d04"
+```
+
+
+IN order to train DADA2 to better distinguish when positive control sequences have arrived in the environment, we will keep the sequences in a csv file
+
+
+```{r ASVs from positives}
+
+Hashes.to.remove.step2 %>% 
+  left_join(all.hashes) %>% 
+  select(Hash, Sequence) %>% 
+  write_csv(here(outdir,"Hashes.to.remove.csv"))
+
+```
+<br>
+
+### Remove the positive control hashes from the composition of the ASVs
+
+```{r cleaning.Step2}
+
+ASV.nested %>% 
+  mutate(Step2.tibble = map (Samples, ~ filter(.,!Hash %in% Hashes.to.remove.step2$Hash) %>% ungroup)) -> ASV.nested
+
+# saveRDS(ASV.nested, file = here(outdir, "Cleaning.before.Occ.model"))
+
+# ASV.nested <- readRDS(file =here(outdir, "Cleaning.before.Occ.model"))
+
+ASV.nested %>% 
+  transmute( Summary.1 = map(Step2.tibble, ~ how.many(ASVtable = .,round = "2.Positives"))) %>% 
+  left_join(ASV.summary) %>% 
+  mutate(Summary   = map2(Summary, Summary.1, bind_rows)) %>%
+  dplyr::select(-Summary.1) -> ASV.summary 
+```
+<br>
+
+Check on how many samples / hashes were filtered out:
+```{r}
+View(ASV.summary %>% 
+  unnest(cols = c(Summary)))
+```
+<br>
+
+Run 1: No hashes were removed from the samples -- I guess that means that the hashes in the controls were only in the controls. 
+
+Run 2: Number of unique hashes in the samples dropped by 57, from 11467821 to 11467764.
+
+<br>
+<br>
+## Exporting the output
+
+We will export the final cleaned table with four columns (Miseq_run, sample, Hash, nReads)
+
+```{r}
+ASV.nested %>% 
+  select(MiSeqRun, Step2.tibble) %>% 
+  unnest(Step2.tibble) %>% 
+  mutate(nReads = as.integer(nReads)) %>% 
+  write_csv(here(outdir,"ASV_table_clean.csv"))
+
+ASV.nested %>% 
+  select(Step2.tibble) %>% 
+  unnest(Step2.tibble) %>% 
+  distinct(Hash) %>% 
+  left_join(all.hashes) %>% 
+  write_csv(here(outdir,"Hash_Key_clean.csv"))
+
+
+
+input <- read_csv(here(dada2_dir,"Hash_key_clean.csv"))
+
+write.fasta (sequences = as.list(input$Sequence),
+             names = as.list(input$Hash),
+             file.out = here(outdir,"Hash_Key_clean.fasta"))
+
+
+```
+
+
+<br>
+
+
+## Summary of the cleanup process
+
+```{r last graph}
+
+ASV.summary %>% 
+  unnest(cols=c(Summary)) %>% 
+  ggplot(aes(x=Stage, y=number, fill = Stat))+
+    geom_line(aes(group = MiSeqRun, color = MiSeqRun))+
+  facet_grid(Stat~., scales = "free")+
+  theme(axis.text.x = element_text(angle = 45, hjust =1),
+        legend.position="none")
+                                 
+
+ggsave(here(outdir,"denoising_reads_per_step.png"), dpi = "retina")
+
+```
+
+# Coverage Table with nReads
+
+```{r}
+# Vector with desired order
+
+order.Sites <- c("CLAY", "KAY", "MARPT", "SAMT", "SIN","PBNERR")
+
+filtered.ASV <- ASV.nested %>% 
+  select(Step2.tibble) %>% 
+  unnest(Step2.tibble) %>% 
+  separate(sample_id, into = c("site","crab-replicate"), sep = "_", remove = F) %>%
+  mutate(nReads = as.integer(nReads)) %>%
+  group_by(Sample_name, site) %>%
+  summarise (nReads = sum(nReads))
+    
+
+filtered.ASV %>% 
+  mutate(site = factor(site, levels = order.Sites)) %>% 
+  ggplot(aes(x = site, 
+             y = nReads/1000)) +
+  geom_boxplot(aes(group=site),outlier.alpha = 0.5) +
+  geom_point() +
+  labs(y = "# reads (x1000)", x = "") +
+  theme_bw() +
+  theme(legend.position = c(0.6, 0.2)) 
+ggsave(here(outdir,"denoising_reads_by_site.png"))
+```
+<br>
+
+The graph can also be written out as a table:
+```{r eval=FALSE}
+filtered.ASV %>% 
+  group_by(site) %>% 
+  summarise (mean = mean(nReads), max = max(nReads), min = min(nReads), sd = sd(nReads)) %>% 
+transmute (site, data = paste0("(", round(mean,0), " +- ", round(sd,0), ")")) %>% 
+  right_join(Coverage.dataset) %>% 
+  mutate( data = paste0(cases, " ", data)) %>% 
+  arrange(Date) %>% 
+  mutate (Date = paste(lubridate::month(Date, label = T),
+                      lubridate::year(Date),
+                      sep= "'")) %>% 
+  pivot_wider(names_from = Date, values_from = data, id_cols = c(Area, Site),values_fill = list(data = "") ) %>% 
+  slice(match(Site, order.Sites)) %>% 
+  kableExtra::kable() %>% 
+  kableExtra::kable_styling() %>% 
+  kableExtra::collapse_rows(1, valign = "top") 
+```
