@@ -1,0 +1,105 @@
+CEG Server Instructions for Kelly Lab
+
+
+Needs: 
+
+    Bash terminal or other SSH program
+    Cyberduck or other SFTP program
+
+
+Notes:
+
+    SSH is how you control the remote server
+    SFTP is how you move files back and forth
+
+
+Startup Steps (explained below):
+
+	1. Generate a public/private key. Send me the public one. 
+
+	2. Login to the CEG Server of your choice.
+
+	3. Run a test blast search using a test fasta file that lives on the server.
+
+
+Detailed Explanations:
+
+	Key
+
+		-  on a Mac, open a terminal and type: `ssh-keygen -t rsa -b 4096 -f ~/.ssh/ceg_rsa` then, look at the resulting key by typing `cat ~/.ssh/ceg_rsa.pub` and send me the resulting text at rpkelly@uw.edu. I will then enter it on the server.
+
+		- on a Windows machine, at a command-prompt, type `ssh-keygen`, and save the file in the default location (something like `C:\Users\yourname/.ssh/id_rsa`
+		
+			**FROM GIT BASH**: 
+			mfisher5@SEFS-9TR67P8 MINGW64 ~
+			$ pwd
+			>> /c/Users/mfisher5
+			mfisher5@SEFS-9TR67P8 MINGW64 ~
+			$ ssh-keygen
+			>> Generating public/private rsa key pair.
+			>> Enter file in which to save the key (/c/Users/mfisher5/.ssh/id_rsa): /c/Users/mfisher5/.ssh/id_rsa
+			>> Enter passphrase (empty for no passphrase):
+			>> Enter same passphrase again:
+				Your identification has been saved in /c/Users/mfisher5/.ssh/id_rsa
+				Your public key has been saved in /c/Users/mfisher5/.ssh/id_rsa.pub
+				The key fingerprint is:...
+
+
+
+		- navigate to the hidden “.ssh” directory in your home folder (or wherever you stored the key), open the file you created (`id_rsa.pub`) in a text editor, and send it to me.
+
+		- store your key on your hard drive `ssh-add -K ~/.ssh/ceg_rsa`
+		
+			**FROM GIT BASH**
+			mfisher5@SEFS-9TR67P8 MINGW64 ~
+			$ exec ssh-agent bash
+			mfisher5@SEFS-9TR67P8 MINGW64 ~
+			$ ssh-add ~/.ssh/id_rsa
+			>> Enter passphrase for /c/Users/mfisher5/.ssh/id_rsa:
+			>> Identity added: /c/Users/mfisher5/.ssh/id_rsa (mfisher5@SEFS-9TR67P8)
+
+
+		-  I will then confirm that I’ve stored it on the server to give you access
+
+	Login
+
+		-  after the above steps, then:
+
+    open a terminal window on your computer and type the following:   `ssh -p 3004 KellyCEG@frustule.ocean.washington.edu`  (without the quotes).  This says “open a secure shell connection, using port 3004, and connect to the server at frustule.ocean.washington.edu using username KellyCEG.  
+    If all goes well, you should see a command-prompt pop up in the terminal.
+
+
+Screen
+
+	If you are running jobs on the server that will take a while, you can run `screen` after you login to the server, but before you start your job.  See https://linuxize.com/post/how-to-use-linux-screen/.  This lets you close your computer and still have your job be running (and also lets you have multiple windows open at once in the same ssh session, I think). 
+
+
+File management
+
+	- make a folder within KellyCEG with a three-letter set of initials (or similar); that will be your folder.
+
+	- in the main KellyCEG folder will be a small number of things: blast executables and other files we all might need, for example. Let’s try to keep it clean.
+
+	- Obviously, only move/delete files that you own
+
+
+R
+
+	if you want to launch R, just type `R` at the command line after logging into the server. Many packages are already installed.
+
+
+Moving things off of and onto the server
+
+	SFTP should recognize your key, and you won’t need a password to login to the server if all goes well. This is the easiest way to move things off of or onto the server.
+
+	Cyberduck: In "Open Connection" (type: FTP-SSH)
+		
+		- server name is frustule.ocean.washington.edu
+		
+		- user name is KellyCEG
+		
+		- port is 3004
+		
+		- no password
+		
+		- select .ssh key *not from the dropdown list*, but using the "CHOOSE" option

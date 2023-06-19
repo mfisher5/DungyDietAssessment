@@ -54,25 +54,18 @@ source(here('R','tibble_to_matrix.R'))
 User directories
 ```{r set up }
 # directory with ASV table from dada2
-dada2_dir <- "data/dada2/run_2"
+dada2_dir <- "data/dada2/run_1"
 # output directory
-outdir    <- "data/dada2/run_2"
+outdir    <- "data/dada2/run_1"
 ```
 
 User inputs
 ```{r}
 # metadata file (with directory)
-metadat_file <- "data/DCRB_run2_samples.csv"
-```
-<br>
-
-We will fit the number of reads assigned to each sample to a normal distribution and discard those samples with a probability of ___% of not fitting in that distribution. 
-```{r}
-pfit <- 0.98
+metadat_file <- "data/DCRB_run1_samples.csv"
 ```
 <br>
 <br>
-
 
 # Load data
 
@@ -343,7 +336,7 @@ order.Sites <- c("CLAY", "KAY", "MARPT", "SAMT", "SIN","PBNERR")
 filtered.ASV <- ASV.nested %>% 
   select(Step2.tibble) %>% 
   unnest(Step2.tibble) %>% 
-  separate(sample_id, into = c("site","crab-replicate"), sep = "_", remove = F) %>%
+  separate(sample_id, into = c("tmp","site","crab","replicate"), sep = "-", remove = F) %>%
   mutate(nReads = as.integer(nReads)) %>%
   group_by(Sample_name, site) %>%
   summarise (nReads = sum(nReads))

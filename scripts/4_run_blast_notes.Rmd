@@ -76,3 +76,7 @@ echo $(date +%H:%M) "BLASTing..."
 **2022-10-07** : Ran @ 13:54
 
 **2022-11-03**: Ran @ 11:15am, with a shorter word size (15) per Moncho's take on blast documentation. I moved the Oct run into a different folder, marked as "WS30"
+
+
+# Running BLAST on the CEG server
+
