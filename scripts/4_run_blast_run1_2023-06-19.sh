@@ -4,6 +4,14 @@ cd /mnt/nfs/home/KellyCEG/blastdb/
 PATH=$PATH:/mnt/nfs/home/KellyCEG/ncbi-blast-2.13.0+/bin
 BLAST_DB='/mnt/nfs/home/KellyCEG/blastdb/nt'
 
+# BLAST PARAMETERS
+PERCENT_IDENTITY="85"   # ran at 94% for first round in April 2023, changed 5/10/2023
+WORD_SIZE="15"
+EVALUE="1e-30"
+# number of matches recorded in the alignment:
+MAXIMUM_MATCHES="50"
+CULLING="5"
+
 ################################################################################
 # Denoised Hashes from DADA2 = All Hashes from DADA2
 ################################################################################
