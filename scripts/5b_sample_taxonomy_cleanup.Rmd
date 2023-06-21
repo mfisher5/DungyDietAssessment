@@ -1,7 +1,8 @@
 ---
 title: "Processing Blast Output: Taxonomy Clean Up"
+subtitle: "run date: `r format(Sys.time(), '%B %d, %Y')`"
 author: "M Fisher"
-date: '2022-10-12'
+date: 'written 2022-10-12'
 output: 
   html_document:
     toc: yes
@@ -37,19 +38,19 @@ outdir      <- 'data/blast'
 What are the names of the processed blast file with taxonomy from script 6?
 ```{r}
 # hashes with unique staxids
-blast_file <- 'lerayXT_r1_sample_blast_lca_taxonomy.csv'
+blast_file <- 'lerayXT_r1-2_sample_blast_lca_taxonomy.csv'
 ```
 <br>
 
 What is the location / name of the metadata file for this sequencing run?
 ```{r}
-run_metadat_file <- 'data/DCRB_Run1_samples.csv'
+run_metadat_files <- c('data/DCRB_Run1_samples.csv','data/DCRB_Run2_samples.csv')
 ```
 <br>
 
 And the run number and the marker
 ```{r}
-run.num <- 1
+run.nums <- c(1,2)
 marker <- 'lerayXT'
 ```
 <br>
@@ -57,30 +58,46 @@ marker <- 'lerayXT'
 # Read in data
 
 ```{r read in asvs1, include=FALSE}
-blast.dat <- read_csv(here(blast_dir, blast_file))
-metadat <- read_csv(here(run_metadat_file))
+blast.dat <- read_csv(here(blast_dir, blast_file)) %>% dplyr::select(-mi_seq_run)
+# remove the sample numbers at the start of the sample IDs from miseqrun 1
+blast.dat <- blast.dat %>% filter(MiSeqRun==1) %>%
+  separate(sample_id, c("tmp1","tmp2","tmp3","tmp4"), sep="-", remove=TRUE) %>%
+  unite(col="sample_id",tmp2,tmp3,tmp4, sep="-", remove=TRUE) %>%
+  mutate(sample_id=ifelse(grepl("Control",sample_id),str_remove(sample_id,"-NA"),sample_id)) %>%
+  bind_rows(blast.dat %>% filter(MiSeqRun==2))
+
+for(i in seq(1,length(run_metadat_files))){
+  tmp.meta <- read_csv(here(run_metadat_files[i])) %>% mutate(MiSeqRun=run.nums[i]) %>% mutate(crab_num=as.character(crab_num),
+                                                                                               tech=as.character(tech))
+  if(i==1){    metadat <- tmp.meta  } else{
+    metadat <- bind_rows(metadat,tmp.meta)
+  }
+}
 ```
 <br>
 
 Join the blast data to metadata information. Remove positive and negative controls (their hashes were removed in the filtering / denoising step before blasting.)
 ```{r}
 blast.dat.filter <- blast.dat %>%
-  left_join(metadat %>% unite(col="sample_id", c(Sample_name,Sample_label), sep="-", remove=FALSE), by=c("sample_id","Sample_name","Locus")) %>%
+  dplyr::select(-tmp1) %>%
+  left_join(metadat, by=c("Sample_name","Locus"="locus","MiSeqRun")) %>%
   filter(!(grepl("Control",sample_id))) %>%
-  separate(Sample_label, into=c("temp1","temp2","temp3"), sep="-", remove=FALSE) %>% unite(col="crab_id",c(temp1,temp2)) %>% dplyr::select(-temp3)
+  separate(sample_label, into=c("temp1","temp2","temp3"), sep="-", remove=FALSE) %>% unite(col="crab_id",c(temp1,temp2)) %>%
+  mutate(sample_id=sample_label) %>%
+  dplyr::select(-temp3,-sample_label)
 ```
 <br>
 
 Do all crab have three replicates present? *Yay! all of them.*
 ```{r}
-blast.dat.filter %>% group_by(crab_id) %>% summarise(nrep=length(unique(Replicate))) %>% filter(nrep < 3)
+blast.dat.filter %>% group_by(crab_id) %>% summarise(nrep=length(unique(tech))) %>% filter(nrep < 3)
 ```
 <br>
 
 How many crab per site are present in the blast data?
 ```{r}
-site.totals <- blast.dat.filter %>% group_by(Site) %>% summarise(total_crab=length(unique(crab_id)), total_hashes=length(unique(Hash)), total_reads=sum(nReads))
-site.totals %>% dplyr::select(Site,total_crab)
+site.totals <- blast.dat.filter %>% group_by(site) %>% summarise(total_crab=length(unique(crab_id)), total_hashes=length(unique(Hash)), total_reads=sum(nReads))
+site.totals %>% dplyr::select(site,total_crab)
 ```
 <br>
 
@@ -95,17 +112,17 @@ Remove any hashes that don't have taxonomy assigned, *OR* don't have a taxonomic
 blast.dat.filter %<>% mutate(missing_rm=ifelse(is.na(rank) | rank %in% c("kingdom","phylum","class"), 1,0))
 ```
 ```{r echo=FALSE, message=FALSE}
-blast.dat.filter %>% group_by(Site,missing_rm) %>%
+blast.dat.filter %>% group_by(site,missing_rm) %>%
   summarise(nhashes=length(unique(Hash)),nreads=sum(nReads)) %>%
-  left_join(site.totals,by="Site") %>%
+  left_join(site.totals,by="site") %>%
   mutate(phashes=nhashes/total_hashes,
          preads=nreads/total_reads) %>%
-  dplyr::select(Site,missing_rm,phashes,preads) %>%
+  dplyr::select(site,missing_rm,phashes,preads) %>%
   pivot_longer(cols=c(phashes,preads),names_to="metric",values_to="proportion") %>%
-  ggplot(aes(x=Site,y=proportion, fill=as.factor(missing_rm))) + geom_col() + facet_wrap(~metric) +
-  labs(x="Site",y="Proportion of Hashes / Reads") +
+  ggplot(aes(x=site,y=proportion, fill=as.factor(missing_rm))) + geom_col() + facet_wrap(~metric) +
+  labs(x="Site",y="Proportion") +
   scale_fill_manual(values=c("darkseagreen4","black"), name="Missing Tax") +
-  theme_classic()
+  theme_classic() + theme(axis.text.x=element_text(angle=45,hjust=1))
 ```
 <br>
 
@@ -135,15 +152,15 @@ blast.dat.filter %<>%
   mutate(predator_rm=ifelse(missing_rm==0 & (taxon =="Metacarcinus magister" | taxon =="Metacarcinus"), 1, 0))
 ```
 ```{r echo=FALSE, message=FALSE, fig.width=10, fig.height=5}
-blast.dat.filter %>% filter(missing_rm==0) %>%
-  group_by(Site,crab_id,predator_rm) %>%
+blast.dat.filter %>%
+  group_by(site,crab_id,predator_rm) %>%
   summarise(nhashes=length(unique(Hash)),nreads=sum(nReads)) %>%
   left_join(crab.totals,by=c("crab_id")) %>%
   mutate(phashes=nhashes/total_hashes,
          preads=nreads/total_reads) %>%
-  dplyr::select(Site,crab_id,predator_rm,phashes,preads) %>%
+  dplyr::select(site,crab_id,predator_rm,phashes,preads) %>%
   pivot_longer(cols=c(phashes,preads),names_to="metric",values_to="proportion") %>%
-  ggplot(aes(x=crab_id,y=proportion, fill=as.factor(predator_rm))) + geom_col() + facet_grid(cols=vars(metric),rows=vars(Site), drop=TRUE) +
+  ggplot(aes(x=crab_id,y=proportion, fill=as.factor(predator_rm))) + geom_col() + facet_grid(rows=vars(metric),cols=vars(site), scales="free_x") +
   labs(x="Crab ID",y="Proportion of Hashes / Reads") +
   scale_fill_manual(values=c("darkseagreen4","dodgerblue4"), name="Predator DNA") +
   theme_classic() + theme(axis.text.x=element_blank())
@@ -153,13 +170,13 @@ blast.dat.filter %>% filter(missing_rm==0) %>%
 
 Is there a relationships between the *total reads* in a sample, and the *proportion of predator DNA*?
 ```{r fig.height=4, fig.width=6}
-blast.dat.filter %>% filter(missing_rm==0) %>%
-  group_by(Site,crab_id,predator_rm) %>%
+blast.dat.filter %>%
+  group_by(site,crab_id,predator_rm) %>%
   summarise(nreads=sum(nReads)) %>%
   left_join(crab.totals,by=c("crab_id")) %>%
   mutate(preads=nreads/total_reads) %>%
   filter(predator_rm==0) %>%
-  dplyr::select(Site,crab_id,preads, total_reads) %>%
+  dplyr::select(site,crab_id,preads, total_reads) %>%
   ggplot(aes(x=total_reads,y=preads), size=3, col="darkseagreen4") + geom_point() +
   labs(x="Total Reads in Sample",y="Proportion Reads Not Predator") +
   theme_classic()
@@ -177,24 +194,25 @@ unique(blast.dat.filter$phylum)
 
 There is also one genus of protists, and a genus of amoebas (not shown above).
 
-These are the bacterial / fungal / amoeba / (human) taxa to remove: 
+These are the bacterial / fungal / amoeba / unicellular algae / (human) taxa to remove: 
 ```{r}
 to_remove_phyla <- c("Ascomycota", "Bacteroidota","Basidiomycota","Discosea","Oomycota","Proteobacteria","Tubulinea")
+to_remove_genus <- c("Nannochloris","Micromonas","Pinnularia","Chattonellaceae","Chlamydomonadaceae","Chloropicaceae","Paralia","Tetraselmis")
 to_remove_taxa <- c("Primates", "Homo sapiens","Amoebozoa sp.")
 
 blast.dat.filter %<>% 
-  mutate(target_rm=ifelse(predator_rm==0 & (phylum %in% to_remove_phyla | taxon %in% to_remove_taxa), 1, 0))
+  mutate(target_rm=ifelse(phylum %in% to_remove_phyla | taxon %in% to_remove_taxa | genus %in% to_remove_genus, 1, 0))
 ``` 
 ```{r echo=FALSE, message=FALSE, fig.width=10, fig.height=5}
 blast.dat.filter %>%
-  group_by(Site,crab_id,target_rm) %>%
+  group_by(site,crab_id,target_rm) %>%
   summarise(nhashes=length(unique(Hash)),nreads=sum(nReads)) %>%
   left_join(crab.totals,by=c("crab_id")) %>%
   mutate(phashes=nhashes/total_hashes,
          preads=nreads/total_reads) %>%
-  dplyr::select(Site,crab_id,target_rm,phashes,preads) %>%
+  dplyr::select(site,crab_id,target_rm,phashes,preads) %>%
   pivot_longer(cols=c(phashes,preads),names_to="metric",values_to="proportion") %>%
-  ggplot(aes(x=crab_id,y=proportion, fill=as.factor(target_rm))) + geom_col() + facet_grid(cols=vars(metric),rows=vars(Site), drop=TRUE, scales="free") +
+  ggplot(aes(x=crab_id,y=proportion, fill=as.factor(target_rm))) + geom_col() + facet_grid(rows=vars(metric),cols=vars(site), scales="free_x") +
   labs(x="Crab ID",y="Proportion of Hashes / Reads") +
   scale_fill_manual(values=c("darkseagreen4","dodgerblue4"), name="Off-Target DNA") +
   theme_classic() + theme(axis.text.x=element_blank())
@@ -205,12 +223,11 @@ Great, an ok % of off-target hashes (around 20%) translates into a very low prop
 <br>
 
 
+
 # Save
 
 ## reads removed
 Save a summary of the reason for removal for each Hash.  
-
-Look at the proportion of reads in each 'removal' category, for each sample.
 ```{r echo=FALSE}
 summary_dat <- blast.dat.filter %>%
   mutate(retained=ifelse(missing_rm==0 & predator_rm==0 & target_rm==0, 1,0)) %>%
@@ -219,11 +236,51 @@ summary_dat <- blast.dat.filter %>%
                        ifelse(reason=="target_rm","non-target DNA",
                               ifelse(reason=="retained","retained",NA)))) %>%
   filter(value==1) %>%
-  dplyr::select(Site,crab_id,Sample_name,sample_id,Replicate,Hash,nReads,reason,rank,taxon)
+  dplyr::select(site,crab_id,Sample_name,sample_id,tech,Hash,nReads,reason,rank,taxon)
 
-write.csv(summary_dat, here(outdir, paste0(marker,"_","r",run.num,"_sample_taxonomy_filtering_summary.csv")))
+write.csv(summary_dat, here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtering_summary.csv")))
 ```
 <br>
+
+By MiSeq Run / site: 
+
+```{r}
+blast.dat.filter %>%
+  mutate(retained=ifelse(missing_rm==0 & predator_rm==0 & target_rm==0, 1,0)) %>%
+  pivot_longer(cols=c(predator_rm,target_rm,retained), names_to="reason") %>%
+  mutate(reason=ifelse(reason=="predator_rm","predator DNA",
+                       ifelse(reason=="target_rm","non-target DNA",
+                              ifelse(reason=="retained","retained",NA)))) %>%
+  filter(value==1) %>%
+  group_by(MiSeqRun,site,sample_id) %>%
+  mutate(totalReads=sum(nReads)) %>% ungroup() %>%
+  group_by(MiSeqRun,site,sample_id,reason,totalReads) %>%
+  summarise(sumReads=sum(nReads)) %>% mutate(pReads=sumReads/totalReads) %>%
+  ggplot(aes(x=site, y=pReads,col=reason)) + geom_boxplot() + 
+  facet_grid(cols=vars(MiSeqRun), scales="free_x") +
+  labs(y="proportion of reads", title="compare MiSeq runs") +
+  theme_bw() + theme(axis.text.x=element_text(angle=45,hjust=1)) 
+```
+
+```{r}
+blast.dat.filter %>%
+  filter(missing_rm==0 & predator_rm==0 & target_rm==0) %>%
+  group_by(MiSeqRun,site,sample_id) %>%
+  summarise(sumReads=sum(nReads)) %>%
+  ggplot(aes(x=site, y=sumReads)) + geom_boxplot() + 
+  facet_grid(cols=vars(MiSeqRun), scales="free_x") +
+  labs(y="number of reads", title="compare MiSeq runs") +
+  theme_bw() + theme(axis.text.x=element_text(angle=45,hjust=1)) 
+```
+check out the low-read samples in run 2:
+```{r}
+blast.dat.filter %>%
+  filter(missing_rm==0 & predator_rm==0 & target_rm==0) %>%
+  group_by(MiSeqRun,site,sample_id) %>%
+  summarise(sumReads=sum(nReads)) %>% filter(MiSeqRun==2 & sumReads < 100)
+```
+
+
 
 ## taxonomy
 
@@ -237,14 +294,21 @@ blast.dat.out <- blast.dat.filter %>%
 
 write out. 
 ```{r}
-write_csv(blast.dat.out, here(outdir, paste0(marker,"_","r",run.num,"_sample_taxonomy_filtered.csv")))
+write_csv(blast.dat.out, here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered.csv")))
 ```
 <br>
 
 
+Did we lose any samples?
+```{r}
+metadat[which(!(metadat$sample_label %in% blast.dat.out$sample_id)),]
+```
 
-
-
+How many crab per site are present in the filtered blast data?
+```{r}
+site.totals <- blast.dat.out %>% group_by(site) %>% summarise(total_crab=length(unique(crab_id)), total_hashes=length(unique(Hash)), total_reads=sum(nReads))
+site.totals %>% dplyr::select(site,total_crab)
+```
 
 
 

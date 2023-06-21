@@ -13,6 +13,9 @@ data/metadata/*.rds
 figs/*
 .Rhistory
 **/.Rhistory
+**/.Rproj
+**.Rproj
 
 scripts/*.html
 scripts/explore_results/*.html
+.Rproj.user

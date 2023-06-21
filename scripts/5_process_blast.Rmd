@@ -49,13 +49,14 @@ dada_dir <- 'data/dada2'
 
 Files containing Blast output.
 ```{r}
-blast_filenames     <- c('hash_key_clean_blast_2022-11-03.fasta')
+blast_filenames     <- c('run1_hash_key_clean_blast_2023-06-19.fasta',
+                         'run2_hash_key_clean_blast_2023-06-19.fasta')
 ```
 <br>
 
 Output files
 ```{r}
-consensus_out <- 'lerayXTblast_multipleIDs_taxonomy.csv'
+consensus_out <- 'lerayXT_blast_multipleIDs_taxonomy.csv'
 unique_out    <- 'lerayXT_blast_uniqueIDs_taxonomy.csv'
 all_out       <- 'lerayXT_blast_taxonomy.csv'
 ```
@@ -63,7 +64,7 @@ all_out       <- 'lerayXT_blast_taxonomy.csv'
 
 Run number and locus for QC.
 ```{r}
-run.num=1
+run.nums=c(1,2)
 locus='lerayXT'
 ```
 <br>
@@ -87,10 +88,10 @@ for(i in seq(1,length(blast_filenames))){
   # split data by whether or not there are multiple IDs in the `staxid` column
   tmp_NA <- tmp_file %>%
     filter(is.na(Ntaxid)) %>%
-    mutate(dataset = run.num)
+    mutate(MiSeqRun = run.nums[i])
   tmp_dat <- tmp_file  %>%
     filter(!is.na(Ntaxid)) %>%
-    mutate(dataset = run.num)
+    mutate(MiSeqRun = run.nums[i])
   # split data again, by whether or not there are multiple rows / `sseqid` per `qseqid`
   tmp_multi <- tmp_dat %>%
     group_by(qseqid) %>%
@@ -112,7 +113,7 @@ for(i in seq(1,length(blast_filenames))){
   
 }
 rm(tmp_file, tmp_dat, tmp_multi, tmp_NA)
-unique(blast_dat$dataset)
+unique(blast_dat$MiSeqRun)
 dim(blast_dat)
 dim(blast_to_process)
 dim(blast_to_process2)
@@ -161,7 +162,7 @@ multi_taxids_df <- blast_to_process2 %>%
 head(multi_taxids_df)
 ```
 ```{r}
-write_csv(multi_taxids_df, here(outdir, paste0(locus,'_r',run.num,'_multipleIDs_staxids_lca-input.csv')))
+write_csv(multi_taxids_df, here(outdir, paste0(locus,'_r',paste(run.nums,collapse="-"),'_multipleIDs_staxids_lca-input.csv')))
 ```
 <br>
 
@@ -196,7 +197,7 @@ multi2_lca_df %<>%
   select(representative, rank) %>% 
   inner_join(multi2_lca_df) %>%
   mutate(taxID="consensus", score="consensus")
-multi2_lca_df %<>% left_join(dplyr::select(blast_to_process2, qseqid,dataset),by=c("representative"="qseqid"))
+multi2_lca_df %<>% left_join(dplyr::select(blast_to_process2, qseqid,MiSeqRun),by=c("representative"="qseqid"))
 colnames(multi2_lca_df)
 ```
 <br>
@@ -236,7 +237,7 @@ colnames(multi_seqids_df)
 ```
 <br>
 ```{r}
-write_csv(multi_seqids_df, here(outdir, paste0(locus,'_r',run.num,'_blast_multipleIDs_multrows_lca-input.csv')))
+write_csv(multi_seqids_df, here(outdir, paste0(locus,'_r',paste(run.nums,collapse="-"),'_blast_multipleIDs_multrows_lca-input.csv')))
 ```
 <br>
 
@@ -282,7 +283,7 @@ multi_lca_df %<>%
   select(representative, rank) %>% 
   inner_join(multi_lca_df) %>%
   mutate(taxID="consensus", score="consensus")
-multi_lca_df %<>% left_join(dplyr::select(blast_to_process, qseqid,dataset) %>% distinct(),by=c("representative"="qseqid"))
+multi_lca_df %<>% left_join(dplyr::select(blast_to_process, qseqid,MiSeqRun) %>% distinct(),by=c("representative"="qseqid"))
 colnames(multi_lca_df)
 ```
 <br>
@@ -341,7 +342,14 @@ After running the previous section, you should have the sample & hash informatio
 
 First, read in the data file that maps the hashes to each sample. 
 ```{r}
-hash.meta <- read_csv(here(dada_dir, 'ASV_table.csv'))
+for(i in run.nums){
+  tmp.dada2 <- read_csv(here(dada_dir,paste0('run_',i), 'ASV_table.csv')) %>% mutate(MiSeqRun=i)
+  if(i==run.nums[1]){
+    hash.meta <- tmp.dada2
+  } else{
+    hash.meta <- bind_rows(hash.meta,tmp.dada2)
+  }
+}
 ```
 <br>
 
@@ -361,7 +369,7 @@ all((unique(blast_dat$qseqid) %in% unique(hash.meta$Hash))==TRUE)
 
 Use the hash to match taxonomy to sample IDs.
 ```{r}
-sample_taxonomy <- left_join(hash.meta, blast_dat,by=c("Hash"="qseqid"))
+sample_taxonomy <- left_join(hash.meta, blast_dat,by=c("Hash"="qseqid","MiSeqRun"))
 ```
 <br>
 
@@ -379,7 +387,7 @@ missing_taxonomy <- sample_taxonomy %>%
   mutate(pHashes=nHashes/totalHashes,
          pReads=nReads/totalReads)
 
-write.csv(missing_taxonomy, here(outdir, paste0(locus,'_r',run.num,'_missing_blast_taxonomy_by-sample.csv')), row.names = FALSE)
+write.csv(missing_taxonomy, here(outdir, paste0(locus,'_r',paste(run.nums,collapse="-"),'_missing_blast_taxonomy_by-sample.csv')), row.names = FALSE)
 ```
 ```{r echo=FALSE}
 p1 <- ggplot(data=filter(missing_taxonomy,taxonomy.present==1), aes(x=pHashes), fill="forestgreen") +
@@ -394,7 +402,7 @@ This distribution may change when contamination from controls is removed.
 
 Write out the full taxonomy dataset.
 ```{r}
-write.csv(sample_taxonomy, here(outdir, paste0(locus,'_r',run.num,"_sample_blast_lca_taxonomy.csv")), row.names=FALSE)
+write.csv(sample_taxonomy, here(outdir, paste0(locus,'_r',paste(run.nums,collapse="-"),"_sample_blast_lca_taxonomy.csv")), row.names=FALSE)
 ```
 <br>
 
