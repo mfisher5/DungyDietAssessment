@@ -1,36 +1,44 @@
 ---
 title: "Dungeness Diet Results 1"
+subtitle: "run date: `r format(Sys.time(), '%B %d, %Y')`"
 author: "M Fisher"
-date: "2022-12-03"
-output: html_document
+date: 'written 2022-12-03'
+output: 
+  html_document:
+    toc: yes
+    toc_float: yes
 ---
 
 # Description
 
-Summary document to produce all results figures / information for tables. Currently, figures are:
 
-1. Prey diversity metrics:
+Summary document to produce major results information for text, tables, figures. Includes:
 
-  - alpha diversity - what proportion of reads were identified down to genus or species? overall, and range per crab
-  - alpha diversity x stomach fullness, per crab. 
+1. Sample sizes: 
+
+  - How many crab were sequenced, total and per site?
+  - How many sequenced crab had putative prey in their stomach contents?
+
+2. Prey diversity metrics:
+
+  - alpha diversity - species and taxa, overall and per site
+  - alpha diversity x stomach fullness 
   - beta diversity - What was the unique number of taxa identified per per site?
   - taxonomic distinctness (vegan doc)[https://search.r-project.org/CRAN/refmans/vegan/html/taxondive.html]
   - species richness within each phyla
 
-2. nMDS plot **check the distance metric here**
+3. Analyze site-by-site differences  
 
-3.  frequency (as number of crabs) of prey species
+  - Site differences in presence / absence: PERMANOVA & PERMDISP 
+  - Site differences in eDNA index: PERMANOVA & PERMDISP  
+  - PERMDISP as a PCoA **Main text figure**
 
-  - top common prey
-  - unique common prey per site
+4. Capture Prey identifications
 
-
-Although the script is designed to work with taxa at any level, it currently uses a *species-only prey data set* (i.e., any taxa that could not be identified down to species were removed). The required inputs are: the filtered blast output (see script 5b), and a species "dictionary" in which all questionable prey IDs have been manually searched and removed.
-
-Before generating figures / tables, the script will apply a second filter to the blast output so that it only includes species verified in the species "dictionary."
+ - Frequency of Occurrence for prey groups **Main text figure**
 
 
-
+Each of the following is completed for unique taxa (any level allowed in the final filtered dataset), and then again for a species-only data set.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
