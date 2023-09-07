@@ -49,124 +49,225 @@ library(ggrepel)
 library(cowplot)
 library(vegan)
 library(magrittr)
+source(here('R','squash_axis.r'))
 
 # User inputs
 blastdir   <- 'data/blast'
 resultsdir <- 'data/results'
-run.nums <- c(1)
+run.nums <- c(1,2)
 marker  <- 'lerayXT'
+
+estuary_colors <- data.frame(estuary=c("Port Susan Bay","Padilla Bay", "Samish Bay"),
+                             key=c("#33a02c","#1f78b4","#a6cee3"))
+
+site_names <- data.frame(site=c("KAY","KAY-shell","MARPT","PBNERR","SAMI","SAMT","LAR"),
+                         site_name=c("Kayak Pt 1","Kayak Pt 2","March Pt",
+                                   "NERR","Samish Isl","Samish Bay","Larrabee"))
 ```
 ```{r data, include=FALSE}
-## data from blast ##
-for(i in seq(1,length(run.nums))) {
-if(i==1){
-    blastdat <- read_csv(here(blastdir, paste0(marker,"_","r",run.nums[i],"_sample_taxonomy_filtered.csv")))
-  } else{
-    blastdat <- bind_rows(blastdat,
-                          read_csv(here(blastdir, paste0(marker,"_","r",run.nums[i],"_sample_taxonomy_filtered.csv"))))
-  }
-}
+## metadata ##
+run_metadat_files <- c('data/DCRB_Run1_samples.csv','data/DCRB_Run2_samples.csv')
+for(i in seq(1,length(run_metadat_files))){
+  tmp.meta <- read_csv(here(run_metadat_files[i])) %>% mutate(MiSeqRun=run.nums[i]) %>% mutate(crab_num=as.character(crab_num), tech=as.character(tech))
+  if(i==1){    metadat <- tmp.meta  } else{
+    metadat <- bind_rows(metadat,tmp.meta)
+  } }
 
-## filtered species with common names ##
-for(i in seq(1,length(run.nums))) {
-if(i==1){
-    spdict <- read_csv(here(resultsdir, paste0(marker,"_","r",run.nums[i],"_species_filtered_common_names.csv")))
-  } else{
-    spdict <- bind_rows(spdict,
-                          read_csv(here(resultsdir, paste0(marker,"_","r",run.nums[i],"_species_filtered_common_names.csv"))))
-  }
-}
+## blast output, pre-filter ##
+blastout <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_blast_lca_taxonomy.csv")))
 
-dat <- blastdat %>%
-  filter(taxon %in% spdict$taxon) %>%
-  mutate(Site=ifelse(Site=="KAY" & Sample_num > 18, "KAY-shell",Site)) %>%
-  mutate(Site=ifelse(Site=="CLAY","LAR",Site)) %>%
-  left_join(spdict)
+blastout %<>% dplyr::select(-mi_seq_run,-sample_id) %>%
+  left_join(metadat, by=c("Sample_name","Locus"="locus","MiSeqRun")) %>%
+  rename(sample_id=sample_label) %>%
+  mutate(crab_num=as.numeric(crab_num)) %>%
+  mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
+  mutate(site=ifelse(site=="CLAY","LAR",
+                     ifelse(site=="SIN","SAMI",site))) %>%
+  mutate(estuary=ifelse(site %in% c("KAY","KAY-shell"),"Port Susan Bay",
+                                    ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
+
+## filtered taxa ##
+dat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_uniqueTaxa.csv")))
+
+dat %<>%
+  mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
+  mutate(site=ifelse(site=="CLAY","LAR",
+                     ifelse(site=="SIN","SAMI",site))) %>%
+  mutate(estuary=ifelse(site %in% c("KAY","KAY-shell"),"Port Susan Bay",
+                                    ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
+
+## too small taxa (aka "detritus") ##
+smdat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_SmallTaxa_uniqueTaxa.csv")))
 ```
 <br>
+
+# 1. Sample sizes
 
 What are the final sample sizes for this data set?
 ```{r}
 dat %>%
-  group_by(Site) %>% summarise(`Crab count`=length(unique(crab_id)))
+  group_by(estuary,site) %>% summarise(`Crab count`=length(unique(crab_id)))
 ```
 <br>
 
-# Prey Diversity
+What % of crab sequenced had putative prey in their stomach contents?
+```{r}
+pcrab_with_preytax <- blastout %>% dplyr::select(site,crab_num,estuary) %>% distinct() %>%
+  mutate(crab_num=as.character(crab_num)) %>%
+  left_join(dat %>% dplyr::select(crab_num,site,estuary) %>% 
+              distinct() %>% mutate(with_prey="1", crab_num=as.character(crab_num))) %>%
+  mutate(with_prey=ifelse(is.na(with_prey),"0",with_prey)) %>%
+  group_by(estuary,site) %>%
+  mutate(total_crab=length(unique(crab_num))) %>%
+  group_by(estuary,site,total_crab,with_prey) %>%
+  summarise(pcrab=length(unique(crab_num))/total_crab) %>% distinct() %>%
+  pivot_wider(names_from=with_prey,values_from=pcrab)
+pcrab_with_preytax 
+```
+What % of crab sequenced had putative prey **species** in their stomach contents?
+```{r}
+blastout %>% dplyr::select(site,crab_num,estuary) %>% distinct() %>%
+  mutate(crab_num=as.character(crab_num)) %>%
+  left_join(dat %>% filter(rank=="species") %>% dplyr::select(crab_num,site,estuary) %>% 
+              distinct() %>% mutate(with_prey="1", crab_num=as.character(crab_num))) %>%
+  mutate(with_prey=ifelse(is.na(with_prey),"0",with_prey)) %>%
+  group_by(estuary,site) %>%
+  mutate(total_crab=length(unique(crab_num))) %>%
+  group_by(estuary,site,total_crab,with_prey) %>%
+  summarise(pcrab=round(length(unique(crab_num))/total_crab, 3)) %>% distinct() %>%
+  pivot_wider(names_from=with_prey,values_from=pcrab)
+```
+
+
+```{r}
+write_csv(pcrab_with_preytax, here(resultsdir, 'lerayXT_runs1-2_percent_crab_with_prey_taxa.csv'))
+```
+
+
+# Taxa
+
+Allows for non-species-level IDs, as long as they are unique 
+
+## 2. Prey Diversity
 
 ### Alpha div
 
-What is the species richness ($\alpha$ diversity) at each site? Richness per crab is simply the species richness / total crab from site.
+What is the total number of unique taxa observed? **121**
 ```{r}
-richness.site <- dat %>%
-  group_by(Site) %>%
-  summarise(ncrab=length(unique(crab_id)),
-            species.richness=length(unique(taxon)))
+# get species-level prey for each crab
+spdat <- dat %>% filter(rank=="species") %>% dplyr::select(taxon,genus,family,order,class) %>% distinct() %>%
+  pivot_longer(cols=c(genus,family,order,class),names_to="tax.level",values_to="sp.taxonomy") %>%
+  rename("sp.taxon"=taxon)
+
+# keep non-specific ids in data set only if that taxon is not represented across the entire dataset
+nonspec_dat <- dat %>% filter(rank!="species") %>% dplyr::select(taxon,rank,species,genus,family,order,class) %>% distinct()
+
+nonspec_dat %<>% pivot_longer(cols=c(genus,family,order,class),names_to="tax.level",values_to="taxonomy") %>%
+  filter(tax.level==rank) %>%
+  left_join(spdat,by=c("tax.level","taxonomy"="sp.taxonomy")) %>% filter(!is.na(sp.taxon))
+
+dat_overall <- dat %>% anti_join(nonspec_dat,by=c("rank","taxon"="taxonomy"))
+
+
+
+length(dat_overall %>% pull(taxon) %>% unique())
+```
+
+What is the taxonomic richness ($\alpha$ diversity) at each site? Standardized site richness is simply the  richness / total crab from site.
+```{r}
+spdat <- dat %>% filter(rank=="species") %>% 
+  dplyr::select(site,taxon,genus,family,order,class) %>% distinct() %>%
+  pivot_longer(cols=c(genus,family,order,class),names_to="tax.level",values_to="sp.taxonomy") %>%
+  rename("sp.taxon"=taxon)
+
+nonspec_dat <- dat %>% 
+  filter(rank!="species") %>% 
+  dplyr::select(site,taxon,rank,species,genus,family,order,class) %>% distinct() %>%
+  pivot_longer(cols=c(genus,family,order,class),names_to="tax.level",values_to="taxonomy") %>%
+  filter(tax.level==rank) %>%
+  left_join(spdat,by=c("site","tax.level","taxonomy"="sp.taxonomy")) %>% filter(!is.na(sp.taxon))
+
+dat_sites <- dat %>%
+  anti_join(nonspec_dat,by=c("site","rank","taxon"="taxonomy"))
+
+richness.site <- dat_sites %>% group_by(site) %>% summarise(richness=length(unique(taxon)),
+                                                            ncrab=length(unique(crab_id))) %>%
+  mutate(std.richness=richness/ncrab)
 richness.site
 ```
 <br>
 
-what is the species richness ($\alpha$ diversity) per crab?
+what is the taxonomic richness ($\alpha$ diversity) per crab?
 ```{r message=FALSE}
 richness.crab <- dat %>%
-  group_by(Site,crab_id) %>%
-  summarise(species.richness=length(unique(taxon))) %>% 
-  mutate(Site=ifelse(Site=="LAR","Larrabee",ifelse(Site=="KAY","Kayak \nPoint 1",
-                                                    ifelse(Site=="KAY-shell","Kayak \nPoint 2",
-                                                           ifelse(Site=="MARPT","March \nPoint")))))
+  group_by(estuary,site,crab_id) %>%
+  summarise(richness=length(unique(taxon))) %>%
+  left_join(estuary_colors,by="estuary")
+
+paste0("taxonomic richness per crab ranges from ", min(richness.crab$richness), " to ", max(richness.crab$richness))
 ```
 ```{r}
-message("species richness per crab ranges from ", min(richness.crab$species.richness), " to ", max(richness.crab$species.richness))
-```
-```{r}
-p.alpha <- ggplot(richness.crab, aes(x=Site,y=species.richness)) +
+plot.alpha <- richness.crab %>%
+  left_join(site_names, by="site") %>%
+  mutate(site_name=factor(site_name, levels=c("Kayak Pt 1","Kayak Pt 2","March Pt","NERR","Samish Isl","Samish Bay", "Larrabee"))) %>%
+  ggplot(aes(x=site_name,y=richness,color=estuary)) +
   geom_boxplot() +
-  labs(y="N. Species",x="") +
-  scale_y_continuous(limits=c(0,max(richness.crab$species.richness)+2), expand=c(0,0)) +
-  theme_bw()
-p.alpha
+  geom_jitter(width=0.1) +
+  labs(y="N. Unique Taxa per crab",x="") +
+  scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
+  scale_color_manual(values=unique(richness.crab$key)) +
+  theme_bw() + theme(axis.text.x=element_text(angle=25, hjust=1))
+plot.alpha
 ```
 <br>
 
 Save plot.
 ```{r echo=TRUE}
-png(here('figs','fig1_alpha-div.png'), res=200, height=600,width=800)
-p.alpha
+png(here('figs','fig1_alpha-div.png'), res=300, height=1000,width=1500)
+plot.alpha
 dev.off()
 ```
 <br>
 
-How is ($\alpha$ diversity) distributed across the taxa?
+How is ($\alpha$ diversity) distributed across taxonomic levels?
 ```{r message=FALSE}
-richness.phyla.site <- dat %>%
-  filter(!is.na(phylum)) %>%
-  group_by(Site, phylum) %>%
-  summarise(species.richness=length(unique(taxon)))  %>%
-  mutate(Site=ifelse(Site=="LAR","Larrabee",ifelse(Site=="KAY","Kayak Point 1",
-                                                    ifelse(Site=="KAY-shell","Kayak Point 2",
-                                                           ifelse(Site=="MARPT","March Point")))))
-richness.phyla <- dat %>%
-  filter(!is.na(phylum)) %>%
-  group_by(phylum) %>%
-  summarise(species.richness=length(unique(taxon))) %>%
-  arrange(species.richness)
+richness.phyla.site <- dat_sites %>%
+  mutate(group=ifelse(!is.na(phylum),phylum,class)) %>%
+  group_by(estuary,site,group) %>%
+  summarise(richness=length(unique(taxon)))  %>%
+  left_join(site_names)
 
-porder <- unique(richness.phyla$phylum)
+richness.phyla <- dat_overall %>%
+  mutate(group=ifelse(!is.na(phylum),phylum,class)) %>%
+  group_by(estuary,site,group) %>%
+  summarise(richness=length(unique(taxon))) %>%
+  arrange(richness)
+
+porder <- unique(richness.phyla$group)
 
 richness.phyla <- richness.phyla %>%
-  mutate(Site="Overall") %>%
+  mutate(estuary="Overall",site="Overall") %>%
   bind_rows(richness.phyla.site)
 
-richness.phyla$phylum <- factor(richness.phyla$phylum, levels=porder)
+richness.phyla$group <- factor(richness.phyla$group, levels=porder)
 ```
-```{r fig.height=7,fig.width=5}
-ggplot(richness.phyla, aes(y=phylum,x=species.richness, fill=Site)) +
+```{r fig.height=5,fig.width=5}
+richness.phyla %>%
+  mutate(site_name=ifelse(is.na(site_name),"Overall",site_name)) %>%
+  mutate(site_name=factor(site_name, levels=c("Kayak Pt 1","Kayak Pt 2","March Pt","NERR","Samish Isl","Samish Bay", "Larrabee","Overall"))) %>%
+  mutate(estuary=factor(estuary,levels=c("Port Susan Bay","Padilla Bay", "Samish Bay", "Overall"))) %>%
+  ggplot(aes(y=group,x=richness, fill=site_name)) +
   geom_col(position="dodge") +
-  labs(x="Species Richness",y="Phylum") +
-  scale_fill_manual(values=c("cyan4","darkblue","darkorange","coral3","gray30")) +
-  theme_bw() + theme(panel.grid.major.y=element_blank())
+  facet_wrap(~estuary, ncol=4) +
+  labs(x="Richness",y="Taxonomic Group") +
+  # scale_fill_manual(values=c("cyan4","darkblue","darkorange","coral3","gray30")) +
+  theme_bw()
 ```
 <br>
+save as a table
+```{r}
+write_csv(richness.phyla, here('data','results','lerayXT_r1-2_tax-richness-by-site.csv'))
+```
 
 
 ### Alpha div x Stomach Fullness
@@ -180,19 +281,20 @@ richness.crab <- richness.crab %>%
   left_join(crabdat)
 ```
 ```{r}
-p.alpha2 <- ggplot(richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=species.richness)) +
-  geom_boxplot() +
-  labs(y="N. Species",x="Stomach Fullness") +
-  scale_y_continuous(limits=c(0,max(richness.crab$species.richness)+2), expand=c(0,0)) +
+p.alpha2 <- ggplot(richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
+  geom_violin() +
+  geom_jitter(width=0.1) +
+  labs(y="N. Unique Taxa per Crab",x="Stomach Fullness") +
+  scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
   theme_bw()
 p.alpha2
 ```
 <br>
 
-Save plot.
+Save plot with the alpha diversity x site plot
 ```{r echo=TRUE}
 png(here('figs','fig1b_alpha-div-fullness.png'), res=200, height=600,width=800)
-p.alpha2
+plot_grid(plot.alpha, p.alpha2)
 dev.off()
 ```
 <br>
@@ -287,7 +389,7 @@ dev.off()
 <br>
 <br>
 
-# nMDS
+## Clustering & Site Differences
 
 Run on a presence/absence matrix, using the Jaccard dissimilarity index.
 ```{r}
@@ -317,7 +419,7 @@ z.scores = as.data.frame(scores(z)$sites)
 z.scores$Sample = rownames(z.scores)
 z.scores <- left_join(z.scores,dat %>% dplyr::select(crab_id,Site),by=c("Sample"="crab_id"))
 z.scores <- z.scores %>% distinct() %>%
-  mutate(Site=ifelse(Site=="KAY","Kayak\nPoint 1",ifelse(Site=="KAY-shell", "Kayak\nPoint 2",
+  mutate(site=ifelse(Site=="KAY","Kayak\nPoint 1",ifelse(Site=="KAY-shell", "Kayak\nPoint 2",
                                                         ifelse(Site=="LAR","Larrabee",
                                                                ifelse(Site=="MARPT","March\nPoint",NA)))))
 
@@ -354,7 +456,61 @@ dev.off()
 <br>
 
 
-# Prey identity
+## Prey identity
+
+### FO%
+
+Calculate frequency of occurrence of each taxon.
+```{r}
+total.crab <- length(unique(dat$crab_id))
+
+plotdat.fo <- dat %>% mutate(plot.group=ifelse(is.na(phylum), class, phylum)) %>%
+  group_by(taxon,plot.group) %>%
+  summarise(ncrab=length(unique(crab_id))) %>%
+  mutate(pcrab=(ncrab/total.crab)*100) %>%
+  arrange(plot.group)
+
+plotdat.fo %<>% left_join(data.frame(plot.group=unique(plotdat.fo$plot.group),
+                       ngroup=order(unique(plotdat.fo$plot.group))),by="plot.group") %>%
+  unite(plot.group, ngroup, col="plot.group.num",sep="-", remove=FALSE)
+```
+
+Identify the outliers
+```{r}
+findoutlier <- function(x) {
+  return(x < quantile(x, .25) - 4*IQR(x) | x > quantile(x, .75) + 4*IQR(x))
+}
+
+plotdat.fo <- plotdat.fo %>%
+        group_by(plot.group) %>%
+        mutate(outlier = ifelse(findoutlier(pcrab), taxon, NA))
+```
+
+Plot
+```{r}
+plot2a <- 
+  ggplot(plotdat.fo, aes(x=plot.group.num,y=pcrab)) +
+  geom_boxplot() + geom_hline(aes(yintercept=-0.1)) +
+  geom_text_repel(aes(label=outlier), na.rm=TRUE,min.segment.length = 0.01,nudge_y=0.5, size=3) +
+    scale_y_continuous(trans=squish_trans(from=40,to=70,factor=10),
+                       breaks=c(0,10,20,30,40,70,75)) +
+  theme_bw() + labs(x="Prey Group", y="Frequency of occurrence (FO%)") + theme(axis.text.x=element_text(angle=60, hjust=1,size=12),
+                     legend.text=element_text(size=12),
+                     axis.title=element_text(size=13))
+plot2a
+```
+The groups with the highest median frequency of occurrence:
+```{r}
+fo.hi <- plotdat.fo %>% group_by(plot.group) %>% 
+  summarise(med.fo=median(pcrab)) %>%
+  slice_max(order_by=med.fo,n=3, with_ties=FALSE) %>%
+  left_join(plotdat.fo,by='plot.group') %>%
+  left_join(dplyr::select(dat, taxon, class, order, family, genus) %>% distinct(), by='taxon')
+
+fo.hi <- fo.hi %>%
+  mutate(plot.subgroup=ifelse(plot.group=="Raphidophyceae",))
+```
+
 
 ### common prey across all sites
 
@@ -381,7 +537,7 @@ ubiq.sp <- dat %>% dplyr::select(Site,taxon) %>%
 ```
 ```{r}
 ggplot(ubiq.sp %>% filter(Site %in% my.sites) %>%
-  mutate(Site=ifelse(Site=="KAY","Kayak Point 1",ifelse(Site=="KAY-shell", "Kayak Point 2",
+  mutate(site=ifelse(Site=="KAY","Kayak Point 1",ifelse(Site=="KAY-shell", "Kayak Point 2",
                                                         ifelse(Site=="LAR","Larrabee",
                                                                ifelse(Site=="MARPT","March Point",NA))))), aes(x=pcrab,y=taxon,fill=Site)) +
   geom_col(position="dodge") +

@@ -5,26 +5,56 @@ date: "2023-09-05"
 output: html_document
 ---
 
+# Description
+
+From the dDNA data, summarize model diets for two analyses: (1) potential site-specific growth differences associated with different diets, (2) potential growth differences associated with diet item OA sensitivity.
+
+
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(ggrepel)
+library(cowplot)
+library(vegan)
+library(magrittr)
+
+# User inputs
+blastdir   <- 'data/blast'
+bedir <- 'data/bioE'
+run.nums <- c(1,2)
+marker  <- 'lerayXT'
 ```
 
-## R Markdown
+```{r data, include=FALSE}
+## filtered taxa ##
+dat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_uniqueTaxa.csv")))
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+dat %<>%
+  mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
+  mutate(estuary=ifelse(site %in% c("KAY","KAY-shell"),"Port Susan Bay",
+                                    ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
 ```
+<br>
 
-## Including Plots
+## Site Diets
 
-You can also embed plots, for example:
+For sites with > 10 crab, find the most commonly detected prey items (according to frequency of occurrence).
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+## OA sensitivity diets
+
+Produce four diets: Hi/Lo Energy Density x Hi/Lo OA Sensitivity
+
+
+
+
+
+
+
+
+
+
