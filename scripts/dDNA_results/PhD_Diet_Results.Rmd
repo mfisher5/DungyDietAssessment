@@ -97,7 +97,14 @@ dat %<>%
                                     ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
 
 ## too small taxa (aka "detritus") ##
-smdat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_SmallTaxa_uniqueTaxa.csv")))
+smdat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_SmallTaxa_uniqueTaxa.csv")))  
+
+smdat %<>%
+  mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
+  mutate(site=ifelse(site=="CLAY","LAR",
+                     ifelse(site=="SIN","SAMI",site))) %>%
+  mutate(estuary=ifelse(site %in% c("KAY","KAY-shell"),"Port Susan Bay",
+                                    ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
 ```
 <br>
 
@@ -152,7 +159,7 @@ Allows for non-species-level IDs, as long as they are unique
 
 ### Alpha div
 
-What is the total number of unique taxa observed? **121**
+What is the total number of unique taxa observed? **99** without unicellular species
 ```{r}
 # get species-level prey for each crab
 spdat <- dat %>% filter(rank=="species") %>% dplyr::select(taxon,genus,family,order,class) %>% distinct() %>%
@@ -168,10 +175,32 @@ nonspec_dat %<>% pivot_longer(cols=c(genus,family,order,class),names_to="tax.lev
 
 dat_overall <- dat %>% anti_join(nonspec_dat,by=c("rank","taxon"="taxonomy"))
 
-
+rm(spdat,nonspec_dat)
 
 length(dat_overall %>% pull(taxon) %>% unique())
 ```
+What is the total number of unique taxa observed among unicellular algae / diatoms / rotifers / protists? **38**
+```{r}
+# get species-level prey for each crab
+spdat <- smdat %>% filter(rank=="species") %>% dplyr::select(taxon,genus,family,order,class) %>% distinct() %>%
+  pivot_longer(cols=c(genus,family,order,class),names_to="tax.level",values_to="sp.taxonomy") %>%
+  rename("sp.taxon"=taxon)
+
+# keep non-specific ids in data set only if that taxon is not represented across the entire dataset
+nonspec_dat <- smdat %>% filter(rank!="species") %>% dplyr::select(taxon,rank,species,genus,family,order,class) %>% distinct()
+
+nonspec_dat %<>% pivot_longer(cols=c(genus,family,order,class),names_to="tax.level",values_to="taxonomy") %>%
+  filter(tax.level==rank) %>%
+  left_join(spdat,by=c("tax.level","taxonomy"="sp.taxonomy")) %>% filter(!is.na(sp.taxon))
+
+smdat_overall <- smdat %>% anti_join(nonspec_dat,by=c("rank","taxon"="taxonomy"))
+rm(spdat,nonspec_dat)
+
+
+length(smdat_overall %>% pull(taxon) %>% unique())
+```
+
+
 
 What is the taxonomic richness ($\alpha$ diversity) at each site? Standardized site richness is simply the  richness / total crab from site.
 ```{r}
@@ -189,6 +218,7 @@ nonspec_dat <- dat %>%
 
 dat_sites <- dat %>%
   anti_join(nonspec_dat,by=c("site","rank","taxon"="taxonomy"))
+rm(spdat,nonspec_dat)
 
 richness.site <- dat_sites %>% group_by(site) %>% summarise(richness=length(unique(taxon)),
                                                             ncrab=length(unique(crab_id))) %>%
@@ -213,7 +243,7 @@ plot.alpha <- richness.crab %>%
   ggplot(aes(x=site_name,y=richness,color=estuary)) +
   geom_boxplot() +
   geom_jitter(width=0.1) +
-  labs(y="N. Unique Taxa per crab",x="") +
+  labs(y="Unique Taxa per crab",x="Sampling Site") +
   scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
   scale_color_manual(values=unique(richness.crab$key)) +
   theme_bw() + theme(axis.text.x=element_text(angle=25, hjust=1))
@@ -266,35 +296,78 @@ richness.phyla %>%
 <br>
 save as a table
 ```{r}
+if(!knitting){
 write_csv(richness.phyla, here('data','results','lerayXT_r1-2_tax-richness-by-site.csv'))
+}
 ```
 
 
 ### Alpha div x Stomach Fullness
+
+Consider alpha diversity with / without the 'detritus' taxa, and then 'detritus' taxa alone
 ```{r message=FALSE}
 ### stomach fullness data ###
 crabdat <- read_csv(here('data','metadata','crab_metadat.csv')) %>%
   filter(sample_id %in% dat$crab_id) %>%
   rename(crab_id=sample_id)
 
+### without detritus ###
 richness.crab <- richness.crab %>%
   left_join(crabdat)
+
+### with detritus ###
+drichness.crab <- smdat %>%
+  group_by(estuary,site,crab_id) %>%
+  summarise(richness=length(unique(taxon))) %>% 
+  left_join(estuary_colors,by="estuary") %>%
+  left_join(crabdat)
+
+### combined ###
+all.richness.crab <- bind_rows(dat,smdat) %>%
+  group_by(estuary,site,crab_id) %>%
+  summarise(richness=length(unique(taxon))) %>% 
+  left_join(estuary_colors,by="estuary") %>%
+  left_join(crabdat)
 ```
+
+
 ```{r}
 p.alpha2 <- ggplot(richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
-  geom_violin() +
+  geom_boxplot() +
   geom_jitter(width=0.1) +
-  labs(y="N. Unique Taxa per Crab",x="Stomach Fullness") +
+  labs(y="",x="", title="Without Detritus") +
   scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
   theme_bw()
-p.alpha2
+p.alpha3 <- ggplot(all.richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
+  geom_boxplot() +
+  geom_jitter(width=0.1) +
+  labs(y="",x="", title="With Detritus") +
+  scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
+  theme_bw()
+p.alpha4 <- ggplot(drichness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
+  geom_boxplot() +
+  geom_jitter(width=0.1) +
+  labs(y="",x="", title="Only Detritus") +
+  scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
+  theme_bw()
+
+y.grob <- textGrob("Unique Taxa per Crab", 
+                   gp=gpar(col="black"), rot=90)
+
+x.grob <- textGrob("Stomach Fullness", 
+                   gp=gpar(col="black"))
+
+
+main <- plot_grid(p.alpha2,p.alpha3,p.alpha4, ncol=3)
+alpha_by_fll <- plot_grid(left=y.grob,main,NULL,bottom=x.grob, rel_heights=c(1,0.05), rel_widths=c(0.05,1))
+alpha_by_fll
 ```
 <br>
 
 Save plot with the alpha diversity x site plot
 ```{r echo=TRUE}
-png(here('figs','fig1b_alpha-div-fullness.png'), res=200, height=600,width=800)
-plot_grid(plot.alpha, p.alpha2)
+png(here('figs','figS_alpha-div_site_fullness.png'), res=200, height=600,width=800)
+plot_grid(plot.alpha + theme(plot.margin=margin(t=0,r=0,b=10,l=20)), alpha_by_fll, nrow=2)
 dev.off()
 ```
 <br>
@@ -470,6 +543,16 @@ plotdat.fo <- dat %>% mutate(plot.group=ifelse(is.na(phylum), class, phylum)) %>
   mutate(pcrab=(ncrab/total.crab)*100) %>%
   arrange(plot.group)
 
+## detritus groups
+fo.sm <- smdat %>% mutate(plot.group="single-celled organisms") %>%
+  filter(crab_id %in% dat$crab_id) %>%
+  group_by(taxon,plot.group) %>%
+  summarise(ncrab=length(unique(crab_id))) %>%
+  mutate(pcrab=(ncrab/total.crab)*100) %>%
+  arrange(plot.group)
+
+plotdat.fo %<>% bind_rows(fo.sm)
+
 plotdat.fo %<>% left_join(data.frame(plot.group=unique(plotdat.fo$plot.group),
                        ngroup=order(unique(plotdat.fo$plot.group))),by="plot.group") %>%
   unite(plot.group, ngroup, col="plot.group.num",sep="-", remove=FALSE)
@@ -489,12 +572,12 @@ plotdat.fo <- plotdat.fo %>%
 Plot
 ```{r}
 plot2a <- 
-  ggplot(plotdat.fo, aes(x=plot.group.num,y=pcrab)) +
+  ggplot(plotdat.fo, aes(x=plot.group,y=pcrab)) +
   geom_boxplot() + geom_hline(aes(yintercept=-0.1)) +
   geom_text_repel(aes(label=outlier), na.rm=TRUE,min.segment.length = 0.01,nudge_y=0.5, size=3) +
     scale_y_continuous(trans=squish_trans(from=40,to=70,factor=10),
                        breaks=c(0,10,20,30,40,70,75)) +
-  theme_bw() + labs(x="Prey Group", y="Frequency of occurrence (FO%)") + theme(axis.text.x=element_text(angle=60, hjust=1,size=12),
+  theme_bw() + labs(x="Prey Group", y="Frequency of occurrence (FO%)") + theme(axis.text.x=element_text(angle=45, hjust=1,size=12,vjust=1.05),
                      legend.text=element_text(size=12),
                      axis.title=element_text(size=13))
 plot2a
@@ -504,11 +587,32 @@ The groups with the highest median frequency of occurrence:
 fo.hi <- plotdat.fo %>% group_by(plot.group) %>% 
   summarise(med.fo=median(pcrab)) %>%
   slice_max(order_by=med.fo,n=3, with_ties=FALSE) %>%
-  left_join(plotdat.fo,by='plot.group') %>%
-  left_join(dplyr::select(dat, taxon, class, order, family, genus) %>% distinct(), by='taxon')
+  left_join(dplyr::select(plotdat.fo,taxon) %>% distinct(),by='plot.group') %>%
+  left_join(bind_rows(dat,smdat), by='taxon') %>%
+  filter(crab_id %in% dat$crab_id) %>%
+  
+  mutate(plot.subgroup=ifelse(plot.group=="single-celled organisms" & is.na(phylum), class,
+                              ifelse(plot.group=="single-celled organisms" & !is.na(phylum),phylum,
+                                     ifelse(plot.group=="Arthropoda",order,
+                                            ifelse(plot.group=="Mollusca",family,phylum))))) %>%
 
-fo.hi <- fo.hi %>%
-  mutate(plot.subgroup=ifelse(plot.group=="Raphidophyceae",))
+  group_by(taxon,plot.group,plot.subgroup) %>%
+  summarise(ncrab=length(unique(crab_id))) %>%
+  mutate(pcrab=(ncrab/total.crab)*100) %>%
+  arrange(plot.subgroup)
+```
+to do: 
+reorder x axis by group and median value; squish y axis; get rid of so many classes of single-celled organisms (all phylum NA are algae??)
+
+```{r}
+plot2b <- 
+  ggplot(fo.hi, aes(x=plot.subgroup,y=pcrab, fill=plot.group)) +
+  geom_boxplot() + geom_hline(aes(yintercept=-0.1)) +
+  # geom_text_repel(aes(label=outlier), na.rm=TRUE,min.segment.length = 0.01,nudge_y=0.5, size=3) +
+  theme_bw() + labs(x="Prey Group", y="Frequency of occurrence (FO%)") + theme(axis.text.x=element_text(angle=60, hjust=1,size=12),
+                     legend.text=element_text(size=12),
+                     axis.title=element_text(size=13))
+plot2b
 ```
 
 

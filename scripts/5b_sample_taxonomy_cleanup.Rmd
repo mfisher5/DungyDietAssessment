@@ -444,9 +444,10 @@ I did leave in some of the "too small" organisms, add those to the manual filter
 too_small_dat <- unqdat %>% filter(phylum %in% c("Bacillariophyta","Rotifera") |
                             class %in% c("Dinophyceae","Chlorophyceae"))
 too_small_filter <- dplyr::select(too_small_dat, taxon, rank) %>%
-  mutate(new_rank="NA",new_taxon="too small")
+  mutate(new_rank="NA",new_taxon="too small") %>% distinct()
 
-manual_filter %<>% bind_rows(too_small_filter) %>% distinct()
+manual_filter %<>% filter(!(new_taxon %in% too_small_filter$taxon)) %>%
+  bind_rows(too_small_filter) %>% distinct()
 ```
 
 
