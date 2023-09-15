@@ -58,7 +58,7 @@ run.nums <- c(1,2)
 marker  <- 'lerayXT'
 
 estuary_colors <- data.frame(estuary=c("Port Susan Bay","Padilla Bay", "Samish Bay"),
-                             key=c("#33a02c","#1f78b4","#a6cee3"))
+                             key=c("#33a02c","#1f78b4","chocolate3"))
 
 site_names <- data.frame(site=c("KAY","KAY-shell","MARPT","PBNERR","SAMI","SAMT","LAR"),
                          site_name=c("Kayak Pt 1","Kayak Pt 2","March Pt",
@@ -366,7 +366,7 @@ alpha_by_fll
 
 Save plot with the alpha diversity x site plot
 ```{r echo=TRUE}
-png(here('figs','figS_alpha-div_site_fullness.png'), res=200, height=600,width=800)
+png(here('figs','figS_alpha-div_site_fullness.png'), res=200, height=1000,width=1000)
 plot_grid(plot.alpha + theme(plot.margin=margin(t=0,r=0,b=10,l=20)), alpha_by_fll, nrow=2)
 dev.off()
 ```
@@ -462,7 +462,13 @@ dev.off()
 <br>
 <br>
 
+
+### eDNA Index
+
+
 ## Clustering & Site Differences
+
+### Presence / absence
 
 Run on a presence/absence matrix, using the Jaccard dissimilarity index.
 ```{r}
@@ -484,35 +490,61 @@ z <- metaMDS(comm=crab.sp.mat, autotransform=FALSE,distance="jaccard",k=2,maxit=
 message('stress: ', round(z$stress,3))
 ```
 <br>
+Run on Sept 15 2023; 
 
-```{r fig.height=5, fig.width=8}
+stress: 0.17
+
+Run 47 stress 0.1697039 
+... Procrustes: rmse 0.0001537278  max resid 0.0009080073 
+... Similar to previous best
+*** Best solution repeated 1 times
+
+
+
+```{r}
 #extract NMDS scores (x and y coordinates)
 z.scores = as.data.frame(scores(z)$sites)
 #add columns to data frame 
 z.scores$Sample = rownames(z.scores)
-z.scores <- left_join(z.scores,dat %>% dplyr::select(crab_id,Site),by=c("Sample"="crab_id"))
+z.scores <- left_join(z.scores,dat %>% dplyr::select(crab_id,site,estuary),by=c("Sample"="crab_id"))
 z.scores <- z.scores %>% distinct() %>%
-  mutate(site=ifelse(Site=="KAY","Kayak\nPoint 1",ifelse(Site=="KAY-shell", "Kayak\nPoint 2",
-                                                        ifelse(Site=="LAR","Larrabee",
-                                                               ifelse(Site=="MARPT","March\nPoint",NA)))))
+  left_join(site_names)
 
 #make hulls
-hull.data <- bind_rows((a <- z.scores[z.scores$Site == "Kayak\nPoint 1", ][chull(z.scores[z.scores$Site == 
-    "Kayak\nPoint 1", c("NMDS1", "NMDS2")]), ]),
-    (b <- z.scores[z.scores$Site == "Kayak\nPoint 2", ][chull(z.scores[z.scores$Site == 
-    "Kayak\nPoint 2", c("NMDS1", "NMDS2")]), ]),  # hull values for grp B
-    (c <- z.scores[z.scores$Site == "Larrabee", ][chull(z.scores[z.scores$Site == 
-    "Larrabee", c("NMDS1", "NMDS2")]), ]),
-    (d <- z.scores[z.scores$Site == "March\nPoint", ][chull(z.scores[z.scores$Site == 
-    "March\nPoint", c("NMDS1", "NMDS2")]), ]))
+hull.data.site <- bind_rows((a <- z.scores[z.scores$site_name == "Kayak Pt 1", ][chull(z.scores[z.scores$site_name == 
+    "Kayak Pt 1", c("NMDS1", "NMDS2")]), ]),
+    (b <- z.scores[z.scores$site_name == "Kayak Pt 2", ][chull(z.scores[z.scores$site_name == 
+    "Kayak Pt 2", c("NMDS1", "NMDS2")]), ]),  # hull values for grp B
+    (c <- z.scores[z.scores$site_name == "March Pt", ][chull(z.scores[z.scores$site_name == 
+    "March Pt", c("NMDS1", "NMDS2")]), ]),
+    (d <- z.scores[z.scores$site_name == "NERR", ][chull(z.scores[z.scores$site_name == 
+    "NERR", c("NMDS1", "NMDS2")]), ]),
+    (d <- z.scores[z.scores$site_name == "Samish Isl", ][chull(z.scores[z.scores$site_name == 
+    "Samish Isl", c("NMDS1", "NMDS2")]), ]),
+    (d <- z.scores[z.scores$site_name == "Samish Bay", ][chull(z.scores[z.scores$site_name == 
+    "Samish Bay", c("NMDS1", "NMDS2")]), ]),
+    (d <- z.scores[z.scores$site_name == "Larrabee", ][chull(z.scores[z.scores$site_name == 
+    "Larrabee", c("NMDS1", "NMDS2")]), ]))
 
-#plot
+hull.data.estuary <- bind_rows((a <- z.scores[z.scores$estuary == "Port Susan Bay", ][chull(z.scores[z.scores$estuary == 
+    "Port Susan Bay", c("NMDS1", "NMDS2")]), ]),
+    (b <- z.scores[z.scores$estuary == "Samish Bay", ][chull(z.scores[z.scores$estuary == 
+    "Samish Bay", c("NMDS1", "NMDS2")]), ]),  # hull values for grp B
+    (c <- z.scores[z.scores$estuary == "Padilla Bay", ][chull(z.scores[z.scores$estuary == 
+    "Padilla Bay", c("NMDS1", "NMDS2")]), ]))
+```
+```{r fig.height=4, fig.width=5}
+#plot estuary
 my.nmds <- ggplot(z.scores, aes(x = NMDS1, y = NMDS2)) + 
-  geom_point(size = 4, aes(col = Site))+ 
-  geom_polygon(data=hull.data,aes(x=NMDS1,y=NMDS2,fill=Site,group=Site),alpha=0.30) + # add the convex hulls
+  geom_point(size = 2, aes(col = factor(estuary, levels=c("Port Susan Bay","Padilla Bay","Samish Bay")))) + 
+  geom_polygon(data=hull.data.estuary,aes(x=NMDS1,y=NMDS2,
+                                          fill=factor(estuary, levels=c("Port Susan Bay","Padilla Bay","Samish Bay")),
+                                          group=factor(estuary, levels=c("Port Susan Bay","Padilla Bay","Samish Bay"))),alpha=0.30) + # add the convex hulls
   
-  labs(x = "NMDS1", colour = "Site", y = "NMDS2")  + 
-  theme_bw()
+  labs(x = "NMDS1", colour = "estuary", y = "NMDS2")  +
+  scale_color_manual(values=estuary_colors$key) +
+  scale_fill_manual(values=estuary_colors$key, name="estuary") + guides(fill="none") +
+  theme_bw() + theme(axis.text=element_blank())
 my.nmds
 ```
 <br>
@@ -521,13 +553,32 @@ my.nmds
 
 Save plot.
 ```{r echo=TRUE}
-png(here('figs','fig3_nmds.png'), res=200, height=900,width=1000)
+png(here('figs','fig3_nmds.png'), res=200, height=900,width=900)
 my.nmds
 dev.off()
 ```
 <br>
 <br>
-
+```{r fig.height=4, fig.width=5}
+#plot sites
+my.nmds2 <- ggplot(z.scores, aes(x = NMDS1, y = NMDS2)) + 
+  geom_point(size = 2, aes(col = site_name)) + 
+  geom_polygon(data=hull.data.site,aes(x=NMDS1,y=NMDS2,
+                                          fill=site_name,
+                                          group=site),alpha=0.30) + # add the convex hulls
+  
+  labs(x = "NMDS1", colour = "site", y = "NMDS2")  + guides(fill="none") +
+  theme_bw() + theme(axis.text=element_blank())
+my.nmds2
+```
+Save plot.
+```{r echo=TRUE}
+png(here('figs','fig3_nmds-site.png'), res=200, height=900,width=900)
+my.nmds2
+dev.off()
+```
+<br>
+<br>
 
 ## Prey identity
 
@@ -558,30 +609,6 @@ plotdat.fo %<>% left_join(data.frame(plot.group=unique(plotdat.fo$plot.group),
   unite(plot.group, ngroup, col="plot.group.num",sep="-", remove=FALSE)
 ```
 
-Identify the outliers
-```{r}
-findoutlier <- function(x) {
-  return(x < quantile(x, .25) - 4*IQR(x) | x > quantile(x, .75) + 4*IQR(x))
-}
-
-plotdat.fo <- plotdat.fo %>%
-        group_by(plot.group) %>%
-        mutate(outlier = ifelse(findoutlier(pcrab), taxon, NA))
-```
-
-Plot
-```{r}
-plot2a <- 
-  ggplot(plotdat.fo, aes(x=plot.group,y=pcrab)) +
-  geom_boxplot() + geom_hline(aes(yintercept=-0.1)) +
-  geom_text_repel(aes(label=outlier), na.rm=TRUE,min.segment.length = 0.01,nudge_y=0.5, size=3) +
-    scale_y_continuous(trans=squish_trans(from=40,to=70,factor=10),
-                       breaks=c(0,10,20,30,40,70,75)) +
-  theme_bw() + labs(x="Prey Group", y="Frequency of occurrence (FO%)") + theme(axis.text.x=element_text(angle=45, hjust=1,size=12,vjust=1.05),
-                     legend.text=element_text(size=12),
-                     axis.title=element_text(size=13))
-plot2a
-```
 The groups with the highest median frequency of occurrence:
 ```{r}
 fo.hi <- plotdat.fo %>% group_by(plot.group) %>% 
@@ -594,26 +621,69 @@ fo.hi <- plotdat.fo %>% group_by(plot.group) %>%
   mutate(plot.subgroup=ifelse(plot.group=="single-celled organisms" & is.na(phylum), class,
                               ifelse(plot.group=="single-celled organisms" & !is.na(phylum),phylum,
                                      ifelse(plot.group=="Arthropoda",order,
-                                            ifelse(plot.group=="Mollusca",family,phylum))))) %>%
+                                            ifelse(plot.group=="Mollusca",order,phylum))))) %>%
 
   group_by(taxon,plot.group,plot.subgroup) %>%
   summarise(ncrab=length(unique(crab_id))) %>%
   mutate(pcrab=(ncrab/total.crab)*100) %>%
+  mutate(outlier=ifelse(pcrab > 50, "M. acherusicum", NA)) %>%
   arrange(plot.subgroup)
 ```
-to do: 
-reorder x axis by group and median value; squish y axis; get rid of so many classes of single-celled organisms (all phylum NA are algae??)
 
+Identify the outliers, and the groups that will be further investigated
 ```{r}
-plot2b <- 
-  ggplot(fo.hi, aes(x=plot.subgroup,y=pcrab, fill=plot.group)) +
+findoutlier <- function(x) {
+  return(x < quantile(x, .25) - 4*IQR(x) | x > quantile(x, .75) + 4*IQR(x))
+}
+
+plotdat.fo <- plotdat.fo %>%
+        group_by(plot.group) %>%
+        mutate(outlier = ifelse(findoutlier(pcrab), taxon, NA)) %>%
+  mutate(subgroup=ifelse(plot.group %in% fo.hi$plot.group, "yes","no"))
+```
+
+Plot
+```{r}
+plot2a <- 
+  ggplot(plotdat.fo, aes(x=plot.group,y=pcrab, fill=subgroup)) +
   geom_boxplot() + geom_hline(aes(yintercept=-0.1)) +
-  # geom_text_repel(aes(label=outlier), na.rm=TRUE,min.segment.length = 0.01,nudge_y=0.5, size=3) +
-  theme_bw() + labs(x="Prey Group", y="Frequency of occurrence (FO%)") + theme(axis.text.x=element_text(angle=60, hjust=1,size=12),
+  geom_text_repel(aes(label=outlier), na.rm=TRUE,min.segment.length = 0.01,nudge_y=0.5, size=3) +
+    scale_y_continuous(trans=squish_trans(from=40,to=70,factor=10),
+                       breaks=c(0,10,20,30,40,70,75)) +
+  scale_fill_manual(values=c("white","yellow")) + guides(fill="none") +
+  theme_bw() + labs(x="Prey Group", y="Freq. of occurrence (FO%)") + theme(axis.text.x=element_text(angle=45, hjust=1,size=12,vjust=1.05),
                      legend.text=element_text(size=12),
                      axis.title=element_text(size=13))
+plot2a
+```
+
+```{r}
+plot2b <-  fo.hi %>%
+  mutate(plot.group=ifelse(plot.group=="single-celled organisms", "single-celled\norganisms", plot.group)) %>%
+  ggplot(aes(x=plot.subgroup,y=pcrab, fill=plot.group)) +
+  geom_boxplot() + geom_hline(aes(yintercept=-0.1)) +
+  facet_wrap(~plot.group, scales="free_x") +
+  scale_y_continuous(trans=squish_trans(from=40,to=70,factor=10),
+                       breaks=c(0,10,20,30,40,70,75)) +
+  geom_text_repel(aes(label=outlier), na.rm=TRUE,min.segment.length = 0.01,nudge_y=0.5, size=3) +
+  theme_bw() + labs(x="Prey Subgroup", y="Freq. of occurrence (FO%)") + theme(axis.text.x=element_text(angle=60, hjust=1,size=12),
+                     legend.text=element_text(size=12),
+                     axis.title=element_text(size=13),
+                     strip.background=element_blank(), strip.text=element_text(size=12, vjust=0),
+                     panel.spacing.x=unit(0, "lines"), legend.position="none")
 plot2b
 ```
+
+
+save together
+```{r}
+png(here('figs','paper_fig2_FO.png'), res=300, height=2800,width=2000)
+plot_grid(plot2a,plot2b,labels=c("(a)","(b)"),nrow=2)
+dev.off()
+```
+
+
+
 
 
 ### common prey across all sites
