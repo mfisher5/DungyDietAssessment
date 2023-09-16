@@ -49,7 +49,14 @@ library(ggrepel)
 library(cowplot)
 library(vegan)
 library(magrittr)
+library(ggordiplots)
 source(here('R','squash_axis.r'))
+source(here('R','ggordiplot_custom.r'))
+eDNAINDEX <- function(x) { #where x is a dataframe with taxa/OTUs/etc in rows, and samples in columns
+  rowMax <- function(x){apply(x, MARGIN = 1, FUN = max)}
+  temp <- sweep(x, MARGIN = 2, STATS = colSums(x), FUN = "/") #create proportion for each taxon/OTU within each sample
+  sweep(temp, MARGIN = 1, STATS = rowMax(temp), FUN = "/")
+}
 
 # User inputs
 blastdir   <- 'data/blast'
@@ -65,7 +72,10 @@ site_names <- data.frame(site=c("KAY","KAY-shell","MARPT","PBNERR","SAMI","SAMT"
                                    "NERR","Samish Isl","Samish Bay","Larrabee"))
 ```
 ```{r data, include=FALSE}
-## metadata ##
+## lab metadata (CH,CW,fullness) ##
+lab_metadat <- read_csv(here('data','metadata','crab_metadat.csv'))
+
+## seq sample id metadata ##
 run_metadat_files <- c('data/DCRB_Run1_samples.csv','data/DCRB_Run2_samples.csv')
 for(i in seq(1,length(run_metadat_files))){
   tmp.meta <- read_csv(here(run_metadat_files[i])) %>% mutate(MiSeqRun=run.nums[i]) %>% mutate(crab_num=as.character(crab_num), tech=as.character(tech))
@@ -307,7 +317,7 @@ write_csv(richness.phyla, here('data','results','lerayXT_r1-2_tax-richness-by-si
 Consider alpha diversity with / without the 'detritus' taxa, and then 'detritus' taxa alone
 ```{r message=FALSE}
 ### stomach fullness data ###
-crabdat <- read_csv(here('data','metadata','crab_metadat.csv')) %>%
+crabdat <- lab_metadat %>%
   filter(sample_id %in% dat$crab_id) %>%
   rename(crab_id=sample_id)
 
@@ -332,16 +342,16 @@ all.richness.crab <- bind_rows(dat,smdat) %>%
 
 
 ```{r}
-p.alpha2 <- ggplot(richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
+p.alpha3 <- ggplot(richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
   geom_boxplot() +
   geom_jitter(width=0.1) +
-  labs(y="",x="", title="Without Detritus") +
+  labs(y="",x="", title="No Detritus") +
   scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
   theme_bw()
-p.alpha3 <- ggplot(all.richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
+p.alpha2 <- ggplot(all.richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
   geom_boxplot() +
   geom_jitter(width=0.1) +
-  labs(y="",x="", title="With Detritus") +
+  labs(y="",x="", title="All Taxa") +
   scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
   theme_bw()
 p.alpha4 <- ggplot(drichness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
@@ -370,24 +380,6 @@ png(here('figs','figS_alpha-div_site_fullness.png'), res=200, height=1000,width=
 plot_grid(plot.alpha + theme(plot.margin=margin(t=0,r=0,b=10,l=20)), alpha_by_fll, nrow=2)
 dev.off()
 ```
-<br>
-<br>
-
-### Beta diversity
-
-What is the $\beta$ diversity for species? (the ratio between regional and local species diversity) The greater the similarity in community composition between multiple communities, the lower the value of β-diversity for that set of communities.
-```{r}
-prey.sp.site.mat <- dat %>%
-  dplyr::select(Site, taxon) %>% distinct() %>%
-  mutate(presence=1) %>%
-  pivot_wider(id_cols="Site", names_from="taxon",values_from="presence", values_fill=0)
-
-bdiv <- as.matrix(betadiver(prey.sp.site.mat, method="w")) 
-colnames(bdiv) <-c(prey.sp.site.mat$Site); rownames(bdiv) <- c(prey.sp.site.mat$Site)
-bdiv
-```
-Beta diversity is greater between distant sites (Kayak Point v. Clayton Beach v. March Point) than it is between neighboring sites (Kayak Point eelgrass v. shell).
-
 <br>
 <br>
 
@@ -465,10 +457,32 @@ dev.off()
 
 ### eDNA Index
 
+calculate eDNA index for all technical replicates
+```{r}
+crab.reads.mat <- dat %>%
+  group_by(sample_id, taxon) %>% summarise(techReads=sum(nReads)) %>%
+  pivot_wider(id_cols="sample_id", names_from="taxon",values_from="techReads", values_fill=0) %>%
+  column_to_rownames("sample_id")
 
-## Clustering & Site Differences
+index.mat <- eDNAINDEX(x=t(crab.reads.mat))
+
+index.df <- as.data.frame(t(index.mat)) %>%
+  rownames_to_column("sample_id") %>% 
+  pivot_longer(cols=2:(dim(index.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
+  left_join(dat %>% dplyr::select(sample_id,crab_id,tech,site,estuary) %>% distinct(),by="sample_id") %>%
+  left_join(site_names) %>%
+  pivot_wider(names_from=taxon,values_from=DNAindex)
+```
+
+
+
+## Ordinations: Estuary / Site Differences
 
 ### Presence / absence
+
+#### nMDS
+
+**is this a good option for compositional data? **
 
 Run on a presence/absence matrix, using the Jaccard dissimilarity index.
 ```{r}
@@ -579,6 +593,146 @@ dev.off()
 ```
 <br>
 <br>
+
+
+### eDNA Index
+
+#### nMDS 
+
+run by calculating the distance between all technical replicates
+```{r eval=FALSE, echo=TRUE}
+z <- metaMDS(comm=t(index.mat), autotransform=FALSE,distance="bray",k=2,maxit=1000,try=40,trymax=100)
+```
+
+```{r}
+message('stress: ', round(z$stress,3))
+```
+9/15/2023
+Run 100 stress 0.0001711876 
+... Procrustes: rmse 0.06489789  max resid 0.5287497 
+*** Best solution was not repeated -- monoMDS stopping criteria:
+   100: scale factor of the gradient < sfgrmin
+Warning: stress is (nearly) zero: you may have insufficient data
+
+#### PERMANOVA
+
+First by **estuary**
+
+```{r}
+perm.index.indat <- index.df %>% 
+  dplyr::select(c(1,5,6:118))
+```
+
+```{r}
+site.index2.perm <- adonis2(perm.index.indat[,4:dim(perm.index.indat)[2]]~estuary, data=perm.index.indat, method="bray")
+site.index2.perm
+```
+
+The permanova is highly significant
+
+Is the significance due to the differences in centroids or due to the differences in dispersion of samples in principal coordinate space of dissimilarity (PCoA)?
+```{r}
+index.indat.dist <- vegdist(x=perm.index.indat[,4:dim(perm.index.indat)[2]],method="bray")
+estuary.index.perm.betadisper <- betadisper(d=index.indat.dist, group=perm.index.indat$estuary)
+
+anova(betadisper(d=index.indat.dist, perm.index.indat$estuary))
+# adonis2(dist(estuary.index.perm.betadisper$distances)~estuary.index.perm.betadisper$group)
+```
+Significant result from PERMDISP: groups differ in dispersion 
+
+And here's the PCoA from the PERMDISP.
+```{r}
+myplot <- gg_ordiplot_customLines(ord=estuary.index.perm.betadisper, groups=perm.index.indat$estuary, 
+                                  groups_plotdiff="color,shape",hull=FALSE, ellipse=FALSE, label=FALSE, spiders=TRUE, 
+                                  pt.size=2, line.alpha=0.5)
+myplot$plot + 
+  scale_shape_manual(values=c(15,17, 16), name="Estuary") +
+  scale_color_manual(values=estuary_colors$key[c(2,1,3)], name="Estuary") +
+  labs(x="PCoA Dim 1",y="PCoA Dim 2") +
+  theme_bw() + theme(axis.text=element_blank(),axis.ticks=element_blank())
+```
+```{r echo=TRUE}
+png(here('figs','fig3_PCoA-estuary.png'), res=200, height=900,width=900)
+myplot$plot + 
+  scale_shape_manual(values=c(15,17, 16), name="Estuary") +
+  scale_color_manual(values=estuary_colors$key[c(2,1,3)], name="Estuary") +
+  labs(x="PCoA Dim 1",y="PCoA Dim 2") +
+  theme_bw() + theme(axis.text=element_blank(),axis.ticks=element_blank())
+dev.off()
+```
+<br>
+<br>
+
+Then by **site**
+
+```{r}
+site.index2.perm <- adonis2(perm.index.indat[,4:dim(perm.index.indat)[2]]~site_name, data=perm.index.indat, method="bray")
+site.index2.perm
+```
+
+The permanova is highly significant
+
+Is the significance due to the differences in centroids or due to the differences in dispersion of samples in principal coordinate space of dissimilarity (PCoA)?
+```{r}
+index.indat.dist <- vegdist(x=perm.index.indat[,4:dim(perm.index.indat)[2]],method="bray")
+site.index.perm.betadisper <- betadisper(d=index.indat.dist, group=perm.index.indat$site_name)
+
+anova(betadisper(d=index.indat.dist, perm.index.indat$site_name))
+# adonis2(dist(estuary.index.perm.betadisper$distances)~estuary.index.perm.betadisper$group)
+```
+Significant result from PERMDISP: groups differ in dispersion 
+
+Save the PCoA from the PERMDISP.
+```{r}
+myplot2 <- gg_ordiplot_customLines(ord=site.index.perm.betadisper, groups=perm.index.indat$site_name, 
+                                  groups_plotdiff="color,shape",hull=FALSE, ellipse=FALSE, label=FALSE, spiders=TRUE, 
+                                  pt.size=2, line.alpha=0.5)
+
+png(here('figs','supplement_PCoA-site.png'), res=200, height=900,width=900)
+myplot2$plot + 
+  labs(x="PCoA Dim 1",y="PCoA Dim 2") +
+  theme_bw() + theme(axis.text=element_blank(),axis.ticks=element_blank())
+dev.off()
+```
+
+### eDNA Index x Size class
+
+Before learning correlations for compositional data, see what happens when we impose size classes based somewhat off of instar stages: CW < 6mm, 6-8mm, 8-11.5mm, >11.5mm
+
+Add CWs and size class
+```{r}
+index.df.cw <- left_join(index.df,lab_metadat %>% dplyr::select(sample_id,CW_mm), by=c("crab_id"="sample_id")) %>%
+  mutate(size_class=ifelse(CW_mm < 6, "j1",
+                           ifelse(CW_mm < 8, "j2",
+                                  ifelse(CW_mm < 11.5, "j3","j4"))))
+
+permCW.index.indat <- index.df.cw %>% 
+  dplyr::select(c(1,120,7:118))
+```
+
+Run the PERMANOVA / PERMDISP
+```{r}
+cw.index.perm <- adonis2(permCW.index.indat[,3:dim(permCW.index.indat)[2]]~size_class, data=permCW.index.indat, method="bray")
+cw.index.perm
+```
+
+```{r}
+indexCW.indat.dist <- vegdist(x=permCW.index.indat[,3:dim(permCW.index.indat)[2]],method="bray")
+
+anova(betadisper(d=indexCW.indat.dist, permCW.index.indat$size_class))
+# adonis2(dist(estuary.index.perm.betadisper$distances)~estuary.index.perm.betadisper$group)
+```
+
+
+
+## Correlations: Size
+https://rachaellappan.github.io/16S-analysis/correlation-between-otus-with-sparcc.html
+https://biovcnet.github.io/_pages/NetworkScience_SparCC.nb.html
+
+or, Kelly paper with weighted correlation network analysis https://www.nature.com/articles/s41467-019-14105-1#code-availability
+
+In order to directly associate specific taxa to environmental variables (Fig. 3), we used sparse partial least square (sPLS) analysis from the R package mixOmics57,58. We applied the sPLS in regression mode, which will model a causal relationship between the lineages and the environmental traits, that is, PLS will predict environmental traits (e.g., temperature) from lineage abundances. This approach enabled us to identify strong correlations between certain taxa and environmental variables without taking into account the global structure of the planktonic community.
+
 
 ## Prey identity
 
