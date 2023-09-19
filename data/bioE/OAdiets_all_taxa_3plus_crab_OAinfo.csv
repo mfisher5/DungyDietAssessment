@@ -1,0 +1,60 @@
+group,new_taxon,ncrab,functional_group,respone_number,r_score_no_effect,r_score_decrease,r_score_increase,r_score_complex,pr_score_no_effect,pr_score_decrease,pr_score_increase,directional_score,evidence_score,agreement_score,normalized_agreement_score,confidence_score,raw_survival_scalar,relative_survival_scalar,oa_survival_response_curve_slope,oa_survival_response_curve_lower_bound_slope,oa_survival_response_curve_upper_bound_slope
+amphipod,Ampithoe lacertosa,3,Deposit feeders,47,13.26,12.59,1.7,1.97,0.48,0.46,0.06,-0.4,27.56,0.69,0.39,1.29,-0.51,-0.37,0.37,0.02,0.72
+amphipod,Ampithoe valida,8,Deposit feeders,47,13.26,12.59,1.7,1.97,0.48,0.46,0.06,-0.4,27.56,0.69,0.39,1.29,-0.51,-0.37,0.37,0.02,0.72
+amphipod,Grandidierella japonica,4,Deposit feeders,47,13.26,12.59,1.7,1.97,0.48,0.46,0.06,-0.4,27.56,0.69,0.39,1.29,-0.51,-0.37,0.37,0.02,0.72
+amphipod,Monocorophium acherusicum,43,Deposit feeders,47,13.26,12.59,1.7,1.97,0.48,0.46,0.06,-0.4,27.56,0.69,0.39,1.29,-0.51,-0.37,0.37,0.02,0.72
+amphipod,Monocorophium insidiosum,15,Deposit feeders,47,13.26,12.59,1.7,1.97,0.48,0.46,0.06,-0.4,27.56,0.69,0.39,1.29,-0.51,-0.37,0.37,0.02,0.72
+annelid worm,Serpulidae,4,Carnivorous infauna,41,13.94,12.97,1.55,0.78,0.49,0.46,0.05,-0.4,28.46,0.7,0.4,1.34,-0.54,-0.39,0.39,0.05,0.73
+barnacle,Balanus crenatus,22,Shallow benthic filter feeders,153,41.17,49.05,6.54,1.32,0.43,0.51,0.07,-0.44,96.75,0.69,0.37,1.71,-0.75,-0.55,0.55,0.25,0.84
+bivalves,Clinocardium nuttallii,6,Bivalves,487,147.57,173.42,11.68,19.34,0.44,0.52,0.04,-0.49,332.67,0.72,0.43,2.52,-1.22,-0.89,0.89,0.69,1.09
+bivalves,Limecola,3,Bivalves,487,147.57,173.42,11.68,19.34,0.44,0.52,0.04,-0.49,332.67,0.72,0.43,2.52,-1.22,-0.89,0.89,0.69,1.09
+bivalves,Modiolus modiolus,7,Bivalves,487,147.57,173.42,11.68,19.34,0.44,0.52,0.04,-0.49,332.67,0.72,0.43,2.52,-1.22,-0.89,0.89,0.69,1.09
+bivalves,Mytilus trossulus,3,Bivalves,487,147.57,173.42,11.68,19.34,0.44,0.52,0.04,-0.49,332.67,0.72,0.43,2.52,-1.22,-0.89,0.89,0.69,1.09
+bivalves,Saxidomus,3,Bivalves,487,147.57,173.42,11.68,19.34,0.44,0.52,0.04,-0.49,332.67,0.72,0.43,2.52,-1.22,-0.89,0.89,0.69,1.09
+bivalves,Tellinidae,6,Bivalves,487,147.57,173.42,11.68,19.34,0.44,0.52,0.04,-0.49,332.67,0.72,0.43,2.52,-1.22,-0.89,0.89,0.69,1.09
+brown algae,Chordariaceae,19,Macroalgae,165,41.98,21.95,37.8,8.34,0.41,0.22,0.37,0.16,101.74,0.6,0.19,0.9,0.14,0.1,-0.1,-0.49,0.29
+brown algae,Ectocarpaceae,4,Macroalgae,165,41.98,21.95,37.8,8.34,0.41,0.22,0.37,0.16,101.74,0.6,0.19,0.9,0.14,0.1,-0.1,-0.49,0.29
+brown algae,Fucales,9,Macroalgae,165,41.98,21.95,37.8,8.34,0.41,0.22,0.37,0.16,101.74,0.6,0.19,0.9,0.14,0.1,-0.1,-0.49,0.29
+brown algae,Fucus distichus,6,Macroalgae,165,41.98,21.95,37.8,8.34,0.41,0.22,0.37,0.16,101.74,0.6,0.19,0.9,0.14,0.1,-0.1,-0.49,0.29
+brown algae,Ralfsiaceae,3,Macroalgae,165,41.98,21.95,37.8,8.34,0.41,0.22,0.37,0.16,101.74,0.6,0.19,0.9,0.14,0.1,-0.1,-0.49,0.29
+brown algae,Sargassum,3,Macroalgae,165,41.98,21.95,37.8,8.34,0.41,0.22,0.37,0.16,101.74,0.6,0.19,0.9,0.14,0.1,-0.1,-0.49,0.29
+bryozoan,Membranipora membranacea,3,Shallow benthic filter feeders,153,41.17,49.05,6.54,1.32,0.43,0.51,0.07,-0.44,96.75,0.69,0.37,1.71,-0.75,-0.55,0.55,0.25,0.84
+copepod,Paracalanus,5,Mesozooplankton,55,12.69,25.59,0,0,0.33,0.67,0,-0.67,38.28,0.78,0.56,2.03,-1.36,-0.99,0.99,0.73,1.25
+crab,Hemigrapsus oregonensis,4,Crabs,145,50.63,47.39,2.13,2.25,0.51,0.47,0.02,-0.45,100.15,0.73,0.46,2.12,-0.96,-0.7,0.7,0.45,0.95
+flatworm,Polycystididae,3,Carnivorous infauna,41,13.94,12.97,1.55,0.78,0.49,0.46,0.05,-0.4,28.46,0.7,0.4,1.34,-0.54,-0.39,0.39,0.05,0.73
+green algae,Ulvales,7,Macroalgae,165,41.98,21.95,37.8,8.34,0.41,0.22,0.37,0.16,101.74,0.6,0.19,0.9,0.14,0.1,-0.1,-0.49,0.29
+horse and gaper clams,Tresus,9,Bivalves,487,147.57,173.42,11.68,19.34,0.44,0.52,0.04,-0.49,332.67,0.72,0.43,2.52,-1.22,-0.89,0.89,0.69,1.09
+jelly fish,Phacellophora camtschatica,5,Gelatinous zooplankton,3,1.51,0,0.83,0,0.64,0,0.36,0.36,2.35,0.77,0.54,0.46,0.16,0.12,-0.12,-0.56,0.33
+marine snails,Haminoea,4,Sea stars moonsnail whelk,80,22.28,20.04,6.86,1.97,0.45,0.41,0.14,-0.27,49.18,0.64,0.28,1.08,-0.29,-0.21,0.21,-0.16,0.58
+polychaete,Eupolymnia heterobranchia,4,Carnivorous infauna,41,13.94,12.97,1.55,0.78,0.49,0.46,0.05,-0.4,28.46,0.7,0.4,1.34,-0.54,-0.39,0.39,0.05,0.73
+polychaete,Pseudopolydora bassarginensis,6,Carnivorous infauna,41,13.94,12.97,1.55,0.78,0.49,0.46,0.05,-0.4,28.46,0.7,0.4,1.34,-0.54,-0.39,0.39,0.05,0.73
+polychaete,Pseudopolydora paucibranchiata,7,Carnivorous infauna,41,13.94,12.97,1.55,0.78,0.49,0.46,0.05,-0.4,28.46,0.7,0.4,1.34,-0.54,-0.39,0.39,0.05,0.73
+polychaete,Rhynchospio arenincola,3,Carnivorous infauna,41,13.94,12.97,1.55,0.78,0.49,0.46,0.05,-0.4,28.46,0.7,0.4,1.34,-0.54,-0.39,0.39,0.05,0.73
+red algae,Rhodomelaceae,7,Macroalgae,165,41.98,21.95,37.8,8.34,0.41,0.22,0.37,0.16,101.74,0.6,0.19,0.9,0.14,0.1,-0.1,-0.49,0.29
+shrimp,Crangon,3,Crangon shrimp,17,4.21,5.08,0,0,0.45,0.55,0,-0.55,9.28,0.75,0.5,1.12,-0.61,-0.45,0.45,0.08,0.81
+tunicate,Botrylloides,4,Shallow benthic filter feeders,153,41.17,49.05,6.54,1.32,0.43,0.51,0.07,-0.44,96.75,0.69,0.37,1.71,-0.75,-0.55,0.55,0.25,0.84
+venus clams,Veneridae,4,Bivalves,487,147.57,173.42,11.68,19.34,0.44,0.52,0.04,-0.49,332.67,0.72,0.43,2.52,-1.22,-0.89,0.89,0.69,1.09
+worm,Platynereis,9,Carnivorous infauna,41,13.94,12.97,1.55,0.78,0.49,0.46,0.05,-0.4,28.46,0.7,0.4,1.34,-0.54,-0.39,0.39,0.05,0.73
+Bacillariophyta,Bacillariaceae,8,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Bacillariophyceae,21,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Bacillariophyta,20,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Coscinodiscophyceae,6,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Cymbellales,5,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Ditylum brightwellii,4,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Haslea,4,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Mediophyceae,9,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Navicula,4,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Naviculales,20,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Nitzschia,7,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Pinnularia sp.,3,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Pleurosigma,20,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Pseudo-nitzschia,4,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Rhizosoleniaceae,5,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Bacillariophyta,Thalassiosirales,3,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+Chlorophyta,Micromonas pusilla,17,Small phytoplankton,79,15.58,11.66,19.47,2.41,0.33,0.25,0.42,0.17,46.71,0.57,0.14,0.54,0.09,0.07,-0.07,-0.5,0.37
+Rotifera,Euchlanis dilatata,17,Microzooplankton,90,26.44,12.09,18.43,3.38,0.46,0.21,0.32,0.11,56.97,0.61,0.23,0.92,0.1,0.07,-0.07,-0.46,0.32
+NA,Chattonella marina,4,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39
+NA,Cryptomonas curvata,3,Small phytoplankton,79,15.58,11.66,19.47,2.41,0.33,0.25,0.42,0.17,46.71,0.57,0.14,0.54,0.09,0.07,-0.07,-0.5,0.37
+NA,Cryptophyceae,6,Small phytoplankton,79,15.58,11.66,19.47,2.41,0.33,0.25,0.42,0.17,46.71,0.57,0.14,0.54,0.09,0.07,-0.07,-0.5,0.37
+NA,Dinophyceae,12,Microzooplankton,90,26.44,12.09,18.43,3.38,0.46,0.21,0.32,0.11,56.97,0.61,0.23,0.92,0.1,0.07,-0.07,-0.46,0.32
+NA,Heterosigma akashiwo,3,Large phytoplankton,231,64.4,36.95,32.39,4.72,0.48,0.28,0.24,-0.03,133.73,0.62,0.23,1.14,-0.04,-0.03,0.03,-0.34,0.39

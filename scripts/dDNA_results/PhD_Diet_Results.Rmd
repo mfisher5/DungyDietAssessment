@@ -161,6 +161,14 @@ write_csv(pcrab_with_preytax, here(resultsdir, 'lerayXT_runs1-2_percent_crab_wit
 ```
 
 
+*Important for further analysis* - do we have the same number of technical replicates per crab?
+```{r}
+with(bind_rows(smdat,dat) %>% group_by(crab_id) %>% summarise(ntech=length(unique(tech))), table(ntech))
+with(dat %>% group_by(crab_id) %>% summarise(ntech=length(unique(tech))), table(ntech))
+```
+
+
+
 # Taxa
 
 Allows for non-species-level IDs, as long as they are unique 
@@ -268,6 +276,7 @@ plot.alpha
 dev.off()
 ```
 <br>
+
 
 How is ($\alpha$ diversity) distributed across taxonomic levels?
 ```{r message=FALSE}

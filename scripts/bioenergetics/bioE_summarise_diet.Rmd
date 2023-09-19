@@ -19,10 +19,11 @@ library(ggrepel)
 library(cowplot)
 library(vegan)
 library(magrittr)
+library(janitor)
 
 # User inputs
 blastdir   <- 'data/blast'
-bedir <- 'data/bioE'
+bdir <- 'data/bioE'
 run.nums <- c(1,2)
 marker  <- 'lerayXT'
 ```
@@ -33,25 +34,172 @@ dat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"
 
 dat %<>%
   mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
+  mutate(site=ifelse(site=="CLAY","LAR",
+                     ifelse(site=="SIN","SAMI",site))) %>%
   mutate(estuary=ifelse(site %in% c("KAY","KAY-shell"),"Port Susan Bay",
                                     ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
 
+## too small taxa (aka "detritus") ##
+smdat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_SmallTaxa_uniqueTaxa.csv")))  
+
+smdat %<>%
+  mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
+  mutate(site=ifelse(site=="CLAY","LAR",
+                     ifelse(site=="SIN","SAMI",site))) %>%
+  mutate(estuary=ifelse(site %in% c("KAY","KAY-shell"),"Port Susan Bay",
+                                    ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
+
+alldat <- bind_rows(dat,smdat)
 ```
 <br>
 
-## Site Diets
+## Basics
 
-For sites with > 10 crab, find the most commonly detected prey items (according to frequency of occurrence).
+What is the median taxonomic richness per crab?
+with detritus
+```{r}
+median(bind_rows(dat,smdat) %>%
+  group_by(crab_id) %>%
+  summarise(richness=length(unique(taxon))) %>% pull(richness))
+```
+with detritus as one category ("uni-cellular")
+```{r}
+median(bind_rows(dat,smdat %>% mutate(taxon="unicellular")) %>%
+  group_by(crab_id) %>%
+  summarise(richness=length(unique(taxon))) %>% pull(richness))
+```
+
+without detritus
+```{r}
+median(dat %>%
+  group_by(crab_id) %>%
+  summarise(richness=length(unique(taxon))) %>% pull(richness))
+```
+only detritus
+```{r}
+median(smdat %>%
+  group_by(crab_id) %>%
+  summarise(richness=length(unique(taxon))) %>% pull(richness))
+```
+
+What is the median stomach fullness per crab?
+```{r}
+```
+
+
+## Overall diet
+
+
 
 
 
 ## OA sensitivity diets
 
-Produce four diets: Hi/Lo Energy Density x Hi/Lo OA Sensitivity
+Produce four diets: Hi/Lo OA Sensitivity x Hi/Lo Energy Density
+
+First, grab only the "large" prey that were present in three or more crab
+```{r}
+summary_dat <- dat %>% 
+  group_by(group, new_taxon) %>% summarise(ncrab=length(unique(crab_id)))
+
+dat_3plus <- dat %>%
+  filter(new_taxon %in% filter(summary_dat, ncrab > 2)$new_taxon)
+
+## how many prey?
+length(unique(dat_3plus$new_taxon))
+
+## how many crab? 
+length(unique(dat_3plus$crab_id))
+
+write_csv(summary_dat %>% filter(ncrab > 2), here(bdir,'OAdiets_all_taxa_3plus_crab.csv'))
+
+```
+
+Grab "small" prey that were present in three or more crab.
+```{r}
+summary_smdat <- smdat %>% 
+  group_by(phylum,taxon) %>% summarise(ncrab=length(unique(crab_id)))
+
+smdat_3plus <- smdat %>%
+  filter(taxon %in% filter(summary_smdat, ncrab > 2)$taxon)
+
+## how many prey?
+length(unique(smdat_3plus$taxon))
+
+## how many crab? 
+length(unique(smdat_3plus$crab_id))
+
+write_csv(summary_smdat %>% filter(ncrab > 2), here(bdir,'OAdiets_small_taxa_3plus_crab.csv'))
+
+```
 
 
+Then, match these prey to the OA list, according to the manually identified functional groups. 
+
+Uncertainties in manual matching: 
+
+- Microzooplankton the agreement score is low. This seems to be because some do make caco3, and some don’t. Could potentially fine-tune this value according to species-level IDs in stomach content data?
+
+- Tunicates (Botrylloides) and rotifers (Euchlanis dilatata) not in the species database. Euchlanis dilatata is a tofier that is generally 170-250uM in length. Compare to Alexandrium, a genus of dinoflagellites classified as microzooplankton at about 50uM, and the copepod Paracalanus, classified as a mesozooplankton at 0.5-1mm (500uM). Euclanis dilatata therefore classified as a microzooplankton. Green Colonial Tunicate was listed as a Shallow benthic filter feeder, therefore Botrylloides as that functional group.
 
 
+```{r}
+taxdat <- read_csv(here(bdir,'OAdiets_all_taxa_3plus_crab_OAinfo.csv'))
+oadat <- read_csv(here(bdir,'BuschMcElhany2016_OAscores_by_functionalGroup.csv'),skip=1) %>% clean_names()
+
+colnames(oadat)
+```
+
+```{r}
+taxdat %<>% left_join(oadat, by="functional_group")
+```
+
+Check the raw survival scalar frequencies
+```{r}
+ggplot(taxdat, aes(x=raw_survival_scalar)) +
+  geom_histogram() + 
+  geom_vline(aes(xintercept=mean(taxdat$raw_survival_scalar))) +
+  geom_text(aes(x=mean(taxdat$raw_survival_scalar), y=5, label=round(mean(taxdat$raw_survival_scalar),2))) +
+  theme_bw()
+```
+
+
+What is 1 standard deviation away from the mean? how many taxa are above / below that cutoff?
+```{r}
+xbar <- mean(taxdat$raw_survival_scalar)
+sdev <- sd(taxdat$raw_survival_scalar)
+upper <- xbar + sdev; lower <- xbar - sdev
+
+upper
+taxdat %>% filter(raw_survival_scalar > upper) %>% pull(new_taxon)
+
+lower
+taxdat %>% filter(raw_survival_scalar < lower) %>% pull(new_taxon)
+```
+
+what is the 50% IQR? how many taxa are above / below that cutoff?
+```{r}
+xmed <- median(taxdat$raw_survival_scalar)
+q75 <- quantile(taxdat$raw_survival_scalar, probs=0.75)
+q25 <- quantile(taxdat$raw_survival_scalar, probs=0.25)
+xmed
+
+q75
+taxdat %>% filter(raw_survival_scalar > q75) %>% pull(new_taxon)
+
+q25
+taxdat %>% filter(raw_survival_scalar < q25) %>% pull(new_taxon)
+```
+Write these out!
+```{r}
+write_csv(taxdat, here(bdir,'OAdiets_all_taxa_3plus_crab_OAinfo.csv'))
+
+diets_out <- taxdat %>% mutate(OA.diet.group=ifelse(raw_survival_scalar < q25, "low",
+                                                    ifelse(raw_survival_scalar > q75, "high",NA))) %>%
+  filter(!is.na(OA.diet.group)) %>%
+  dplyr::select(new_taxon,OA.diet.group,colnames(taxdat)[-1])
+write_csv(diets_out, here(bdir,'OAdiets_HiLo.csv'))
+```
 
 
 
