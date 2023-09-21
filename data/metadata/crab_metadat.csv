@@ -20,7 +20,7 @@ CLAY_01,Samish Bay,Larrabee,8/11/2021,11.5,10,0.5,no,yes
 CLAY_02,Samish Bay,Larrabee,8/11/2021,11,9,2,yes,yes
 CLAY_03,Samish Bay,Larrabee,8/11/2021,8,6.5,0.5,yes,yes
 CLAY_04,Samish Bay,Larrabee,8/11/2021,7.5,7,0.5,yes,yes
-CLAY_05,Samish Bay,Larrabee,8/11/2021,6.5,7.5,1,no,yes
+CLAY_05,Samish Bay,Larrabee,8/11/2021,7.5,6.5,1,no,yes
 CLAY_06,Samish Bay,Larrabee,8/11/2021,9,8,2,no,yes
 CLAY_07,Samish Bay,Larrabee,8/11/2021,6.5,6.5,2,no,yes
 CLAY_08,Samish Bay,Larrabee,8/11/2021,6,5.5,1,no,yes
@@ -32,47 +32,47 @@ CLAY_13,Samish Bay,Larrabee,8/11/2021,13,11,1,yes,no
 CLAY_14,Samish Bay,Larrabee,8/11/2021,9,7.5,1,no,no
 CLAY_15,Samish Bay,Larrabee,8/11/2021,7,6.5,1,no,no
 CLAY_16,Samish Bay,Larrabee,8/11/2021,12.5,9,0,no,no
-CLAY_17,Samish Bay,Larrabee,8/11/2021,7,7.5,1.5,no,no
+CLAY_17,Samish Bay,Larrabee,8/11/2021,7.5,7,1.5,no,no
 CLAY_18,Samish Bay,Larrabee,8/11/2021,7.5,6.5,1.5,no,no
 CLAY_19,Samish Bay,Larrabee,8/11/2021,7,6.5,1.5,no,no
 CLAY_20,Samish Bay,Larrabee,8/11/2021,7.5,7,1.5,no,no
 CLAY_21,Samish Bay,Larrabee,8/11/2021,9.5,9,2,no,no
-KAY_01,Port Susan,Kayak Point 1,7/23/2021,6.5,6.5,0.5,no,yes
-KAY_02,Port Susan,Kayak Point 1,7/23/2021,9,8,1,no,yes
-KAY_03,Port Susan,Kayak Point 1,7/23/2021,9.5,8.5,1,no,yes
-KAY_04,Port Susan,Kayak Point 1,7/23/2021,9,8.5,0,yes,yes
-KAY_05,Port Susan,Kayak Point 1,7/23/2021,10.5,8.5,1,yes,yes
-KAY_06,Port Susan,Kayak Point 1,7/23/2021,10.5,8.5,2,yes,yes
-KAY_07,Port Susan,Kayak Point 1,7/23/2021,9,8.5,1,no,yes
-KAY_08,Port Susan,Kayak Point 1,7/23/2021,10.5,9,2,yes,yes
-KAY_09,Port Susan,Kayak Point 1,8/5/2021,10,8.5,1,yes,yes
-KAY_10,Port Susan,Kayak Point 1,8/6/2021,6.5,6.5,1,yes,yes
-KAY_11,Port Susan,Kayak Point 1,8/19/2021,9,9,0.5,yes,yes
-KAY_12,Port Susan,Kayak Point 1,8/19/2021,9,8,0.5,yes,no
-KAY_13,Port Susan,Kayak Point 1,8/19/2021,9,7.5,0.5,yes,no
-KAY_14,Port Susan,Kayak Point 1,8/20/2021,10,8,0,no,no
-KAY_15,Port Susan,Kayak Point 1,8/19/2021,5,5,NA,yes,no
-KAY_16,Port Susan,Kayak Point 1,8/19/2021,8,7.5,NA,no,no
-KAY_17,Port Susan,Kayak Point 1,8/19/2021,7,6.5,NA,no,no
-KAY_18,Port Susan,Kayak Point 2,8/6/2021,10,8,2,yes,yes
-KAY_19,Port Susan,Kayak Point 2,8/6/2021,10,8.5,1,no,yes
-KAY_20,Port Susan,Kayak Point 2,8/6/2021,7,7,1,yes,yes
-KAY_21,Port Susan,Kayak Point 2,8/6/2021,9.5,8,1.5,no,yes
-KAY_22,Port Susan,Kayak Point 2,8/6/2021,8,8,0.5,yes,yes
-KAY_23,Port Susan,Kayak Point 2,8/6/2021,9.5,9.5,NA,yes,yes
-KAY_24,Port Susan,Kayak Point 2,8/6/2021,6,6,NA,yes,yes
-KAY_25,Port Susan,Kayak Point 2,8/6/2021,11.5,10,NA,no,yes
-KAY_26,Port Susan,Kayak Point 2,8/6/2021,6,6,NA,no,yes
-KAY_27,Port Susan,Kayak Point 2,8/6/2021,9,8,NA,no,yes
-KAY_28,Port Susan,Kayak Point 2,8/6/2021,10,8.5,NA,yes,yes
-KAY_29,Port Susan,Kayak Point 2,8/6/2021,9,9,NA,no,yes
+KAY_01,Port Susan Bay,Kayak Point 1,7/23/2021,6.5,6.5,0.5,no,yes
+KAY_02,Port Susan Bay,Kayak Point 1,7/23/2021,9,8,1,no,yes
+KAY_03,Port Susan Bay,Kayak Point 1,7/23/2021,9.5,8.5,2,no,yes
+KAY_04,Port Susan Bay,Kayak Point 1,7/23/2021,9,8.5,0.5,yes,yes
+KAY_05,Port Susan Bay,Kayak Point 1,7/23/2021,10.5,8.5,0.5,yes,yes
+KAY_06,Port Susan Bay,Kayak Point 1,7/23/2021,10.5,8.5,2,yes,yes
+KAY_07,Port Susan Bay,Kayak Point 1,7/23/2021,9,8.5,1,no,yes
+KAY_08,Port Susan Bay,Kayak Point 1,7/23/2021,10.5,9,2,yes,yes
+KAY_09,Port Susan Bay,Kayak Point 1,8/5/2021,10,8.5,1,yes,yes
+KAY_10,Port Susan Bay,Kayak Point 1,8/6/2021,6.5,6.5,1,yes,yes
+KAY_11,Port Susan Bay,Kayak Point 1,8/19/2021,9,9,0.5,yes,yes
+KAY_12,Port Susan Bay,Kayak Point 1,8/19/2021,9,8,0.5,yes,no
+KAY_13,Port Susan Bay,Kayak Point 1,8/19/2021,9,7.5,0.5,yes,no
+KAY_14,Port Susan Bay,Kayak Point 1,8/20/2021,10,8,0,no,no
+KAY_15,Port Susan Bay,Kayak Point 1,8/19/2021,5,5,0.5,yes,no
+KAY_16,Port Susan Bay,Kayak Point 1,8/19/2021,8,7.5,0.5,no,no
+KAY_17,Port Susan Bay,Kayak Point 1,8/19/2021,7,6.5,0.5,no,no
+KAY_18,Port Susan Bay,Kayak Point 2,8/6/2021,10,8,2,yes,yes
+KAY_19,Port Susan Bay,Kayak Point 2,8/6/2021,10,8.5,2,no,yes
+KAY_20,Port Susan Bay,Kayak Point 2,8/6/2021,7,7,1,yes,yes
+KAY_21,Port Susan Bay,Kayak Point 2,8/6/2021,9.5,8,2,no,yes
+KAY_22,Port Susan Bay,Kayak Point 2,8/6/2021,8,8,0.5,yes,yes
+KAY_23,Port Susan Bay,Kayak Point 2,8/6/2021,9.5,9.5,2,yes,yes
+KAY_24,Port Susan Bay,Kayak Point 2,8/6/2021,6,6,0.5,yes,yes
+KAY_25,Port Susan Bay,Kayak Point 2,8/6/2021,11.5,10,NA,no,yes
+KAY_26,Port Susan Bay,Kayak Point 2,8/6/2021,6,6,NA,no,yes
+KAY_27,Port Susan Bay,Kayak Point 2,8/6/2021,9,8,NA,no,yes
+KAY_28,Port Susan Bay,Kayak Point 2,8/6/2021,10,8.5,NA,yes,yes
+KAY_29,Port Susan Bay,Kayak Point 2,8/6/2021,9,9,NA,no,yes
 PBNERR_01,Padilla Bay,PBNERR 1,8/7/2021,13.5,10,2,no,yes
 PBNERR_02,Padilla Bay,PBNERR 2,8/8/2021,9,7.5,1,no,yes
 PBNERR_03,Padilla Bay,PBNERR 2,8/8/2021,14,10.5,1,yes,no
 PBNERR_04,Padilla Bay,PBNERR 3,8/18/2021,5,5,0.5,no,yes
 PBNERR_05,Padilla Bay,PBNERR 3,8/18/2021,10,8.5,0.5,no,no
 PBNERR_06,Padilla Bay,PBNERR 2,8/8/2021,7.5,7,0.5,no,no
-PBNERR_07,Padilla Bay,PBNERR 3,8/18/2021,13,10,NA,yes,no
+PBNERR_07,Padilla Bay,PBNERR 3,8/18/2021,13,10,0.5,yes,no
 SAMT_01,Samish Bay,Oyster Creek,8/9/2021,7,7,1,yes,yes
 SAMT_02,Samish Bay,Oyster Creek,8/10/2021,10,8,0.5,no,yes
 MARPT_18,Padilla Bay,March Point,8/21/2021,5,5,1,no,

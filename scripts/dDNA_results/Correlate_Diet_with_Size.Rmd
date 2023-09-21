@@ -1,0 +1,200 @@
+---
+title: "Diet by Size"
+subtitle: "run date: `r format(Sys.time(), '%B %d, %Y')`"
+author: "M Fisher"
+date: 'written 2022-9-19'
+output: 
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+# Description
+
+Is diet variability correlated with instar size?
+
+https://rachaellappan.github.io/16S-analysis/correlation-between-otus-with-sparcc.html
+https://biovcnet.github.io/_pages/NetworkScience_SparCC.nb.html
+
+or, Kelly paper with weighted correlation network analysis https://www.nature.com/articles/s41467-019-14105-1#code-availability
+
+In order to directly associate specific taxa to environmental variables (Fig. 3), we used sparse partial least square (sPLS) analysis from the R package mixOmics57,58. We applied the sPLS in regression mode, which will model a causal relationship between the lineages and the environmental traits, that is, PLS will predict environmental traits (e.g., temperature) from lineage abundances. This approach enabled us to identify strong correlations between certain taxa and environmental variables without taking into account the global structure of the planktonic community.
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(ggrepel)
+library(cowplot)
+library(vegan)
+library(magrittr)
+# library(devtools)
+# devtools::install_github("mixOmicsTeam/mixOmics")
+library(mixOmics)
+
+source(here('R','eDNA_index.r'))
+
+# User inputs
+blastdir   <- 'data/blast'
+resultsdir <- 'data/results'
+run.nums <- c(1,2)
+marker  <- 'lerayXT'
+
+site_names <- data.frame(site=c("KAY","KAY-shell","MARPT","PBNERR","SAMI","SAMT","LAR"),
+                         site_name=c("Kayak Pt 1","Kayak Pt 2","March Pt",
+                                   "NERR","Samish Isl","Samish Bay","Larrabee"))
+```
+
+```{r data, include=FALSE}
+## lab metadata (CH,CW,fullness) ##
+lab_metadat <- read_csv(here('data','metadata','crab_metadat.csv'))
+
+## filtered taxa ##
+dat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_uniqueTaxa.csv")))
+
+dat %<>%
+  mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
+  mutate(site=ifelse(site=="CLAY","LAR",
+                     ifelse(site=="SIN","SAMI",site))) %>%
+  mutate(estuary=ifelse(site %in% c("KAY","KAY-shell"),"Port Susan Bay",
+                                    ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
+
+## too small taxa (aka "detritus") ##
+smdat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_SmallTaxa_uniqueTaxa.csv")))  
+
+smdat %<>%
+  mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
+  mutate(site=ifelse(site=="CLAY","LAR",
+                     ifelse(site=="SIN","SAMI",site))) %>%
+  mutate(estuary=ifelse(site %in% c("KAY","KAY-shell"),"Port Susan Bay",
+                                    ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
+```
+
+
+## Prep data
+
+First, create a data frame with only the carapace width data, per technical replicate. 
+```{r}
+cw.df <- lab_metadat %>% dplyr::select(sample_id,CW_mm) %>%
+  rename(crab_id=sample_id) %>%
+  left_join(bind_rows(dat,smdat) %>% dplyr::select(crab_id,sample_id,tech) %>% distinct,
+            by=c("crab_id")) %>%
+  filter(!is.na(tech))
+```
+
+
+Then, calculate the eDNA index. I'm going to use all technical replicates.
+
+**large taxa only**
+```{r}
+crab.lreads.mat <- dat %>%
+  group_by(sample_id, new_taxon) %>% summarise(techReads=sum(nReads)) %>%
+  pivot_wider(id_cols="sample_id", names_from="new_taxon",values_from="techReads", values_fill=0) %>%
+  column_to_rownames("sample_id")
+
+index.lg.mat <- t(eDNA_index(x=t(crab.lreads.mat)))
+
+index.lg.df <- as.data.frame(t(index.lg.mat)) %>%
+  rownames_to_column("sample_id") %>% 
+  pivot_longer(cols=2:(dim(index.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
+  left_join(dat %>% dplyr::select(sample_id,crab_id,tech,site,estuary) %>% distinct(),by="sample_id") %>%
+  left_join(site_names) %>%
+  pivot_wider(names_from=taxon,values_from=DNAindex)
+```
+
+
+**micro taxa only**
+```{r}
+crab.smreads.mat <- smdat %>%
+  group_by(sample_id, taxon) %>% summarise(techReads=sum(nReads)) %>%
+  pivot_wider(id_cols="sample_id", names_from="taxon",values_from="techReads", values_fill=0) %>%
+  column_to_rownames("sample_id")
+
+index.sm.mat <- t(eDNA_index(x=t(crab.smreads.mat)))
+```
+
+
+**large taxa only**
+```{r}
+crab.reads.mat <- bind_rows(smdat,
+                            dat %>% dplyr::select(-taxon) %>% rename(taxon=new_taxon)) %>%
+  group_by(sample_id, taxon) %>% summarise(techReads=sum(nReads)) %>%
+  pivot_wider(id_cols="sample_id", names_from="taxon",values_from="techReads", values_fill=0) %>%
+  column_to_rownames("sample_id")
+
+index.mat <- t(eDNA_index(x=t(crab.reads.mat)))
+```
+
+
+check to make sure all technical replicates are in both data frames
+```{r}
+all(rownames(index.mat) %in% cw.df$sample_id)
+```
+
+
+
+## Sparse partial least squares analysis
+
+
+Kelly et al. :
+> In order to directly associate specific taxa to environmental variables (Fig. 3), we used sparse partial least square (sPLS) analysis from the R package mixOmics. We applied the sPLS in regression mode, which will model a causal relationship between the lineages and the environmental traits, that is, PLS will predict environmental traits (e.g., temperature) from lineage abundances. This approach enabled us to identify strong correlations between certain taxa and environmental variables without taking into account the global structure of the planktonic community.
+
+
+
+
+### large taxa
+
+The carapace width data will be "Y" in the sPLS, and the diet data will be "X"
+
+```{r fig.width=3, fig.height=3}
+cw.lg.mat <- as.matrix(cw.df %>% filter(sample_id %in% rownames(index.lg.mat)) %>%
+  arrange(match(sample_id, rownames(index.lg.mat))) %>%
+  column_to_rownames(var="sample_id") %>% dplyr::select(CW_mm))
+
+hist(cw.lg.mat[,1], main="histogram of carapace width")
+```
+
+make sure the rows in the carapace width data exactly match the rows in the diet data. 
+```{r}
+all(rownames(cw.lg.mat) == rownames(index.lg.mat))
+```
+
+
+Defining the ‘best’ number of dimensions to explain the data requires we first launch a PLS1 model with a large number of components. Some of the outputs from the PLS1 object are then retrieved in the perf() function to calculate the Q2
+
+criterion using repeated 10-fold cross-validation.
+```{r}
+cw.lgtax.pls4 <- pls(Y = cw.lg.mat, X = index.lg.mat,  ncomp=4, mode = 'regression')
+
+test.pls4 <- pls(Y = liver.toxicity$clinic[,"ALB.g.dL."], X = liver.toxicity$gene,  ncomp=4, mode = 'regression')
+
+set.seed(33)  # For reproducibility with this handbook, remove otherwise
+Q2.lgtax.pls4 <- perf(cw.lgtax.pls4, validation = 'Mfold', 
+                      folds = 10, nrepeat = 5)
+plot(Q2.lgtax.pls4, criterion = 'Q2')
+```
+
+
+
+```{r}
+out.list <- list(index.lg.mat, cw.lg.mat); names(out.list) <- c("X","Y")
+saveRDS(out.list, here('data','results','test_spls.rds'))
+rm(out.list)
+readRDS(here('data','results','test_spls.rds'))
+
+
+hist(index.lg.mat, main="histogram of eDNA index (X)")
+```
+
+
+
+
+
+## Clustering
+
+
+
+

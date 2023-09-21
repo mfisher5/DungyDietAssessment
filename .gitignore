@@ -10,6 +10,7 @@ data/results/*
 data/blast/**/*.fasta
 data/blast/**/*.csv
 data/metadata/*.rds
+data/bioE/literature/**
 figs/*
 .Rhistory
 **/.Rhistory
