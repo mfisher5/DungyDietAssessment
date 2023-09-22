@@ -226,6 +226,28 @@ fig1b
 if(!knitting){saveRDS(fig1b, here('figs','fig1b_obj.rds'))}
 ```
 
+Graph mean and sdev carapace width and height for each site, and save for supplement.
+```{r}
+# png(here('figs','figS_CW_CH_bysite.png'))
+crab_metadat %>% 
+  left_join(site_names) %>% pivot_longer(cols=c("CW_mm","CH_mm"),names_to="metric",values_to="mm") %>%
+  group_by(site,metric) %>% summarise(mean_mm=mean(mm),sd_mm=sd(mm)) %>%
+  mutate(metric=ifelse(metric=="CW_mm","Carapace Width","Carapace Height"))
+  
+crab_metadat %>% left_join(site_names) %>%
+  group_by(site,site_name) %>%
+  summarise(mean_cw=mean(CW_mm), sdev_cw=sd(CW_mm),
+                                              mean_ch=mean(CH_mm), sdev_ch=sd(CH_mm)) %>%
+ggplot(aes(x=mean_cw,y=mean_ch,color=fct_relevel(site_name, c("Kayak Pt 1","Kayak Pt 2","March Pt","NERR","Samish Isl","Samish Bay","Larrabee")))) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin=mean_ch-sdev_ch,ymax=mean_ch+sdev_ch)) +
+  geom_errorbarh(aes(xmin=mean_cw-sdev_ch,xmax=mean_cw+sdev_cw)) +
+  scale_color_manual(values=c("darkgreen","chartreuse3","#1f78b4","cadetblue2","chocolate4","chocolate2","orange2"),name="Site") +
+  labs(x="Carapace width (mm)", y="Carapace height (mm)") +
+  theme_bw() 
+```
+
+
 
 # Taxa
 
@@ -766,9 +788,6 @@ What is the $\beta$ diversity for prey taxon? (the ratio between regional and lo
 
 I do have very different sample sizes between sites. According to Barwell et al. 2014, "In sampling simulations S1 (Unbiased by undersampling) and S2 (Unbiased by unequal sampling effort ) (Table 1; Figs S12 and S13), most presence–absence metrics were positively biased by undersampling, with the exception of βChao Sørensen and βChao Jaccard which have a correction for undersampling." But those need species abundance data...
 
-
-#### presence/absence
-
 First, among all sites *all taxa*
 ```{r}
 prey.sp.site.mat <- alldat %>%
@@ -822,22 +841,168 @@ colnames(bdiv4) <-c(prey.sp.est.mat2$estuary); rownames(bdiv4) <- c(prey.sp.est.
 bdiv4
 ```
 
+save the all-taxa matrices
+```{r}
+write_csv(as.data.frame(bdiv, row.names=rownames(bdiv)) %>% rownames_to_column("x"), here('data','results','betadiver_runs1-2_lerayXT_presence_allTaxa.csv'))
+
+write_csv(as.data.frame(bdiv3, row.names=rownames(bdiv3)) %>% rownames_to_column("x"), here('data','results','betadiver_estuaries_runs1-2_lerayXT_presence_allTaxa.csv'))
+```
+
 
 ### Zeta diversity
 
 Zeta diversity is the mean number of species shared by any number of assemblages, and can differentiate the contribution of rare and common species to biodiversity. 
 
-I'm interested in the following orders: 
-$\zeta_1$ = taxonomic richness per crab, among crab at a sampling site
+#### zeta decay across all sites
 
-$\zeta_2$ = taxonomic richness per sampling site, among sites within the same estuary
+Zeta diversity decay measures the decreasing number of shared taxa across greater observed communities 
 
-$\zeta_3$ = taxonomic richness per estuary
-
+data.spec input: presence-absence data frame, with sites as rows and species as columns. I have 7 sites, so I'll ask for the zeta diversity across 7 orders?
 ```{r}
+zdata <- t(prey.sp.site.mat %>% column_to_rownames("site"))
+
+zout <- Zeta.decline.ex(zdata, orders = 1:7,plot=TRUE)
+
 ```
 
+So, I read an asymptote after $\zeta_5$ - $\zeta_6$. I think this means that once I reach 5-6 sites, the average number of species shared between sites gets really small? 
 
+Based on AIC, the exponential regression is the better fit
+```{r}
+zout$aic
+```
+
+#### zeta decay within an estuary (all taxa)
+
+Within an estuary, what is the zeta decay (1) among samples, and (2) among sites?
+```{r}
+zin.df <- alldat %>%
+  dplyr::select(estuary,site,crab_id,taxon) %>% distinct() %>%
+  mutate(presence=1)
+  
+
+zdecay_samples <- list()
+zdecay_sites <- list()
+i <- 1
+
+for(e in unique(zin.df$estuary)){
+  ## samples
+  tmp.mat.samples <- zin.df %>% filter(estuary==e) %>% dplyr::select(crab_id,taxon,presence) %>%
+    pivot_wider(id_cols="crab_id", names_from="taxon",values_from="presence", values_fill=0) %>%
+    column_to_rownames("crab_id")
+  zout <- Zeta.decline.ex(tmp.mat.samples, orders = 1:dim(tmp.mat.samples)[1],plot=TRUE)
+  
+  ## sites
+  tmp.mat.sites <- zin.df %>% filter(estuary==e) %>% dplyr::select(site,taxon,presence) %>%
+    distinct() %>%
+    pivot_wider(id_cols="site", names_from="taxon",values_from="presence", values_fill=0) %>%
+    column_to_rownames("site")
+  zout.sites <- Zeta.decline.ex(tmp.mat.sites, orders = 1:dim(tmp.mat.sites)[1],plot=TRUE)
+  
+  zdecay_samples[[i]] <- zout
+  zdecay_sites[[i]] <- zout.sites
+  i <- i+1
+}
+names(zdecay_samples) <- unique(zin.df$estuary)
+
+```
+
+plot zeta diversity and zeta ratio x order for each estuary, from samples
+```{r}
+zeta.samples.df <- data.frame(estuary=as.character(),
+                      zorder=as.numeric(),
+                      zval=as.numeric(),
+                      zval.sd=as.numeric(),
+                      zratio=as.numeric())
+for(i in seq(1,length(zdecay_samples))){
+  tmpz <- zdecay_samples[[i]]
+  j <- length(tmpz$combinations[which(tmpz$combinations > 1)])
+  zeta.samples.df %<>% bind_rows(data.frame(zorder=tmpz$zeta.order[1:j],
+                                    zval=tmpz$zeta.val[1:j],
+                                    zval.sd=tmpz$zeta.val.sd[1:j],
+                                    zratio=tmpz$ratio[1:j],
+                                    estuary=rep(names(zdecay_samples)[i],j)))
+}
+```
+```{r}
+zplot1 <- zeta.samples.df %>%
+  dplyr::select(estuary,zorder,zratio,zval) %>%
+  pivot_longer(cols=c("zratio","zval"),names_to="metric",values_to="val") %>%
+  mutate(estuary=factor(estuary,levels=estuary_colors$estuary),
+         metric=ifelse(metric=="zval","Zeta Diversity","Ratio of Zeta Diversity")) %>%
+ggplot(aes(x=zorder,y=val,color=estuary,pch=estuary)) +
+  geom_point() +
+  geom_path() + 
+  facet_wrap(~metric,scales="free_y") +
+  scale_color_manual(values=estuary_colors$key, name="estuary") +
+  labs(x="Zeta order (samples)",y="") +
+  theme_bw()
+zplot1
+```
+
+#### zeta decay within sites (all taxa)
+
+```{r}
+zdecay_samples_bysite <- list()
+i <- 1
+
+for(s in unique(zin.df$site)){
+  ## samples
+  tmp.mat.samples <- zin.df %>% filter(site==s) %>% dplyr::select(crab_id,taxon,presence) %>%
+    pivot_wider(id_cols="crab_id", names_from="taxon",values_from="presence", values_fill=0) %>%
+    column_to_rownames("crab_id")
+  zout <- Zeta.decline.ex(tmp.mat.samples, orders = 1:dim(tmp.mat.samples)[1],plot=TRUE)
+  
+  zdecay_samples_bysite[[i]] <- zout
+  i <- i+1
+}
+names(zdecay_samples_bysite) <- unique(zin.df$site)
+
+```
+
+plot zeta diversity and zeta ratio x order for each site
+```{r}
+zeta.samples.bysite.df <- data.frame(site=as.character(),
+                      zorder=as.numeric(),
+                      zval=as.numeric(),
+                      zval.sd=as.numeric(),
+                      zratio=as.numeric())
+for(i in seq(1,length(zdecay_samples_bysite))){
+  tmpz <- zdecay_samples_bysite[[i]]
+  j <- length(tmpz$combinations[which(tmpz$combinations > 1)])
+  zeta.samples.bysite.df %<>% bind_rows(data.frame(zorder=tmpz$zeta.order[1:j],
+                                    zval=tmpz$zeta.val[1:j],
+                                    zval.sd=tmpz$zeta.val.sd[1:j],
+                                    zratio=tmpz$ratio[1:j],
+                                    site=rep(names(zdecay_samples_bysite)[i],j)))
+}
+```
+```{r}
+zplot2 <- zeta.samples.bysite.df %>%
+  filter(site!="PBNERR" & site!="SAMT") %>%
+  left_join(site_names) %>%
+  dplyr::select(site,site_name,zorder,zratio,zval) %>%
+  pivot_longer(cols=c("zratio","zval"),names_to="metric",values_to="val") %>%
+  mutate(metric=ifelse(metric=="zval","Zeta Diversity","Ratio of Zeta Diversity")) %>%
+ggplot(aes(x=zorder,y=val,color=fct_relevel(site_name, c("Kayak Pt 1","Kayak Pt 2","March Pt","Samish Isl","Larrabee")))) +
+  geom_point() +
+  geom_path() + 
+  facet_wrap(~metric,scales="free_y") +
+  scale_color_manual(values=c("darkgreen","chartreuse3","#1f78b4","chocolate4","chocolate2"),name="site") +
+  labs(x="Zeta order (samples)",y="") +
+  theme_bw()
+zplot2
+```
+
+faster decay = greater community overlap = indicative of lower overall diversity
+
+```{r}
+png(here('figs','figS_zeta_bysamples.png'),res=300,height=2000,width=2000)
+plot_grid(zplot1 + theme(axis.title.x=element_blank(),
+                         plot.margin = margin(5.5,5.5,5.5,10.5)),zplot2 + theme(plot.margin = margin(5.5,25.5,5.5,5.5)),
+          nrow=2, labels=c("(a)","(b)"))
+dev.off()
+```
 
 
 ## Ordinations: Estuary / Site Differences
@@ -1123,7 +1288,7 @@ The groups with the highest median frequency of occurrence:
 fo.hi <- plotdat.fo %>% group_by(plot.group) %>% 
   summarise(med.fo=median(pcrab)) %>%
   slice_max(order_by=med.fo,n=3, with_ties=FALSE) %>%
-  left_join(dplyr::select(plotdat.fo,taxon) %>% distinct(),by='plot.group') %>%
+  left_join(dplyr::select(plotdat.fo,plot.group,taxon) %>% distinct(),by='plot.group') %>%
   left_join(bind_rows(dat,smdat), by='taxon') %>%
   filter(crab_id %in% dat$crab_id) %>%
   
@@ -1191,7 +1356,38 @@ plot_grid(plot2a,plot2b,labels=c("(a)","(b)"),nrow=2)
 dev.off()
 ```
 
+save frequencies of occurrence into a dataframe
+```{r}
+write_csv(plotdat.fo, here('data','results','freqoccur_runs1-2_lerayxt_presence.csv'))
+```
 
+How many prey were only identified in 1 crab?
+```{r}
+dim(plotdat.fo %>% filter(ncrab==1))[1]
+dim(plotdat.fo %>% filter(ncrab==2))[2]
+```
+```{r}
+fo.hi %>% group_by(plot.group, plot.subgroup) %>% summarise(medFO=median(pcrab)) %>% filter(plot.group %in% c("Arthropoda","Mollusca","single-celled organisms"))
+```
+
+
+### rare prey
+
+Which plot groups have a high proportion of rare taxa? (rare = 1-2 crab)
+```{r}
+raretax <- plotdat.fo %>% group_by(plot.group) %>% mutate(grouptot=length(unique(taxon))) %>%
+  filter(ncrab==1) %>% ungroup() %>%
+  group_by(plot.group,grouptot,ncrab) %>% summarise(nrare=length(unique(taxon)),
+                                           prare=nrare/grouptot) %>% distinct()
+```
+
+
+### eDNA index of common prey
+
+What is the eDNA index across sites for the 10 most common prey items?
+```{r}
+fo.hi.sub <- (fo.hi %>% arrange(-pcrab))[1:10,]
+```
 
 
 
