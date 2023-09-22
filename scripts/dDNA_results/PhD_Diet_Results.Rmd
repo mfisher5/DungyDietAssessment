@@ -49,6 +49,7 @@ library(ggplot2)
 library(ggrepel)
 library(cowplot)
 library(vegan)
+library(zetadiv)
 library(magrittr)
 library(ggordiplots)
 library(grid); library(gridExtra)
@@ -178,6 +179,25 @@ with(alldat %>% group_by(crab_id) %>% summarise(ntech=length(unique(tech))), tab
 with(dat %>% group_by(crab_id) %>% summarise(ntech=length(unique(tech))), table(ntech))
 with(smdat %>% group_by(crab_id) %>% summarise(ntech=length(unique(tech))), table(ntech))
 ```
+
+ntech
+ 2  3 
+ 6 52 
+ntech
+ 1  2  3 
+ 5  5 46 
+ntech
+ 1  2  3 
+ 4  8 42 
+ 
+crab with only two replicates in the full data set:
+KAY_05
+KAY_23
+MARPT_12
+SAMT_02
+SIN_02
+SIN_08
+
 So, there are enough crab with < 3 technical replicates that when running analyses like the PERMANOVA, I want to either (1) sum reads across technical replicates, or (2) nest technical replicates within crabs, like factors.
 
 ### Carapace width
@@ -233,6 +253,43 @@ smdat_overall <- get_unique_taxa(smdat)
 # percent at each rank?
 with(smdat_overall %>% dplyr::select(taxon,rank) %>% distinct(),table(rank)) / length(smdat_overall %>% pull(taxon) %>% unique())
 ```
+
+## eDNA Index
+
+calculate eDNA index for all technical replicates (1 row = 1 crab x 1 replicate)
+```{r}
+sample.reads.mat <- dat %>%
+  group_by(sample_id, taxon) %>% summarise(techReads=sum(nReads)) %>%
+  pivot_wider(id_cols="sample_id", names_from="taxon",values_from="techReads", values_fill=0) %>%
+  column_to_rownames("sample_id")
+
+index2.mat <- eDNA_index(x=t(sample.reads.mat))
+
+index2.df <- as.data.frame(t(index2.mat)) %>%
+  rownames_to_column("sample_id") %>% 
+  pivot_longer(cols=2:(dim(index2.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
+  left_join(dat %>% dplyr::select(sample_id,crab_id,tech,site,estuary) %>% distinct(),by="sample_id") %>%
+  left_join(site_names) %>%
+  pivot_wider(names_from=taxon,values_from=DNAindex)
+```
+
+calculate eDNA index from the sum of reads across technical replicates (1 row = 1 crab)
+```{r}
+crab.reads.mat <- dat %>%
+  group_by(crab_id, taxon) %>% summarise(sumReads=sum(nReads)) %>%
+  pivot_wider(id_cols="crab_id", names_from="taxon",values_from="sumReads", values_fill=0) %>%
+  column_to_rownames("crab_id")
+
+index.mat <- eDNA_index(x=t(crab.reads.mat))
+
+index.df <- as.data.frame(t(index.mat)) %>%
+  rownames_to_column("crab_id") %>% 
+  pivot_longer(cols=2:(dim(index.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
+  left_join(dat %>% dplyr::select(crab_id,site,estuary) %>% distinct(),by="crab_id") %>%
+  left_join(site_names) %>%
+  pivot_wider(names_from=taxon,values_from=DNAindex)
+```
+
 
 
 ## 2. Prey Diversity
@@ -384,18 +441,13 @@ write_csv(richness.phyla, here('data','results','lerayXT_r1-2_tax-richness-overa
 ```
 
 
-### Alpha div x Stomach Fullness
+#### Alpha div x Stomach Fullness
 
 Consider alpha diversity with / without the 'detritus' taxa, and then 'detritus' taxa alone
 ```{r message=FALSE}
-### stomach fullness data ###
-crabdat <- lab_metadat %>%
-  filter(sample_id %in% dat$crab_id) %>%
-  rename(crab_id=sample_id)
-
 ### without detritus ###
 richness.crab <- richness.crab %>%
-  left_join(crabdat, by=c("crab_id","estuary"))
+  left_join(crab_metadat, by=c("crab_id","estuary"))
 
 ### with detritus ###
 drichness.crab <- smdat %>%
@@ -405,7 +457,7 @@ drichness.crab <- smdat %>%
   left_join(crabdat)
 
 ### combined ###
-all.richness.crab <- bind_rows(dat,smdat) %>%
+all.richness.crab <- alldat %>%
   group_by(estuary,site,crab_id) %>%
   summarise(richness=length(unique(taxon))) %>% 
   left_join(estuary_colors,by="estuary") %>%
@@ -417,23 +469,23 @@ all.richness.crab <- bind_rows(dat,smdat) %>%
 p.alpha3 <- ggplot(richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
   geom_boxplot() +
   geom_jitter(width=0.1) +
-  labs(y="",x="", title="Main Taxa Only") +
+  labs(y="",x="", title="\nOnly Multi-cellular Taxa") +
   scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
   theme_bw()
 p.alpha2 <- ggplot(all.richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
   geom_boxplot() +
   geom_jitter(width=0.1) +
-  labs(y="",x="", title="All Taxa") +
-  scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
+  labs(y="",x="", title="\nAll Taxa") +
+  scale_y_continuous(limits=c(0,max(all.richness.crab$richness)+2), expand=c(0,0)) +
   theme_bw()
 p.alpha4 <- ggplot(drichness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
   geom_boxplot() +
   geom_jitter(width=0.1) +
-  labs(y="",x="", title="Only Single-celled Taxa") +
-  scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
+  labs(y="",x="", title="Only Single-celled\n Organisms") +
+  scale_y_continuous(limits=c(0,max(drichness.crab$richness)+2), expand=c(0,0)) +
   theme_bw()
 
-y.grob <- textGrob("Unique Taxa per Crab", 
+y.grob <- textGrob("Number Taxa per Crab", 
                    gp=gpar(col="black"), rot=90)
 
 x.grob <- textGrob("Stomach Fullness", 
@@ -448,12 +500,55 @@ alpha_by_fll
 
 Save plot with the alpha diversity x site plot
 ```{r echo=TRUE}
-png(here('figs','figS_alpha-div_site_fullness.png'), res=200, height=1000,width=1500)
-plot_grid(plot.alpha + theme(plot.margin=margin(t=0,r=0,b=10,l=20)), alpha_by_fll, nrow=2)
+# png(here('figs','figS_alpha-div_site_fullness.png'), res=200, height=1000,width=1500)
+# plot_grid(plot.alpha + theme(plot.margin=margin(t=0,r=0,b=10,l=20)), alpha_by_fll, nrow=2)
+# dev.off()
+
+png(here('figs','figS_alpha-div_fullness.png'), res=200, height=800,width=1500)
+alpha_by_fll
 dev.off()
 ```
 <br>
 <br>
+
+#### Alpha Div x Size
+
+```{r}
+p.alpha2 <- ggplot(richness.crab %>% filter(!is.na(CW_mm)), aes(x=CW_mm,y=richness)) +
+  geom_point() +
+  labs(y="",x="", title="\nOnly Multi-cellular Taxa") +
+  scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
+  theme_bw()
+p.alpha1 <- ggplot(all.richness.crab %>% filter(!is.na(CW_mm)), aes(x=CW_mm,y=richness)) +
+  geom_point() +
+  labs(y="",x="", title="\nAll Taxa") +
+  scale_y_continuous(limits=c(0,max(all.richness.crab$richness)+2), expand=c(0,0)) +
+  theme_bw()
+p.alpha3 <- ggplot(drichness.crab %>% filter(!is.na(CW_mm)), aes(x=CW_mm,y=richness)) +
+  geom_point() +
+  labs(y="",x="", title="Only Single-celled\n Organisms") +
+  scale_y_continuous(limits=c(0,max(drichness.crab$richness)+2), expand=c(0,0)) +
+  theme_bw()
+
+y.grob <- textGrob("Number Taxa per Crab", 
+                   gp=gpar(col="black"), rot=90)
+
+x.grob <- textGrob("Carapace Width (mm)", 
+                   gp=gpar(col="black"))
+
+
+main <- plot_grid(p.alpha1,p.alpha2,p.alpha3, ncol=3)
+alpha_by_cw <- plot_grid(left=y.grob,main,NULL,bottom=x.grob, rel_heights=c(1,0.05), rel_widths=c(0.05,1))
+alpha_by_cw
+```
+Save plot
+```{r echo=TRUE}
+png(here('figs','figS_alpha-div_cw.png'), res=200, height=800,width=1500)
+alpha_by_cw
+dev.off()
+```
+
+
 ### Saturation
 
 #### all taxa
@@ -463,9 +558,9 @@ At each site, how does adding one additional crab change alpha diversity?
 all_sp <- c()
 added_sp <- data.frame(ncrab=as.numeric(),
                        nsp=as.numeric())
-for(i in seq(1,length(unique(dat$crab_id)))){
-  new_sp <- dat %>%
-    filter(crab_id==unique(dat$crab_id)[i]) %>%
+for(i in seq(1,length(unique(alldat$crab_id)))){
+  new_sp <- alldat %>%
+    filter(crab_id==unique(alldat$crab_id)[i]) %>%
     filter(rank=="species") %>%
     dplyr::select(crab_id,species) %>%
     distinct() %>%
@@ -484,8 +579,8 @@ sat.overall.plot <- ggplot(added_sp,aes(x=ncrab,y=nsp)) +
 added_sp_est <- data.frame(estuary=as.character(),
                        ncrab=as.numeric(),
                        nsp=as.numeric())
-for(s in unique(dat$estuary)){
-  dat.filter <- filter(dat, estuary==s)
+for(s in unique(alldat$estuary)){
+  dat.filter <- filter(alldat, estuary==s)
   all_sp <- c()
   for(i in seq(1,length(unique(dat.filter$crab_id)))){
     new_sp <- dat.filter %>%
@@ -511,16 +606,6 @@ ggplot(plotdat, aes(x=ncrab,y=nsp,color=estuary)) +
   labs(y="total prey taxa",x="number of crab") + theme_classic()
 ``` 
 <br>
-
-```{r}
-png(here('figs','figS_saturation_curve_lgtax.png'), res=300,height=1000,width=1800)
-ggplot(plotdat, aes(x=ncrab,y=nsp,color=estuary)) +
-  geom_point( size=0.5) + geom_path() +
-  scale_color_manual(values=c("gray30",estuary_colors$key[c(2,1,3)])) +
-  labs(y="total prey taxa",x="number of crab") + theme_classic()
-dev.off()
-```
-
 
 #### excluding single-celled organisms
 
@@ -567,11 +652,11 @@ for(s in unique(dat$estuary)){
 }
 ```
 ```{r}
-plotdat <- added_sp_est %>% 
+plotdat2 <- added_sp_est %>% 
   bind_rows(added_sp %>% mutate(estuary="Overall")) %>%
   left_join(estuary_colors %>% bind_rows(data.frame(estuary="Overall",key="gray30")))
 
-ggplot(plotdat, aes(x=ncrab,y=nsp,color=estuary)) +
+ggplot(plotdat2, aes(x=ncrab,y=nsp,color=estuary)) +
   geom_point( size=0.5) + geom_path() +
   scale_color_manual(values=c("gray30",estuary_colors$key[c(2,1,3)])) +
   labs(y="total prey taxa",x="number of crab") + theme_classic()
@@ -579,11 +664,20 @@ ggplot(plotdat, aes(x=ncrab,y=nsp,color=estuary)) +
 <br>
 
 ```{r}
-png(here('figs','figS_saturation_curve_lgtax.png'), res=300,height=1000,width=1800)
-ggplot(plotdat, aes(x=ncrab,y=nsp,color=estuary)) +
+
+p1 <- ggplot(plotdat, aes(x=ncrab,y=nsp,color=estuary)) +
   geom_point( size=0.5) + geom_path() +
   scale_color_manual(values=c("gray30",estuary_colors$key[c(2,1,3)])) +
-  labs(y="total prey taxa",x="number of crab") + theme_classic()
+  labs(y="total prey taxa",x="number of crab",subtitle="all prey taxa") + theme_bw() +
+  theme(legend.position="none")
+p2 <- ggplot(plotdat2, aes(x=ncrab,y=nsp,color=estuary)) +
+  geom_point( size=0.5) + geom_path() +
+  scale_color_manual(values=c("gray30",estuary_colors$key[c(2,1,3)])) +
+  labs(y="",x="number of crab", subtitle="excluding single-celled organisms") + theme_bw()
+
+
+png(here('figs','figS_saturation_curve_alltax_lgtax.png'), res=300,height=1300,width=2200)
+plot_grid(p1,p2, rel_widths=c(0.7,1))
 dev.off()
 ```
 
@@ -660,24 +754,89 @@ dev.off()
 <br>
 
 
-### eDNA Index
 
-calculate eDNA index for all technical replicates
+
+## Beta & Zeta diversity
+
+Where appropriate, calculate these indices by summing reads / summarizing presence across technical replicates. 
+
+### Beta diversity
+
+What is the $\beta$ diversity for prey taxon? (the ratio between regional and local prey diversity) The greater the similarity in community composition between multiple communities, the lower the value of β-diversity for that set of communities.
+
+I do have very different sample sizes between sites. According to Barwell et al. 2014, "In sampling simulations S1 (Unbiased by undersampling) and S2 (Unbiased by unequal sampling effort ) (Table 1; Figs S12 and S13), most presence–absence metrics were positively biased by undersampling, with the exception of βChao Sørensen and βChao Jaccard which have a correction for undersampling." But those need species abundance data...
+
+
+#### presence/absence
+
+First, among all sites *all taxa*
 ```{r}
-crab.reads.mat <- dat %>%
-  group_by(sample_id, taxon) %>% summarise(techReads=sum(nReads)) %>%
-  pivot_wider(id_cols="sample_id", names_from="taxon",values_from="techReads", values_fill=0) %>%
-  column_to_rownames("sample_id")
+prey.sp.site.mat <- alldat %>%
+  dplyr::select(site, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="site", names_from="taxon",values_from="presence", values_fill=0)
 
-index.mat <- eDNAINDEX(x=t(crab.reads.mat))
-
-index.df <- as.data.frame(t(index.mat)) %>%
-  rownames_to_column("sample_id") %>% 
-  pivot_longer(cols=2:(dim(index.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
-  left_join(dat %>% dplyr::select(sample_id,crab_id,tech,site,estuary) %>% distinct(),by="sample_id") %>%
-  left_join(site_names) %>%
-  pivot_wider(names_from=taxon,values_from=DNAindex)
+## jaccard
+bdiv <- as.matrix(betadiver(prey.sp.site.mat, method="j")) 
+colnames(bdiv) <-c(prey.sp.site.mat$site); rownames(bdiv) <- c(prey.sp.site.mat$site)
+bdiv
 ```
+
+
+among all sites *excluding single-celled organisms*
+```{r}
+prey.sp.site.mat2 <- dat %>%
+  dplyr::select(site, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="site", names_from="taxon",values_from="presence", values_fill=0)
+
+## jaccard
+bdiv2 <- as.matrix(betadiver(prey.sp.site.mat2, method="j")) 
+colnames(bdiv2) <-c(prey.sp.site.mat2$site); rownames(bdiv2) <- c(prey.sp.site.mat2$site)
+bdiv2
+```
+
+Then, between estuaries *all taxa*
+```{r}
+prey.sp.est.mat <- alldat %>%
+  dplyr::select(estuary, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="estuary", names_from="taxon",values_from="presence", values_fill=0)
+
+## jaccard
+bdiv3 <- as.matrix(betadiver(prey.sp.est.mat, method="j")) 
+colnames(bdiv3) <-c(prey.sp.est.mat$estuary); rownames(bdiv3) <- c(prey.sp.est.mat$estuary)
+bdiv3
+```
+
+*excluding single-celled organisms*
+```{r}
+prey.sp.est.mat2 <- dat %>%
+  dplyr::select(estuary, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="estuary", names_from="taxon",values_from="presence", values_fill=0)
+
+## jaccard
+bdiv4 <- as.matrix(betadiver(prey.sp.est.mat2, method="j")) 
+colnames(bdiv4) <-c(prey.sp.est.mat2$estuary); rownames(bdiv4) <- c(prey.sp.est.mat2$estuary)
+bdiv4
+```
+
+
+### Zeta diversity
+
+Zeta diversity is the mean number of species shared by any number of assemblages, and can differentiate the contribution of rare and common species to biodiversity. 
+
+I'm interested in the following orders: 
+$\zeta_1$ = taxonomic richness per crab, among crab at a sampling site
+
+$\zeta_2$ = taxonomic richness per sampling site, among sites within the same estuary
+
+$\zeta_3$ = taxonomic richness per estuary
+
+```{r}
+```
+
 
 
 
