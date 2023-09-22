@@ -228,23 +228,24 @@ if(!knitting){saveRDS(fig1b, here('figs','fig1b_obj.rds'))}
 
 Graph mean and sdev carapace width and height for each site, and save for supplement.
 ```{r}
-# png(here('figs','figS_CW_CH_bysite.png'))
-crab_metadat %>% 
-  left_join(site_names) %>% pivot_longer(cols=c("CW_mm","CH_mm"),names_to="metric",values_to="mm") %>%
-  group_by(site,metric) %>% summarise(mean_mm=mean(mm),sd_mm=sd(mm)) %>%
-  mutate(metric=ifelse(metric=="CW_mm","Carapace Width","Carapace Height"))
+png(here('figs','figS_CW_CH_bysite.png'),res=300,height=1700,width=1900)
   
 crab_metadat %>% left_join(site_names) %>%
-  group_by(site,site_name) %>%
+  group_by(estuary,site,site_name) %>%
   summarise(mean_cw=mean(CW_mm), sdev_cw=sd(CW_mm),
                                               mean_ch=mean(CH_mm), sdev_ch=sd(CH_mm)) %>%
-ggplot(aes(x=mean_cw,y=mean_ch,color=fct_relevel(site_name, c("Kayak Pt 1","Kayak Pt 2","March Pt","NERR","Samish Isl","Samish Bay","Larrabee")))) + 
+  mutate(site_name=factor(site_name, levels=c("Kayak Pt 1","Kayak Pt 2","March Pt","NERR","Samish Isl","Samish Bay","Larrabee"))) %>%
+ggplot(aes(x=mean_cw,y=mean_ch,pch=site_name,color=site_name)) + 
   geom_point() + 
-  geom_errorbar(aes(ymin=mean_ch-sdev_ch,ymax=mean_ch+sdev_ch)) +
-  geom_errorbarh(aes(xmin=mean_cw-sdev_ch,xmax=mean_cw+sdev_cw)) +
-  scale_color_manual(values=c("darkgreen","chartreuse3","#1f78b4","cadetblue2","chocolate4","chocolate2","orange2"),name="Site") +
+  geom_errorbar(aes(ymin=mean_ch-sdev_ch,ymax=mean_ch+sdev_ch),linewidth=0.25) +
+  geom_errorbarh(aes(xmin=mean_cw-sdev_ch,xmax=mean_cw+sdev_cw),linewidth=0.25) +
+  scale_color_manual(values=c("darkgreen","chartreuse3","#1f78b4","cadetblue2","chocolate4","chocolate2","orange2"),name="site") +
+  scale_shape_manual(values=c(15,15,16,16,17,17,17),name="site") +
   labs(x="Carapace width (mm)", y="Carapace height (mm)") +
+  xlim(c(5.5,15)) + ylim(c(5.5,12)) +
   theme_bw() 
+
+dev.off()
 ```
 
 
@@ -1003,6 +1004,145 @@ plot_grid(zplot1 + theme(axis.title.x=element_blank(),
           nrow=2, labels=c("(a)","(b)"))
 dev.off()
 ```
+```{r}
+saveRDS(zdecay_samples, here('data','results','zeta.decline.ex_bysample_forEstuaries.rds'))
+saveRDS(zdecay_samples_bysite, here('data','results','zeta.decline.ex_bysample_forSites.rds'))
+```
+
+
+
+#### zeta decay within an estuary (excluding single-celled organisms)
+
+Within an estuary, what is the zeta decay (1) among samples, and (2) among sites?
+```{r}
+zin.df2 <- dat %>%
+  dplyr::select(estuary,site,crab_id,taxon) %>% distinct() %>%
+  mutate(presence=1)
+  
+
+zdecay_samples2 <- list()
+i <- 1
+
+for(e in unique(zin.df2$estuary)){
+  ## samples
+  tmp.mat.samples <- zin.df2 %>% filter(estuary==e) %>% dplyr::select(crab_id,taxon,presence) %>%
+    pivot_wider(id_cols="crab_id", names_from="taxon",values_from="presence", values_fill=0) %>%
+    column_to_rownames("crab_id")
+  zout <- Zeta.decline.ex(tmp.mat.samples, orders = 1:dim(tmp.mat.samples)[1],plot=TRUE)
+  
+  zdecay_samples2[[i]] <- zout
+  i <- i+1
+}
+names(zdecay_samples2) <- unique(zin.df2$estuary)
+
+```
+
+plot zeta diversity and zeta ratio x order for each estuary, from samples
+```{r}
+zeta.samples.df2 <- data.frame(estuary=as.character(),
+                      zorder=as.numeric(),
+                      zval=as.numeric(),
+                      zval.sd=as.numeric(),
+                      zratio=as.numeric())
+for(i in seq(1,length(zdecay_samples2))){
+  tmpz <- zdecay_samples2[[i]]
+  j <- length(tmpz$combinations[which(tmpz$combinations > 1)])
+  zeta.samples.df2 %<>% bind_rows(data.frame(zorder=tmpz$zeta.order[1:j],
+                                    zval=tmpz$zeta.val[1:j],
+                                    zval.sd=tmpz$zeta.val.sd[1:j],
+                                    zratio=tmpz$ratio[1:j],
+                                    estuary=rep(names(zdecay_samples)[i],j)))
+}
+```
+```{r}
+zplot3 <- zeta.samples.df2 %>%
+  dplyr::select(estuary,zorder,zratio,zval) %>%
+  pivot_longer(cols=c("zratio","zval"),names_to="metric",values_to="val") %>%
+  mutate(estuary=factor(estuary,levels=estuary_colors$estuary),
+         metric=ifelse(metric=="zval","Zeta Diversity","Ratio of Zeta Diversity")) %>%
+ggplot(aes(x=zorder,y=val,color=estuary,pch=estuary)) +
+  geom_point() +
+  geom_path() + 
+  facet_wrap(~metric,scales="free_y") +
+  scale_color_manual(values=estuary_colors$key, name="estuary") +
+  labs(x="Zeta order (samples)",y="", title="multi-cellular prey only") +
+  theme_bw()
+zplot3
+```
+
+
+#### zeta decay within sites (excluding single-celled organisms)
+
+```{r}
+zdecay_samples_bysite2 <- list()
+i <- 1
+
+for(s in unique(zin.df2$site)){
+  if(s != "SAMT"){
+  ## samples
+  tmp.mat.samples <- zin.df2 %>% filter(site==s) %>% dplyr::select(crab_id,taxon,presence) %>%
+    pivot_wider(id_cols="crab_id", names_from="taxon",values_from="presence", values_fill=0) %>%
+    column_to_rownames("crab_id")
+  zout <- Zeta.decline.ex(tmp.mat.samples, orders = 1:dim(tmp.mat.samples)[1],plot=TRUE)
+  
+  zdecay_samples_bysite2[[i]] <- zout
+  i <- i+1
+  }
+}
+names(zdecay_samples_bysite2) <- unique(zin.df2$site)[-which(unique(zin.df2$site) =="SAMT")]
+
+```
+
+plot zeta diversity and zeta ratio x order for each site
+```{r}
+zeta.samples.bysite.df2 <- data.frame(site=as.character(),
+                      zorder=as.numeric(),
+                      zval=as.numeric(),
+                      zval.sd=as.numeric(),
+                      zratio=as.numeric())
+for(i in seq(1,length(zdecay_samples_bysite2))){
+  tmpz <- zdecay_samples_bysite2[[i]]
+  j <- length(tmpz$combinations[which(tmpz$combinations > 1)])
+  zeta.samples.bysite.df2 %<>% bind_rows(data.frame(zorder=tmpz$zeta.order[1:j],
+                                    zval=tmpz$zeta.val[1:j],
+                                    zval.sd=tmpz$zeta.val.sd[1:j],
+                                    zratio=tmpz$ratio[1:j],
+                                    site=rep(names(zdecay_samples_bysite2)[i],j)))
+}
+```
+```{r}
+zplot4 <- zeta.samples.bysite.df2 %>%
+  filter(site!="PBNERR" & site!="SAMT") %>%
+  left_join(site_names) %>%
+  dplyr::select(site,site_name,zorder,zratio,zval) %>%
+  pivot_longer(cols=c("zratio","zval"),names_to="metric",values_to="val") %>%
+  mutate(metric=ifelse(metric=="zval","Zeta Diversity","Ratio of Zeta Diversity")) %>%
+ggplot(aes(x=zorder,y=val,color=fct_relevel(site_name, c("Kayak Pt 1","Kayak Pt 2","March Pt","Samish Isl","Larrabee")))) +
+  geom_point() +
+  geom_path() + 
+  facet_wrap(~metric,scales="free_y") +
+  scale_color_manual(values=c("darkgreen","chartreuse3","#1f78b4","chocolate4","chocolate2"),name="site") +
+  labs(x="Zeta order (samples)",y="") +
+  theme_bw()
+zplot4
+```
+
+faster decay = greater community overlap = indicative of lower overall diversity
+
+```{r}
+png(here('figs','figS_zeta_bysamples_onlyLgTax.png'),res=300,height=2000,width=2000)
+plot_grid(zplot3 + theme(axis.title.x=element_blank(),
+                         plot.margin = margin(5.5,5.5,5.5,10.5)),zplot4 + theme(plot.margin = margin(5.5,25.5,5.5,5.5)),
+          nrow=2, labels=c("(a)","(b)"))
+dev.off()
+```
+```{r}
+saveRDS(zdecay_samples2, here('data','results','zeta.decline.ex_bysample_forEstuaries_LgTaxOnly.rds'))
+saveRDS(zdecay_samples_bysite2, here('data','results','zeta.decline.ex_bysample_forSites_LgTaxOnly.rds'))
+```
+
+
+
 
 
 ## Ordinations: Estuary / Site Differences
