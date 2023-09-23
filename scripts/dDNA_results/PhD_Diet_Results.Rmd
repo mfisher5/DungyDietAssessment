@@ -815,6 +815,19 @@ bdiv2 <- as.matrix(betadiver(prey.sp.site.mat2, method="j"))
 colnames(bdiv2) <-c(prey.sp.site.mat2$site); rownames(bdiv2) <- c(prey.sp.site.mat2$site)
 bdiv2
 ```
+among all sites *only single-celled organisms*
+```{r}
+prey.sp.site.mat2b <- smdat %>%
+  dplyr::select(site, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="site", names_from="taxon",values_from="presence", values_fill=0)
+
+## jaccard
+bdiv2b <- as.matrix(betadiver(prey.sp.site.mat2b, method="j")) 
+colnames(bdiv2b) <-c(prey.sp.site.mat2b$site); rownames(bdiv2b) <- c(prey.sp.site.mat2b$site)
+bdiv2b
+```
+
 
 Then, between estuaries *all taxa*
 ```{r}
@@ -841,6 +854,19 @@ bdiv4 <- as.matrix(betadiver(prey.sp.est.mat2, method="j"))
 colnames(bdiv4) <-c(prey.sp.est.mat2$estuary); rownames(bdiv4) <- c(prey.sp.est.mat2$estuary)
 bdiv4
 ```
+*only single-celled organisms*
+```{r}
+prey.sp.est.mat2b <- smdat %>%
+  dplyr::select(estuary, taxon) %>% distinct() %>%
+  mutate(presence=1) %>%
+  pivot_wider(id_cols="estuary", names_from="taxon",values_from="presence", values_fill=0)
+
+## jaccard
+bdiv4b <- as.matrix(betadiver(prey.sp.est.mat2b, method="j")) 
+colnames(bdiv4b) <-c(prey.sp.est.mat2b$estuary); rownames(bdiv4b) <- c(prey.sp.est.mat2b$estuary)
+bdiv4b
+```
+
 
 save the all-taxa matrices
 ```{r}
@@ -848,6 +874,17 @@ write_csv(as.data.frame(bdiv, row.names=rownames(bdiv)) %>% rownames_to_column("
 
 write_csv(as.data.frame(bdiv3, row.names=rownames(bdiv3)) %>% rownames_to_column("x"), here('data','results','betadiver_estuaries_runs1-2_lerayXT_presence_allTaxa.csv'))
 ```
+
+plot how within / between estuary differences change for larger and single-celled organisms. 
+```{r}
+
+
+
+
+```
+
+
+
 
 
 ### Zeta diversity
@@ -863,7 +900,6 @@ data.spec input: presence-absence data frame, with sites as rows and species as 
 zdata <- t(prey.sp.site.mat %>% column_to_rownames("site"))
 
 zout <- Zeta.decline.ex(zdata, orders = 1:7,plot=TRUE)
-
 ```
 
 So, I read an asymptote after $\zeta_5$ - $\zeta_6$. I think this means that once I reach 5-6 sites, the average number of species shared between sites gets really small? 
@@ -872,6 +908,37 @@ Based on AIC, the exponential regression is the better fit
 ```{r}
 zout$aic
 ```
+
+
+```{r}
+zeta.val.df <- data.frame(zorder = zout$zeta.order,
+           zval = zout$zeta.val,
+           zval.sd = zout$zeta.val.sd) 
+
+zp1 <- zeta.val.df %>%
+  ggplot(aes(x=zorder,y=zval, ymin=zval-zval.sd, ymax=zval+zval.sd)) +
+  geom_point() + geom_path() + 
+  geom_ribbon(alpha=0, color="gray60") + 
+  labs(x="Zeta order (sites)", y="Zeta diversity") + theme_bw()
+zp1
+```
+
+
+```{r}
+zp2 <- zeta.val.df %>%
+  ggplot(aes(x=zorder,y=zval)) + 
+  geom_point() + 
+  stat_smooth(method='lm', se=FALSE, color="black", size=0.5) +
+  scale_y_continuous(trans='log', breaks = c(0.005,0.020,0.100,0.500,2.00)) + 
+  labs(x="Zeta order (sites)", y="Zeta diversity (log)") + theme_bw()
+```
+
+```{r}
+png(here('figs','figS_zeta-decay_sites_allTaxa.png'),res=300,height=1200,width=1700)
+plot_grid(zp1,zp2)
+dev.off()
+```
+
 
 #### zeta decay within an estuary (all taxa)
 
