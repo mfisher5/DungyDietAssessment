@@ -52,7 +52,7 @@ knitr::opts_chunk$set(echo = TRUE,
 dge_dir <- '../../../DungiGraciisBioenergetics'
 nrg_dir <- '../../../NRG'
 ```
-```{r Part0, echo=FALSE, warning=FALSE}
+```{r Part0, echo=FALSE, include=FALSE}
   # install.packages("devtools")
   #library("devtools");devtools::install_github("kholsman/NRG")
 
@@ -94,7 +94,7 @@ source("R/subscripts/crab_afdw.R")
 
 All of the experimental data from 2018 has been cleaned up from the original spreadsheet. The data frame contains three separate trials (and so tank numbers are repeated) 
 
-```{r eval=FALSE, include=FALSE}
+```{r}
 dat <- read_csv(here::here(dge_dir,"data","Experiments2018.csv")) %>% filter(species=="Dungeness")
 
 str(dat)
@@ -102,15 +102,222 @@ str(dat)
 <br>
 
 
-Calculate the ingestion loss (I), egestion (F), consumption (C), and specific consumption (in gWW C / gWW crab). 
+For trial 1, 
+Calculate the ingestion loss (I), egestion (F), consumption (C), and specific consumption (in gWW prey / gWW predator). 
 ```{r}
-dat %<>% mutate(I=i_filtered_w_nytex_clip-i_nytex_clip,
+cdat <- dat %>%
+  filter(trial==1) %>%
+  mutate(I=i_filtered_w_nytex_clip-i_nytex_clip,
                 F=f_filtered_w_nytex_clip-f_nytex_clip,
                 C=total_squid_added - (squid_disc_left + I),  ## Note that in experimental data sheet, C calculation doesn't account for I
                 C_gg=C/crab_mass_g)
-head(dplyr::select(dat, crab_mass_g, total_squid_added, squid_disc_left, I, F, C, C_gg))
+head(dplyr::select(cdat, crab_mass_g, total_squid_added, squid_disc_left, I, F, C, C_gg))
 ```
 <br>
+
+### option 1: consumption in gPrey/gPred
+
+Fit the new parameters using consumption from the experiments, as g Prey AFDW / g Pred AFDW. 
+
+
+Re-calculate the C_gg value, so that it is in ash-free dry weight (like the model; currently in WW). I can first calculate crab AFDW using the carapace width for Dungeness crab (in Holsman et al. 2003). 
+```{r}
+cdat_AFDW <- cdat %>%
+  mutate(crab_mass_gAFDW=(0.00005068 * (as.numeric(cw_inside_spines)^(2.79))))
+```
+
+I don't have a good conversion factor for squid, but I do have an average % water (of WW) and an average % Ash (of DW) across a range of squid species, from: Nancy Davis 1993. Caloric content of oceanic zooplankton and fishes for studies of salmonid food habits and their ecologically related species. (NPAFC Doe.) FRI-UW-93 12. Fisheries Research Institute, University of Washington, Seattle. 10 pp
+
+Can I use these averages as conversion factors? g squid WW * (ww2dw as average % water) * (dw2afdw as average % ash)
+```{r}
+ww2dw <- mean(0.69,0.72,0.817,0.852)
+dw2afdw <- mean(0.07,0.08,0.094,0.064,0.092)
+
+cdat_AFDW %<>% mutate(C_gAFDW=(total_squid_added - squid_disc_left)*ww2dw*dw2afdw) %>%
+  mutate(C_ggAFDW=C_gAFDW/crab_mass_gAFDW)
+
+head(dplyr::select(cdat_AFDW, temp,crab_mass_g, crab_mass_gAFDW,C, C_gAFDW, C_gg, C_ggAFDW))
+```
+
+
+The value `C_ggAFDW` is what is put into the find_ftcpar function.
+
+
+
+### option 2: Percent max consumption
+
+Use the parameters from the model to calculate **theoretical** maximum possible consumption (will be in g AFDW) from crab mass and temperature. Then divide specific consumption by maximum consumption, to get proportion max consumption. Since it's a proportion, I don't have to convert units, I think?
+
+
+Note that this does require using the estimated (not fitted) values for $Tco$ and $QC$, when calculating max consumption. 
+
+in the `bioE` function for NRG, maximum specific consumption rate at temperature T = $C_{max}$ =  $C_A * W^{C_B} *f(T_c) * E_{prey}$. And $f(T_c)$ is created using the NRG function `fTC_fun`. This gives maximum consumption as J / g pred AFDW / day
+
+
+First, get the values for $f(T_c)$. This requires the input parameters, and a data frame with the temperatures from the experiment.
+```{r}
+inparms <- crabPARMS_USE %>% filter(X=="Cmagister")
+
+tdat <- data.frame(TempC=cdat$temp)
+ftc_dat <- fTC_fun(par=inparms,data=tdat)
+
+cdat %<>% bind_cols(ftc=ftc_dat)
+```
+
+Then, calculate "W" (g AFDW) from the carapace width, using equation 6 from Holsman et al. 
+```{r}
+cdat %<>% mutate(crab_mass_gAFDW=(0.00005068 * (as.numeric(cw_inside_spines)^(2.79))))
+```
+
+Now we have $f(T_c)$ and $W$, and we already have $C_A$ and $C_B$ in the parameters data frame. Putting that altogether we get $C_{max}$ in g Pred AFDW:
+```{r}
+cdat %<>% 
+  mutate(Cmax=inparms$CA*(crab_mass_gAFDW^inparms$CB)*ftc)
+head(dplyr::select(cdat, temp, crab_mass_g, C_gg, ftc,Cmax))
+```
+
+Convert $C_{max}$ to g Pred WW. 
+
+**For this I needed a conversion factor** so I ended up using the conversion factor 0.123, which was calculated for *Carcinus maenas* by Gogina et al. (2022); and then I calculated proportion of max consumption by dividing C_max g PredWW by specific consumption (`C_gg`, which is in gPrey WW / g Pred WW).
+
+Finally, multiply the proportion of max consumption by the max consumption value in g AFDW. 
+```{r}
+cdat %<>%
+  mutate(Cmax_WW=Cmax*0.123) %>%
+  mutate(Cp=C_gg/Cmax_WW) %>%
+  mutate(C_ggAFDW=Cp*Cmax)
+
+head(dplyr::select(cdat, temp, crab_mass_g, C,C_gg, ftc,Cmax,Cmax_WW,Cp,C_ggAFDW))
+```
+
+```{r echo=FALSE,fig.width=3, fig.height=3}
+ggplot(cdat, aes(x=as.factor(temp),y=Cp)) + geom_violin() + geom_jitter(width=0.1)
+```
+
+Let's assume that the top point is an outlier, and remove it from the dataset that will be used to fit new parameters
+```{r}
+cdat_fitting <- filter(cdat, Cp < 1)
+```
+
+The value `C_ggAFDW` is what is put into the find_ftcpar function.
+
+
+
+
+# Fit consumption
+
+estimate the consumption curves  - and re-fit consumption parameters Tco and Qc - using MCMC to draw from informly distributed intial conditions.
+
+
+### option 1: consumption in gPrey/gPred AFDW
+
+```{r}
+newDat1 <- cdat_AFDW %>%
+  mutate(N_fed=115) %>%
+  rename(Temp=temp,Size_CW=cw_widest,W_g=crab_mass_gAFDW,C_g=C_gAFDW,C_ggd=C_ggAFDW) %>%
+  dplyr::select(Temp,Size_CW,W_g,C_g,C_ggd,I,F)
+newDat1
+```
+
+make sure that the function `find_ftcpar` works with some changes to input names.
+```{r}
+
+inparms <- crabPARMS_USE %>% filter(X=="Cmagister")
+
+indat <- list(
+    logitlink    = TRUE,
+    fitsigma     = FALSE,
+    sigset       = 0.02,
+    TempCIN      = newDat1$Temp,
+    ftc_obsIN    = newDat1$C_ggd)
+```
+
+Is the function working?
+```{r}
+find_ftcpar(
+  parms_use    = inparms,
+  par = c(
+    logTco   = log(8),
+    logQc    = log(2),
+    logsigma = log(.0002)),
+  data=indat)
+```
+
+```{r}
+m<-optim(fn=find_ftcpar,par=c(logTco=log(8),logQc=log(2),
+                              logsigma=log(.0002)),parms_use = inparms,data=indat,
+         hessian=TRUE,control=list(maxit=1e6))
+# vc <- solve(m$hessian)
+# se<-(sqrt(diag(vc)))
+
+
+round(exp(m$par),3)
+```
+
+How close are these to our original values?
+```{r}
+inparms$Tco ; inparms$QC
+```
+
+yikes...
+
+
+### option 2: consumption as proportion of maximum consumption
+```{r}
+newDat2 <- cdat_fitting %>%
+  mutate(N_fed=115) %>%
+  rename(Temp=temp,W_g=crab_mass_g,C_g=C_gg,C_ggd=C_ggAFDW) %>%
+  dplyr::select(Temp,C_ggd,I,F)
+newDat2
+```
+
+make sure that the function `find_ftcpar` works with some changes to input names.
+```{r}
+inparms <- crabPARMS_USE %>% filter(X=="Cmagister")
+
+indat <- list(
+    logitlink    = TRUE,
+    fitsigma     = FALSE,
+    sigset       = 0.02,
+    TempCIN      = newDat2$Temp,
+    ftc_obsIN    = newDat2$C_ggd)
+```
+
+Is the function working?
+```{r}
+find_ftcpar(
+  parms_use    = inparms,
+  par = c(
+    logTco   = log(8),
+    logQc    = log(2),
+    logsigma = log(.0002)),
+  data=indat)
+```
+
+```{r}
+m2<-optim(fn=find_ftcpar,par=c(logTco=log(8),logQc=log(2),
+                              logsigma=log(.0002)),parms_use = inparms,data=indat,
+         hessian=TRUE,control=list(maxit=1e6))
+# vc <- solve(m$hessian)
+# se<-(sqrt(diag(vc)))
+
+
+round(exp(m2$par),3)
+```
+
+How close are these to our original values?
+```{r}
+inparms$Tco ; inparms$QC
+```
+
+argh...
+
+
+
+
+# Test run Holsman model
+
+
 
 ## temperature
 
@@ -131,113 +338,6 @@ ggplot() + geom_point(data=Tdat_raw, aes(x=date, y=TempC), col="grey60") +
 ```
 <br>
 
-## respiration 
-
-Respiration data drawn from 
-
-- CF Prentice & DE Schneider (1979), Respiration and thermal tolerance of the dungeness crab, Cancer magister dana. *Comparative Biochemistry and Physiology Part A: Physiology 63*(4), 591-597. doi:10.1016/0300-9629(79)90201-9
-
-```{r resp-dat}
-RespData  <- read.csv(here::here(dge_dir,"data","Scans","PrenticeSchneider.csv"))
-RespData2 <- read.csv(here::here(dge_dir,"data","Scans","DungiResp.csv"))
-```
-<br>
-
-
-
-
-# Fit consumption
-
-## find_ftcpar
-
-let's just get this function working as it does in the vignette
-
-`c_data` appears to be `ebs_data`
-```{r}
-c_data <- ebs_data
-```
-
-```{r}
-find_ftcparfunction(
-  par = c(
-    logTco   = log(8),
-    logQc    = log(2),
-    logsigma = log(.0002)),
-  data=list(
-    logitlink    = TRUE,
-    fitsigma     = FALSE,
-    sigset       = 0.02,
-    TempCIN      = sim_obs$TempC,
-    ftc_obsIN    = sim_obs$fTc_obs))
-```
-
-
-
-## dungeness crab
-
-estimate the consumption curves  - and re-fit consumption parameters Tco and Qc - using MCMC to draw from informly distributed intial conditions.
-
-
-```{r}
-newDat1 <- dat %>%
-  filter(trial==1) %>%
-  mutate(N_fed=115) %>%
-  rename(Temp=temp,Size_CW=cw_widest,W_g=crab_mass_g,Fed_g=total_squid_added,Uneaten_g=squid_disc_left,C_g=C,C_ggd=C_gg) %>%
-  dplyr::select(Temp,Size_CW,W_g,Fed_g,Uneaten_g,C_g,C_ggd,I,F)
-newDat1
-```
-
-make sure that the function `find_ftcpar` works with some changes to input names.
-```{r}
-indat <- list(
-    logitlink    = TRUE,
-    fitsigma     = FALSE,
-    sigset       = 0.02,
-    TempCIN      = newDat1$Temp,
-    ftc_obsIN    = newDat1$C_ggd)
-inparms <- crabPARMS_USE %>% filter(X=="Cmagister")
-
-find_ftcpar(
-  parms_use    = inparms,
-  par = c(
-    logTco   = log(8),
-    logQc    = log(2),
-    logsigma = log(.0002)),
-  data=indat)
-```
-
-```{r}
-c_data <- dcrab_data
-```
-
-```{r}
-ft<-fTC_fun(par=parms,data=c_data)
-```
-
-
-```{r}
-m<-optim(fn=find_ftcpar,par=c(logTco=log(8),logQc=log(2),
-                              logsigma=log(.0002)),parms_use = inparms,data=indat,
-         hessian=TRUE,control=list(maxit=1e6))
-# vc <- solve(m$hessian)
-# se<-(sqrt(diag(vc)))
-
-
-round(exp(m$par),3)
-```
-
-How close are these to our original values?
-```{r}
-inparms$Tco ; inparms$QC
-```
-
-Not close, because they are calculated from wet weight I think?
-
-
-
-
-
-# Test run Holsman model
 
 ## with original parameters
 
@@ -291,25 +391,25 @@ ggplot(plotdat,aes(x=day,y=value)) +
   facet_wrap(~Metric, scales="free") + ylab("mm / grams")
 ```
 
-Weight is high, will need to come back to that. 
+Weight seems high, will need to come back to that. 
 
 
 ## with newly fit parameters
 
 Dungeness crab parameters
-```{r}
+```{r eval=FALSE}
 parms2 <- crabPARMS_USE %>% filter(X=="Cmagister")
 parms2$Tco <- exp(m$par["Tco"])
   parms2$QC <- exp(m$par["QC"])
 ```
 molt information is in its own data frame:
-```{r}
+```{r eval=FALSE}
 dataMOLT$Cmagister
 ```
 
 
 Set up the simulation with some fake weights
-```{r}
+```{r eval=FALSE}
 nd     <-  dim(Tdat)[1] # days of simulation
 # at start of simulation
 Wstart <- 2           
@@ -334,11 +434,11 @@ DCRBdat4sim   <- list(
 
 sim_out       <- Tdat %>% mutate(W=0)
 ```
-```{r}
+```{r eval=FALSE}
 dcrb.oy.sim <- sim_W(par=0.4, dataIN=DCRBdat4sim, LL=F)
 ```
 
-```{r echo=FALSE}
+```{r echo=FALSE, eval=FALSE}
 plotdat <- data.frame(day=seq(1:(nd+1)),
                       Weight=dcrb.oy.sim$W,
                       Carapace_Width=dcrb.oy.sim$CW) %>%
@@ -349,240 +449,15 @@ ggplot(plotdat,aes(x=day,y=value)) +
 ```
 
 
-# Data and code:
 
-# 1. Experiments overview
+# parking lot
 
-## 1.1. Gemma Woodhouse Capstone, 2006-07
-
-Gemma Woodhouse conducted consumption experiments on *C. magister* and *C. gracilis* in 2005-06 for her capstone project at the School of Aquatic and Fishery Sciences, UW: "A comparison of bioenergetics between two species of Puget Sound crabs"
-
-1. Crabs were collected using both crab pots and by hand from Skagit Bay and the South Puget Sound. Only healthy crabs were selected for the experiment. 
-2. Carapace width (from the interior of the 10th lateral spine), weight (g) and sex were recorded. 
-2. Crabs were placed in 10gal aquariums with an airstone, at 6 different temperatures (5-24C). They were starved for 48 hours, then moved to clean tanks and acclimated at experimental temperature for 6 hours.
-3. Crabs were fed (in excess) ~50g of squid mantle, cut into 1/4 inch cubes.
-4. Crabs were left for 12 hours in the 12, since both species primarily forage at night.
-5. Tank contents were filtered to remove remaining food, and weighed. The resulting weight represents combined uneaten food, ingestion loss, and egesion.
-
-This experiment was repeated for *C. gracilis* of different sizes at a standard temperature.
-<br>
-
-
-## 1.2. Grace Workman & Stacy McMahon Research, 2018
-
-Grace Workman and Stacy McMahon completed consumption experiments on *C. magister* and *C. gracilis* in 2018. These experiments were similar to Gemma Woodhouse's experiments, but were slightly re-designed to accurately measure ingestion loss, an important parameter for crab bioenergetic models. In short:
-
-1. Crabs were placed on platforms in aquaria, and fed a squid disk of known quantity
-2. Crabs were allowed to feed for a set length of time
-3. Crabs were isolated in clean tanks; the remaining squid disk removed and tank water was filtered to collect ingestion loss
-4. After several days, crab feces from the new tank was collected and weighed to measure egestion
-<br>
-
-
-# 2. Read in Data and analysis
-
-## 2.1. Experimental Data
-
-All of the experimental data from 2018 is summarized on the first sheet of the excel spreadsheet. The data frame contains three separate trials (and so tank numbers are repeated) - trial numbers need to be added into the data frame.
+Let's just take an average of the values for whole squid reported by: Nancy Davis 1993. Caloric content of oceanic zooplankton and fishes for studies of salmonid food habits and their ecologically related species. (NPAFC Doe.) FRI-UW-93 12. Fisheries Research Institute, University of Washington, Seattle. 10 pp
 ```{r}
-dat <- readxl::read_xlsx(here::here("data","Crab Data_D&G_9.16.18.xlsx"), sheet =1) %>%
-  clean_names()
-dat %<>% mutate(trial = c(rep(1,16),rep(2,42), rep(3,41)))
-str(dat)
+squid.df <- data.frame(species=c("Illex illacabrosus","Illex illacabrosus","Illex illacabrosus","Loligo paelei","Loligo paelei","Loligo paelei","Loligo bravis","Squids"),
+                           sample_area=c("NW atlantic","NW atlantic","NW atlantic","NW atlantic","NW atlantic","NW atlantic","NE Atlantic","Bristol Bay"),
+                           calgWW=c(1695,NA,NA,1337,NA,NA,1051,NA),
+                           calgAFDW=c(5636,5875,5397,5110,4991,5540,6342,5578)) %>%
+  mutate(JgAFDW=calgAFDW*4.184)
+squid_ed=mean(squid.df$JgAFDW); squid_ed
 ```
-<br>
-
-Keep the columns that provide the raw experimental data.
-```{r}
-dat %<>% dplyr::select(species, temp, trial, tank,
-                       cw_widest, cw_inside_spines, crab_mass_g,
-                       i_nytex_clip, f_nytex_clip, 
-                       total_squid_added, discs_left, 
-                       i_filtered_w_nytex_clip,f_filtered_w_nytex_clip) %>%
-  rename(squid_disc_left=discs_left) %>%
-  arrange(species,temp)
-```
-```{r eval=FALSE, include=FALSE}
-write.csv(dat, here::here("data","Experiments2018.csv"))
-```
-<br>
-
-
-Calculate the ingestion loss (I), egestion (F), consumption (C), and specific consumption (in gWW C / gWW crab). 
-```{r}
-dat %<>% mutate(I=i_filtered_w_nytex_clip-i_nytex_clip,
-                F=f_filtered_w_nytex_clip-f_nytex_clip,
-                C=total_squid_added - (squid_disc_left + I),  ## Note that in experimental data sheet, C calculation doesn't account for I
-                C_gg=C/crab_mass_g)
-head(dplyr::select(dat, crab_mass_g, total_squid_added, squid_disc_left, I, F, C, C_gg))
-```
-<br>
-
-
-## 2.2. Parameters, respiration data
-
-Parameters for *C. magister*, *C. gracilis*, *Carcinus maenas*
-```{r}
-load(here::here("data","parUSE.rdata"))
-```
-<br>
-
-
-
-## 2.3. Temperature data
-
-Temperature data is pulled from Oceanic Remote Chemical Analyzer (ORCA) buoy at Point Wells, made available through the UW Applied Physics Laboratory. The raw data file was last updated at 2021-04-06 06:33.
-
-A note from the APL : *This data has been automatically processed and is not validated. Data files are preliminary, only partially calibrated, and definitely not final! This data is being provided in it's raw form to authorized users only. The data is to be used for research purposes only and may not be used commercially without the consent of the authors and the University of Washington.*
-
-The raw data is stored in MATLAB files. Since we only need the temperature data, I'll save just that information into a new .csv file. 
-
-```{r temp-matlab}
-PWbuoy <- read.mat("data/ORCA_raw/PW_CTD_data_bin_web.mat")
-str(PWbuoy)
-```
-<br>
-
-Each variable in the data frame is a matrix; column = cast number, row = a pressure bin during the cast. Binning is performed using averages.
-
-The example provided: a buoy that had profiled 100 casts down to 136 db would have a matrix dimension of [136 100].  
-Btemp(1,1) = temperature in the -135 db bin during cast 1, Btemp(135,1) = temperature in the 1 db bin during cast 1. 
-
-The date is recorded as Yearday from 2000, with yearday 1 = January 1, 2000 (`Btime`)
-
-The pressure bins in our data set range from:
-```{r}
-range(PWbuoy$Bpress[,1], na.rm=TRUE)
-range(PWbuoy$Bpress[,8164], na.rm=TRUE)
-```
-<br>
-
-Pull the highest (most negative) pressure for every cast:
-```{r warning=FALSE}
-bottom_dbar <- apply(PWbuoy$Bpress, 2, min, na.rm=TRUE)
-bottom_dbar[bottom_dbar=="Inf"] <- NA
-hist(bottom_dbar, col="grey48", main="Minimum dbar across casts", xlab="dbar")
-```
-<br>
-
-Grab the `Btime` information for the cast completed at the highest (most negative) pressure, and convert Yeardays to a date object. Some days had multiple casts at the same pressure, so I'm going to keep the Yearday variable in the final data frame for now.
-```{r warning=FALSE}
-bottom_yrdays <- apply(PWbuoy$Btime, 2, max, na.rm=TRUE)
-bottom_yrdays[bottom_yrdays=="Inf"] <- NA
-
-start_day <- ymd("2000/01/01")
-bottom_date <- start_day + bottom_yrdays
-```
-<br>
-
-Create a new data frame to hold the temperature data.
-```{r}
-tempPW <- data.frame(date = bottom_date,
-                     year_day = bottom_yrdays,
-                     pressure = bottom_dbar) %>%
-  dplyr::filter(!is.na(bottom_dbar)) 
-```
-<br>
-
-Get the position in the matrix of each Yearday of interest, then use the position information to grab temperature data. 
-```{r}
-tmp_bin_mat <- PWbuoy$Btime %in% tempPW$year_day
-tmp_temp <- PWbuoy$Btemp[which(tmp_bin_mat==TRUE)]
-```
-<br>
-
-Add the temperature data to the data frame.
-```{r}
-tempPW <- tempPW %>%
-  mutate(tempC=tmp_temp)
-```
-<br>
-
-Take a look at the temperature data.
-```{r echo=FALSE}
-ggplot(tempPW %>% mutate(`Month of Year`=as.factor(month(date))), aes(x=tempC)) +
-  geom_histogram(aes(fill=`Month of Year`)) +
-  ylab("number of casts") +
-  theme_classic()
-
-ggplot(tempPW %>% mutate(`Day of Year`=yday(date), year=as.factor(year(date))), aes(x=`Day of Year`, y=tempC, col=year)) +
-  geom_point() +
-  xlab("day of year") +
-  theme_classic()
-```
-<br>
-
-Some days have multiple casts at the same pressure - I'm unsure of why this is. How different are temperatures taken on the same day? *Most are <1C, although there are some outliers.*
-```{r echo=FALSE, fig.height=3, fig.width=4}
-tempPW_sd <- tempPW %>%
-  dplyr::select(-year_day) %>%
-  mutate(date=ymd(date)) %>%
-  group_by(date) %>%
-  summarise(sd_temp = sd(tempC, na.rm=TRUE))
-
-ggplot(tempPW_sd, aes(x=sd_temp)) +
-  geom_histogram() + 
-  ylab("number of casts") + xlab("st. dev. temp") +
-  theme_classic()
-```
-<br>
-
-
-To get the final data set, I took the median across casts.
-```{r}
-tempPW_exp <- tempPW
-
-tempPW <- tempPW_exp %>%
-  mutate(date=ymd(date)) %>%
-  group_by(date) %>%
-  summarise(pressure_db = median(pressure), tempC=median(tempC))
-```
-<br>
-
-Does the data still make sense?
-```{r echo=FALSE}
-ggplot(tempPW %>% mutate(`Day of Year`=yday(date), year=as.factor(year(date))), aes(x=`Day of Year`, y=tempC, col=year)) +
-  geom_point() +
-  geom_path() +
-  xlab("day of year") +
-  theme_classic()
-```
-
-
-
-Write out the data frame. 
-```{r eval=FALSE}
-write.csv(tempPW, "data/Point Wells Bottom Temp.csv", row.names=FALSE)
-```
-<br>
-
-
-Do the same for the Hood Canal temperature data, this time using a function based on the code above.
-
-
-
-
-# 3. Graphs
-
-## 3.1 plot consumption curve and consumption data from experiment
-
-# 4 validate green crab model
-
-## 4.1 refit consumption curves
-
-## 4.2 refit eggestion parms
-
-# 5 apply to evironmental data
-
-## 5.1 Puget sound temperature data
-
-## 5.2 Willapa Bay 
-
-
-
-
-
-
-
-
-

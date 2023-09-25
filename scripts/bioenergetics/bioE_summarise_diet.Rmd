@@ -283,3 +283,24 @@ write_csv(diets2, here(bdir,'OAdiets_HiLo_Condensed.csv'))
 
 }
 ```
+
+
+
+
+**For energy density:** generally...
+
+Cnidaria (4091 callg AFDW) and Ctenophora (3240 callg AFDW) had the lowest caloric
+value of the organisms surveyed --> Pelagic polychaetes (Tomopterus helgolandica 7518
+callg AFDW), copepods (Chiridius armatus 7698 callg AFDW), mysids (Boreomysis arctica
+8525 callg AFDW), arrow worms (Sagitta elegans 7546 call AFDW), and euphausiids
+(Meganyctiphanes norvegica 8574 caIJAFDW) all exhibited high caloric content 
+
+Among the fishes, herring (Clupea harengus harengus) and lake char, (Salve linus namaycush) had a high caloric
+content, 5994 callg DW, and 7103 callg DW (Table 1). The caloric content of the Pacific salmon ranged from 3345 ca]lg DW to 6227 call g DW.
+
+
+
+
+
+
+

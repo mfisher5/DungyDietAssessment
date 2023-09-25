@@ -79,7 +79,7 @@ source("R/subscripts/crab_afdw.R")
 ## 1.1. Parameters
 
 ```{r}
-parms <- crabPARMS_USE %>% filter(X=="Cmaenas"); str(parms)
+parms <- crabPARMS_USE %>% filter(X=="Cmagister"); str(parms)
 ```
 <br>
 
