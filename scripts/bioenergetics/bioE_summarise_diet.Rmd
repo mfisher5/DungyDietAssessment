@@ -22,10 +22,11 @@ library(magrittr)
 library(janitor)
 
 # User inputs
-blastdir   <- 'data/blast'
-bdir <- 'data/bioE'
+blastdir   <- '../../data/blast'
+bdir <- '../../data/bioE'
 run.nums <- c(1,2)
 marker  <- 'lerayXT'
+knitting=TRUE
 ```
 
 ```{r data, include=FALSE}
@@ -95,6 +96,8 @@ What is the median stomach fullness per crab?
 
 ## OA sensitivity diets
 
+### first pass: dDNA data only
+
 Produce four diets: Hi/Lo OA Sensitivity x Hi/Lo Energy Density
 
 First, grab only the "large" prey that were present in three or more crab
@@ -111,8 +114,9 @@ length(unique(dat_3plus$new_taxon))
 ## how many crab? 
 length(unique(dat_3plus$crab_id))
 
-write_csv(summary_dat %>% filter(ncrab > 2), here(bdir,'OAdiets_all_taxa_3plus_crab.csv'))
-
+```
+```{r}
+if(!knitting){write_csv(summary_dat %>% filter(ncrab > 2), here(bdir,'OAdiets_all_taxa_3plus_crab.csv'))}
 ```
 
 Grab "small" prey that were present in three or more crab.
@@ -129,10 +133,13 @@ length(unique(smdat_3plus$taxon))
 ## how many crab? 
 length(unique(smdat_3plus$crab_id))
 
-write_csv(summary_smdat %>% filter(ncrab > 2), here(bdir,'OAdiets_small_taxa_3plus_crab.csv'))
-
+```
+```{r}
+if(!knitting){write_csv(summary_smdat %>% filter(ncrab > 2), here(bdir,'OAdiets_small_taxa_3plus_crab.csv'))}
 ```
 
+
+### match to OA list functional groups
 
 Then, match these prey to the OA list, according to the manually identified functional groups. 
 
@@ -190,8 +197,11 @@ taxdat %>% filter(raw_survival_scalar > q75) %>% pull(new_taxon)
 q25
 taxdat %>% filter(raw_survival_scalar < q25) %>% pull(new_taxon)
 ```
+
 Write these out!
-```{r}
+```{r echo=TRUE}
+if(!knitting){
+  
 write_csv(taxdat, here(bdir,'OAdiets_all_taxa_3plus_crab_OAinfo.csv'))
 
 diets_out <- taxdat %>% mutate(OA.diet.group=ifelse(raw_survival_scalar < q25, "low",
@@ -199,10 +209,77 @@ diets_out <- taxdat %>% mutate(OA.diet.group=ifelse(raw_survival_scalar < q25, "
   filter(!is.na(OA.diet.group)) %>%
   dplyr::select(new_taxon,OA.diet.group,colnames(taxdat)[-1])
 write_csv(diets_out, here(bdir,'OAdiets_HiLo.csv'))
+
+}
 ```
 
 
 
+### second pass: combine similar groups
 
 
+*Limecola* + *Tellinidae*
 
+*Veneridae* + *Saxidomus*
+
+*Ectocarpaceae* + *Ectocarpus*
+
+*Rhodomelaceae* + *Polysiphonia*
+
+*Cryptophyceae* + *Cryptomonas curvata* [and] *Micromonas pusilla* as "small phytoplankton"
+```{r}
+small_phytoplankton_taxa <- c("Cryptophyceae","Cryptomonas curvata","Micromonas pusilla")
+```
+
+
+```{r}
+taxdat <- read_csv(here(bdir,'OAdiets_all_taxa_3plus_crab_OAinfo.csv'))
+diets_out <- read_csv(here(bdir,'OAdiets_HiLo.csv'))
+```
+
+```{r}
+diets2.lg <- diets_out %>% dplyr::select(new_taxon,functional_group) %>% 
+  mutate(new_taxon2=ifelse(new_taxon %in% c("Limecola","Tellinidae"), "Tellinidae (incl. Limecola)",
+                           ifelse(new_taxon %in% c("Veneridae","Saxidomus"), "Veneridae (incl. Saxidomus)",
+                                  ifelse(new_taxon %in% c("Ectocarpaceae","Ectocarpus"), "Ectocarpaceae (incl. Ectocarpus spp.)",
+                                         ifelse(new_taxon %in% c("Rhodomelaceae","Polysiphonia"),"Rhodomelaceae (incl. Polysiphonia sp.)",new_taxon))))) %>%
+  filter(new_taxon != "Fucales") %>%
+  bind_rows(
+    data.frame(functional_group=c("Macroalgae","Macroalgae","Macroalgae"),
+               new_taxon=c("Polysiphonia paniculata","Ectocarpus","Ectocarpus siliculosus"),
+               new_taxon2=c("Rhodomelaceae (incl. Polysiphonia sp.)","Ectocarpaceae (incl. Ectocarpus spp.)","Ectocarpaceae (incl. Ectocarpus spp.)"), 
+               ncrab=c(NA,NA,NA))
+    
+    ) %>%
+  filter(!(new_taxon %in% small_phytoplankton_taxa) & !(functional_group %in% c("Microzooplankton"))) %>%
+  left_join(dat_3plus %>% dplyr::select(-group)) %>% ungroup() %>%
+  group_by(new_taxon2, functional_group) %>% summarise(ncrab=length(unique(crab_id)))
+  
+
+```
+
+```{r}
+diets2.sm <- diets_out %>% 
+  filter((new_taxon %in% small_phytoplankton_taxa) | (functional_group %in% c("Microzooplankton"))) %>%
+  dplyr::select(new_taxon,functional_group) %>%
+  mutate(new_taxon2=ifelse(new_taxon %in% small_phytoplankton_taxa, "Small phytoplankton",new_taxon)) %>%
+  left_join(smdat %>% dplyr::select(-new_taxon),by=c("new_taxon"="taxon")) %>%
+  group_by(new_taxon2,new_taxon,functional_group) %>% summarise(ncrab=length(unique(crab_id)))
+```
+
+```{r}
+diets2 <- bind_rows(diets2.lg,diets2.sm) %>%
+  left_join(oadat, by="functional_group") %>%
+   mutate(OA.diet.group=ifelse(raw_survival_scalar < q25, "low",
+                                                    ifelse(raw_survival_scalar > q75, "high",NA)))
+
+any(is.na(diets2$raw_survival_scalar))
+```
+
+Write these out!
+```{r echo=TRUE}
+if(!knitting){
+write_csv(diets2, here(bdir,'OAdiets_HiLo_Condensed.csv'))
+
+}
+```

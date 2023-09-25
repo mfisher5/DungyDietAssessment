@@ -1,0 +1,255 @@
+---
+title: "Dungeness crab Bioenergetic Updates - Consumption curve"
+author: "Kirstin Holsman, Mary Fisher"
+output:
+  html_document:
+    df_print: kable
+    fig_caption: yes
+    theme: flatly
+    toc: true
+    toc_float: true
+  pdf_document:
+    fig_caption: yes
+    fig_height: 4
+    fig_width: 5
+    highlight: tango
+    keep_tex: yes
+    latex_engine: xelatex
+    toc: TRUE
+  header-includes:
+  - \usepackage{inputenc}
+  - \usepackage{unicode-math}
+  - \pagenumbering{gobble}
+  word_document:
+    fig_caption: yes
+    fig_width: 4
+    keep_md: yes
+---
+
+# Description
+
+Use crab NRG to validate a green crab bioenergetics model for Willapa Bay. 
+
+
+```{r setup, include=FALSE}
+library(here)
+library(tidyverse)
+library(janitor)
+
+knitr::opts_chunk$set(echo = TRUE,
+                      theme_set(theme_bw()))
+```
+```{r Part0, echo=FALSE, warning=FALSE}
+  # install.packages("devtools")
+  #library("devtools");devtools::install_github("kholsman/NRG")
+
+  #library("NRG")
+  #setwd("/Users/kholsman/GitHub/NRG/NRG")
+
+setwd(here::here())
+source("R/make.R")
+
+
+# source("R/G_fun.R")
+# source("R/bioE.R")
+# source("R/load_data.R")
+# source("R/cuml_curv.R")
+# source("R/ftc_fun.R")
+# source("R/find_ftcpar.R")
+# source("R/hello.R")
+# source("R/nrg.R")
+# source("R/plot_curve.R")
+# source("R/plot_curve3.R")
+# source("R/profileT.R")
+# source("R/profileW.R")
+# source("R/resp_fun.R")
+# source("R/rmd2md.R")
+# source("R/sim_W.R")
+# source("R/simul_ftc.R")
+# source("R/ultils.R")
+# source("R/waste_fun.R")
+source("R/subscripts/molty_IP.R")
+source("R/subscripts/molty_MI.R")
+source("R/subscripts/crab_afdw.R")
+```
+<br>
+
+# 1. Data
+
+## 1.1. Parameters
+
+```{r}
+parms <- crabPARMS_USE %>% filter(X=="Cmaenas"); str(parms)
+```
+<br>
+
+
+
+Note that: 
+
+- Ceq is opt 3,
+
+- Req is opt 0 -- user-specified respiration model. For green crab, this will be the regression equation from Newell et al. (1972) that is cited by McDonald et al. (2006). 
+
+$R_{rest}=R_A * W^{R_B} * E^{T * R_C}$
+
+"Since littoral crabs must respire throughout the tidal cycle, resting metabolism was modeled for crabs submerged in water and exposed to air..." Which means that there will be two versions of the constants in the equation above, one for when green crab are exposed to air, and one when they are submerged in the water.
+
+There are currently $C_A$, $R_A$ and $R_B$ values in the parUSE data frame, that are averages of the individual respiration constants for exposed / submerged periods. 
+<br>
+<br>
+
+## 1.2. Data object 
+
+The green crab data object is saved into NRG. Note that the units in this data / additional parameters all match the units in the parameters object. The respiration function, exuvia energy loss, and proportion I loss are from McDonald et al. (2006). Prey energy density is the energy density for manila clam. 
+```{r eval=FALSE}
+str(EGC_data)
+```
+
+<br>
+
+Molting information is also provided as a data frame. Only Dungeness crab molt information is saved into NRG. 
+```{r}
+dataMOLT$Cmaenas$mod  <- 1                                    # model simulating molt. 1 = static molt increment; 2 = degree days
+dataMOLT$Cmaenas$ip   <- data.frame(a=5.25, b=0.0175)        # These are the Dungy parameters!!
+dataMOLT$Cmaenas$mi$molt_eq   <-function(CW_mm){return((1.08*CW_mm) + 9.49)}   # custom molt equation
+dataMOLT$Cmaenas$exuviaW <- 4342                             # weight of exuvia lost
+dataMOLT$Cmaenas$DD   <- data.frame(Tmin=NA, DDthreshold=NA)  # parameters for using degree days to trigger molt
+```
+
+<br>
+
+### 1.3. Temperature
+
+```{r}
+load(here('data','WillapaBayTemperature.rds'))
+str(WillapaBayTemperature)
+```
+
+Temperature data is from loggers placed by the WSG Crab Team in Willapa Bay.
+```{r fig.width=4, fig.height=3}
+Tdat_raw <- WillapaBayTemperature$WB.oysterville.2021
+Tdat_raw %>% ggplot() + geom_point(aes(x=time_step, y=TempC)) + 
+  ggtitle("oysterville 2021") +
+  labs(subtitle=paste0(Tdat_raw$date[1], " through ", Tdat_raw$date[dim(Tdat_raw)[1]])) +
+  theme(axis.text.x=element_blank())
+```
+<br>
+
+Get a daily average temperature
+```{r fig.width=4, fig.height=3}
+Tdat <- Tdat_raw %>%
+  group_by(date) %>%
+  summarise(TempC=mean(TempC))
+ggplot() + geom_point(data=Tdat_raw, aes(x=date, y=TempC), col="grey60") +
+  geom_path(data=Tdat, aes(x=date,y=TempC, group=1), col="darkred", linewidth=2) + theme(axis.text.x=element_blank())
+```
+<br>
+
+Alternatively, read in tidal data, and get an average temperature for periods when the temp logger was exposed v. under water. 
+
+
+## 1.4. Test sim_W
+
+Make sure that NRG will work with data given, by running sim_w. 
+
+
+### Green crab params
+
+**green crab propIloss to zero and re-run**
+**multiply CA by 24 to get to /day, to match respiration equation**
+
+```{r}
+nd     <-  dim(Tdat)[1] # days of simulation
+# at start of simulation
+Wstart <- 2           
+
+## made up simulation day, weights + date 
+Wobs   <- data.frame(
+  day = c(1,nd),
+  W   = c(Wstart,16)) 
+Wobs$date <- Tdat$date[Wobs$day]
+parms[1,"CA"] <- parms[1,"CA"]*24
+# simulation data
+sim_dat       <- EGC_data
+# sim_dat$Eprey <- 19380
+sim_dat$TempC <- Tdat$TempC     ## temperatures
+sim_dat$W     <- Wstart         ## set W data for the simulation to the first observed weight
+
+EGCdat4sim   <- list(
+                  Wtarget  = Wobs,
+                  parSIM  = parms,
+                  simTdat = Tdat,
+                  dataSIM  = sim_dat,
+                  dataMOLT = dataMOLT$Cmaenas)
+
+sim_out       <- Tdat %>% mutate(W=0)
+```
+
+```{r}
+egc.oy.sim <- sim_W(par=1, dataIN=EGCdat4sim, LL=F)
+```
+```{r echo=FALSE}
+plotdat <- data.frame(day=seq(1:(nd+1)),
+                      Weight=egc.oy.sim$W,
+                      Carapace_Width=egc.oy.sim$CW) %>%
+  pivot_longer(cols=c(2:3), names_to="Metric")
+ggplot(plotdat,aes(x=day,y=value)) +
+  geom_path() +
+  facet_wrap(~Metric, scales="free")
+```
+
+
+
+# 3. Graphs
+
+## 3.1 plot consumption curve and consumption data from experiment
+
+
+# 4 validate green crab model
+
+## 4.1 refit consumption curves
+```{r Part5, echo=TRUE, warning=FALSE, eval=FALSE}
+  # fit pars to lab data:
+      find_ftcpar<-function(par=c(logTco=log(8),logQc=log(2),
+                                  logsigma=log(.0002)),data=list(c_data=c_data,FTdat=FTdat)){
+        FTdat<-data$FTdat
+        c_data<-data$c_data
+        PARMS_USE$Tco<-exp(par[1])
+        PARMS_USE$QC<-exp(par[2])
+        sigma<-exp(par[3])
+        c_data$TempC<-FTdat$TempC
+        fThat<-fTC_fun(par=PARMS_USE,data=c_data)
+        LL<-dnorm(fThat-FTdat$fTobs,sigma,log=TRUE)
+        LLuse<--sum(LL)
+        if(is.na(LLuse)){LLuse<-1e6}	
+        #if(Tcm>35){LLuse<-1e6}	
+        return(LLuse)
+      }
+      m<-optim(fn=find_ftcpar,par=c(logTco=log(8),logQc=log(2),
+                logsigma=log(.0002)),data=list(c_data=c_data,FTdat=FTdat),
+                hessian=TRUE,control=list(maxit=1e6))
+      vc <- solve(m$hessian)
+      se<-(sqrt(diag(vc)))
+
+      # compare values
+      round(exp(m$par),3)
+      hal_par$Tco
+      hal_par$QC
+    
+``` 
+
+## 4.2 refit eggestion parms
+
+# 5 apply to environmental data
+
+## 5.1 Willapa Bay
+
+
+
+
+
+
+
+
+
