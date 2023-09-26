@@ -57,15 +57,20 @@ alldat <- bind_rows(dat,smdat)
 ## Basics
 
 What is the median taxonomic richness per crab?
-with detritus
+with detritus   9 / 10
 ```{r}
 median(bind_rows(dat,smdat) %>%
   group_by(crab_id) %>%
   summarise(richness=length(unique(taxon))) %>% pull(richness))
+
+mean(bind_rows(dat,smdat) %>%
+  group_by(crab_id) %>%
+  summarise(richness=length(unique(taxon))) %>% pull(richness))
 ```
-with detritus as one category ("uni-cellular")
+with algae-based detritus as one category ("uni-cellular")  5.5 / 7
 ```{r}
-median(bind_rows(dat,smdat %>% mutate(taxon="unicellular")) %>%
+median(bind_rows(dat,smdat %>% mutate(taxon=ifelse(is.na(phylum) | phylum=="Chlorophyta", "small phytoplankton",
+                                                   ifelse(phylum=="Bacillariophyta", "Bacillariophyta",taxon)))) %>%
   group_by(crab_id) %>%
   summarise(richness=length(unique(taxon))) %>% pull(richness))
 ```
@@ -82,11 +87,6 @@ median(smdat %>%
   group_by(crab_id) %>%
   summarise(richness=length(unique(taxon))) %>% pull(richness))
 ```
-
-What is the median stomach fullness per crab?
-```{r}
-```
-
 
 ## Overall diet
 

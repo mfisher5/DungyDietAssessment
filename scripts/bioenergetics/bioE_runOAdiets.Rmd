@@ -28,7 +28,11 @@ output:
 
 # Description
 
- 
+Compare growth rates of crab with OA diets. 
+
+To Do List:
+
+- check weight calculation in sim_W function -- weight is too high!
 
 
 ```{r setup, include=FALSE}
@@ -38,6 +42,9 @@ library(janitor)
 
 knitr::opts_chunk$set(echo = TRUE,
                       theme_set(theme_bw()))
+
+dge_dir <- '../../../DungiGraciisBioenergetics'
+nrg_dir <- '../../../NRG'
 ```
 ```{r Part0, echo=FALSE, warning=FALSE}
   # install.packages("devtools")
@@ -46,7 +53,7 @@ knitr::opts_chunk$set(echo = TRUE,
   #library("NRG")
   #setwd("/Users/kholsman/GitHub/NRG/NRG")
 
-setwd(here::here())
+setwd('C:/Users/mfisher5/Documents/NRG')
 source("R/make.R")
 
 
@@ -74,7 +81,7 @@ source("R/subscripts/crab_afdw.R")
 ```
 <br>
 
-# 1. Data
+# 1. Getting set up
 
 ## 1.1. Parameters
 
@@ -89,78 +96,65 @@ Note that:
 
 - Ceq is opt 3,
 
-- Req is opt 0 -- user-specified respiration model. For green crab, this will be the regression equation from Newell et al. (1972) that is cited by McDonald et al. (2006). 
+- Req is opt 0 -- user-specified respiration model. 
 
-$R_{rest}=R_A * W^{R_B} * E^{T * R_C}$
-
-"Since littoral crabs must respire throughout the tidal cycle, resting metabolism was modeled for crabs submerged in water and exposed to air..." Which means that there will be two versions of the constants in the equation above, one for when green crab are exposed to air, and one when they are submerged in the water.
-
-There are currently $C_A$, $R_A$ and $R_B$ values in the parUSE data frame, that are averages of the individual respiration constants for exposed / submerged periods. 
 <br>
 <br>
 
 ## 1.2. Data object 
 
-The green crab data object is saved into NRG. Note that the units in this data / additional parameters all match the units in the parameters object. The respiration function, exuvia energy loss, and proportion I loss are from McDonald et al. (2006). Prey energy density is the energy density for manila clam. 
-```{r eval=FALSE}
-str(EGC_data)
+The Dungeness crab data object is saved into NRG. Note that the units in this data / additional parameters all match the units in the parameters object. The respiration function, exuvia energy loss, and proportion I loss are from McDonald et al. (2006). Let's set prey energy density is to be equivalent to predator energy density, representing a 100% cannibalistic diet (!). 
+```{r}
+str(dcrab_data)
+
+dcrab_data$Eprey <- dcrab_data$Epred
 ```
 
 <br>
 
-Molting information is also provided as a data frame. Only Dungeness crab molt information is saved into NRG. 
+Molting information is also provided as a data frame.  
 ```{r}
-dataMOLT$Cmaenas$mod  <- 1                                    # model simulating molt. 1 = static molt increment; 2 = degree days
-dataMOLT$Cmaenas$ip   <- data.frame(a=5.25, b=0.0175)        # These are the Dungy parameters!!
-dataMOLT$Cmaenas$mi$molt_eq   <-function(CW_mm){return((1.08*CW_mm) + 9.49)}   # custom molt equation
-dataMOLT$Cmaenas$exuviaW <- 4342                             # weight of exuvia lost
-dataMOLT$Cmaenas$DD   <- data.frame(Tmin=NA, DDthreshold=NA)  # parameters for using degree days to trigger molt
+str(dataMOLT$Cmagister)
 ```
+
+Energy lost to exuvia is modeled as a proportion of body mass. The molt model is set to `1`, which means that molting increment will be based on carapace width (as opposed to degree-days)
 
 <br>
 
 ### 1.3. Temperature
 
+For now, use temperature loggers from the intertidal in Willapa Bay, WA. Provided by WSG Crab Team
+
 ```{r}
-load(here('data','WillapaBayTemperature.rds'))
-str(WillapaBayTemperature)
+load(here(nrg_dir,'data','WillapaBayTemperature.rds'))
 ```
 
-Temperature data is from loggers placed by the WSG Crab Team in Willapa Bay.
-```{r fig.width=4, fig.height=3}
-Tdat_raw <- WillapaBayTemperature$WB.oysterville.2021
-Tdat_raw %>% ggplot() + geom_point(aes(x=time_step, y=TempC)) + 
-  ggtitle("oysterville 2021") +
-  labs(subtitle=paste0(Tdat_raw$date[1], " through ", Tdat_raw$date[dim(Tdat_raw)[1]])) +
-  theme(axis.text.x=element_blank())
-```
-<br>
 
 Get a daily average temperature
 ```{r fig.width=4, fig.height=3}
+Tdat_raw <- WillapaBayTemperature$WB.oysterville.2021
+
 Tdat <- Tdat_raw %>%
   group_by(date) %>%
   summarise(TempC=mean(TempC))
 ggplot() + geom_point(data=Tdat_raw, aes(x=date, y=TempC), col="grey60") +
-  geom_path(data=Tdat, aes(x=date,y=TempC, group=1), col="darkred", linewidth=2) + theme(axis.text.x=element_blank())
+  geom_path(data=Tdat, aes(x=date,y=TempC, group=1), col="darkred", linewidth=2) 
 ```
 <br>
 
-Alternatively, read in tidal data, and get an average temperature for periods when the temp logger was exposed v. under water. 
+Then subset the temperature data to run between Jul 1 and October 1.
+```{r}
+summerTdat <- Tdat %>% filter(ymd(date) < ymd('2021-10-01') & ymd(date) > ymd('2021-07-01'))
+```
 
 
-## 1.4. Test sim_W
+### 1.4. Test sim_W
 
 Make sure that NRG will work with data given, by running sim_w. 
 
-
-### Green crab params
-
-**green crab propIloss to zero and re-run**
-**multiply CA by 24 to get to /day, to match respiration equation**
-
+Set up the simulation with some fake weights
 ```{r}
-nd     <-  dim(Tdat)[1] # days of simulation
+nd     <-  dim(summerTdat)[1] # days of simulation
 # at start of simulation
 Wstart <- 2           
 
@@ -168,40 +162,65 @@ Wstart <- 2
 Wobs   <- data.frame(
   day = c(1,nd),
   W   = c(Wstart,16)) 
-Wobs$date <- Tdat$date[Wobs$day]
-parms[1,"CA"] <- parms[1,"CA"]*24
+Wobs$date <- summerTdat$date[Wobs$day]
+
 # simulation data
-sim_dat       <- EGC_data
-# sim_dat$Eprey <- 19380
-sim_dat$TempC <- Tdat$TempC     ## temperatures
+sim_dat       <- dcrab_data
+sim_dat$TempC <- summerTdat$TempC     ## temperatures
 sim_dat$W     <- Wstart         ## set W data for the simulation to the first observed weight
 
-EGCdat4sim   <- list(
+DCRBdat4sim   <- list(
                   Wtarget  = Wobs,
                   parSIM  = parms,
-                  simTdat = Tdat,
+                  simTdat = summerTdat,
                   dataSIM  = sim_dat,
-                  dataMOLT = dataMOLT$Cmaenas)
+                  dataMOLT = dataMOLT$Cmagister)
 
-sim_out       <- Tdat %>% mutate(W=0)
+sim_out       <- summerTdat %>% mutate(W=0)
 ```
-
 ```{r}
-egc.oy.sim <- sim_W(par=1, dataIN=EGCdat4sim, LL=F)
+dcrb.oy.sim <- sim_W(par=0.4, dataIN=DCRBdat4sim, LL=F)
 ```
+
 ```{r echo=FALSE}
 plotdat <- data.frame(day=seq(1:(nd+1)),
-                      Weight=egc.oy.sim$W,
-                      Carapace_Width=egc.oy.sim$CW) %>%
+                      Weight=dcrb.oy.sim$W,
+                      Carapace_Width=dcrb.oy.sim$CW) %>%
   pivot_longer(cols=c(2:3), names_to="Metric")
 ggplot(plotdat,aes(x=day,y=value)) +
   geom_path() +
-  facet_wrap(~Metric, scales="free")
+  facet_wrap(~Metric, scales="free") + ylab("mm / grams")
 ```
 
 
 
-# 2 
+
+
+
+
+
+
+
+
+
+# 2. Prep Diet Profiles
+
+
+
+# 3. Simulate Growth
+
+
+randomly sample a set of 6 numbers from a normal distribution, and normalize to add to "1". do this 1000 x. These will be the diet proportions. 
+```{r}
+
+```
+
+
+
+
+
+
+
 
 
 
