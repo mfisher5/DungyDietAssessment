@@ -1,0 +1,10 @@
+wet weights for a subsample of Dungeness crab instars (tared); stomachs were dissected then washed out; weights are on a petri dish (stomach full / empty) or in a 1.5mL tube (contents). Weight for tube included,,,,,,,,,,,,,,
+site,quadrat,date,CW_in,CW_mm,CW_in,CH_mm,limb_damage,fullness,feces,crab_gWW,full_stomach_plus_dish_gWW,consumed_plus_tube_gWW,tube_gWW,empty_stomach_plus_dish_gWW
+LAR,Q4,8/11/2021,0.215,7.0,0.19,6.0,none,1,0,0.0841,12.5912,1.0095,1.1174,12.5859
+LAR,Q4,8/11/2021,0.32,9.0,0.29,8.0,none,0.5,0,0.1844,12.5954,1.1168,1.13,12.6203
+LAR,Q4,8/11/2021,0.27,7.5,0.235,7.0,none,0,0,0.0839,12.6071,1.1011,1.1314,12.6423
+MARPT,Q3,8/21/2021,0.215,7.0,0.213,6.0,none,1.5,1,0.0068,12.4691,1.1088,1.1374,12.4479
+MARPT,Q3,8/21/2021,0.205,6.0,0.11,5.0,none,1,1,0.0385,12.4719,1.1183,1.1385,12.4719
+MARPT,Q10,8/21/2021,0.22,6.5,0.205,6.5,none,0.5,0,0.0678,12.4805,1.1311,1.1368,12.4719
+MARPT,Q10,8/21/2021,0.34,9.5,0.29,8.0,none,0,0,0.2756,12.452,1.1178,1.1449,12.5109
+SAMI,Hi,8/22/2021,0.51,14.0,0.395,11.0,none,2,1,0.5067,12.6159,1.1151,1.1113,12.6011

@@ -313,6 +313,30 @@ inparms$Tco ; inparms$QC
 argh...
 
 
+# Check CW --> W conversion
+
+The model has a function to convert CW to W, and I want to check this against my measurements in the lab.
+First, read in the lab data sheet and grab the CW (mm) and W (g wet weight) values
+```{r}
+sizedat <- read_csv(here('../../','data','bioE','instar_WW.csv'), skip=1) %>% dplyr::select(site, quadrat, CW_mm, crab_gWW)
+```
+
+Calculate the carapace widths according to the weights, and compare against measured carapace width. note that i have to use a second conversion equation to get from AFDW to WW
+```{r}
+sizedat %<>%
+  mutate(crab_gAFDW_fromCW=cw2afdw_vectorize(v=CW_mm)) %>%
+  mutate(crab_gWW_fromCW=afdw2ww_vectorize(v=crab_gAFDW_fromCW))
+```
+```{r echo=FALSE}
+rlabel <- round(summary(lm(crab_gWW_fromCW ~ crab_gWW, data=sizedat))$adj.r.squared,2)
+ggplot(sizedat, aes(x=crab_gWW, y=crab_gWW_fromCW)) + 
+  geom_point() +
+  geom_smooth(method="lm") + 
+  geom_text(data=data.frame(x=0.2, y=0.5,label=paste0("r2=",rlabel)),aes(x=x,y=y,label=label))
+```
+
+Not bad! The scale I was working with wasn't the greatest. 
+
 
 
 # Test run Holsman model
