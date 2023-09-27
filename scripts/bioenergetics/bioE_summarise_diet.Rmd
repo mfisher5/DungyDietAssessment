@@ -57,17 +57,13 @@ alldat <- bind_rows(dat,smdat)
 ## Basics
 
 What is the median taxonomic richness per crab?
-with detritus   9 / 10
+with detritus   9
 ```{r}
 median(bind_rows(dat,smdat) %>%
   group_by(crab_id) %>%
   summarise(richness=length(unique(taxon))) %>% pull(richness))
-
-mean(bind_rows(dat,smdat) %>%
-  group_by(crab_id) %>%
-  summarise(richness=length(unique(taxon))) %>% pull(richness))
 ```
-with algae-based detritus as one category ("uni-cellular")  5.5 / 7
+with algae-based detritus as one category ("small phytoplankton") and diatoms as one category (any within "Bacillariophyta")  6
 ```{r}
 median(bind_rows(dat,smdat %>% mutate(taxon=ifelse(is.na(phylum) | phylum=="Chlorophyta", "small phytoplankton",
                                                    ifelse(phylum=="Bacillariophyta", "Bacillariophyta",taxon)))) %>%
@@ -75,13 +71,13 @@ median(bind_rows(dat,smdat %>% mutate(taxon=ifelse(is.na(phylum) | phylum=="Chlo
   summarise(richness=length(unique(taxon))) %>% pull(richness))
 ```
 
-without detritus
+without detritus? 5
 ```{r}
 median(dat %>%
   group_by(crab_id) %>%
   summarise(richness=length(unique(taxon))) %>% pull(richness))
 ```
-only detritus
+only detritus? 4
 ```{r}
 median(smdat %>%
   group_by(crab_id) %>%
@@ -89,9 +85,6 @@ median(smdat %>%
 ```
 
 ## Overall diet
-
-
-
 
 
 ## OA sensitivity diets
@@ -161,7 +154,10 @@ colnames(oadat)
 taxdat %<>% left_join(oadat, by="functional_group")
 ```
 
-Check the raw survival scalar frequencies
+
+#### explore exposure
+
+Check the raw survival scalar frequencies across all prey taxa identified in 3 plus crab
 ```{r}
 ggplot(taxdat, aes(x=raw_survival_scalar)) +
   geom_histogram() + 
@@ -170,6 +166,42 @@ ggplot(taxdat, aes(x=raw_survival_scalar)) +
   theme_bw()
 ```
 
+Now calculate the average survival scalar per crab, based on taxa presence/absence in the diet. I calculated this just by taking the mean of the raw survival scalars across species, and then dividing by the total number of species present in the diet that were in the "3 plus" list. 
+```{r}
+avg_OAscalar <- dat %>% filter(new_taxon %in% taxdat$new_taxon) %>%
+  dplyr::select(crab_id,site,crab_num,new_taxon,estuary) %>% distinct() %>%
+  left_join(taxdat,by=c("new_taxon")) %>%
+  bind_rows(smdat %>% filter(taxon %in% taxdat$new_taxon) %>% 
+              mutate(new_taxon=taxon) %>%
+              dplyr::select(crab_id,site,crab_num,new_taxon,estuary) %>% distinct() %>%
+              left_join(taxdat,by=c("new_taxon"))) %>%
+  group_by(crab_id,site,crab_num,estuary) %>% summarise(mean_ss=mean(raw_survival_scalar),sd_ss=sd(raw_survival_scalar),
+                                                alphadiv=length(unique(new_taxon)))
+```
+```{r echo=FALSE}
+p1 <- ggplot(avg_OAscalar, aes(x=mean_ss)) + geom_histogram() +
+  labs(x="Mean OA Survival Scalar per Crab",y="Count")
+p2 <- ggplot(avg_OAscalar, aes(x=site,y=mean_ss)) +
+  geom_boxplot() +
+  geom_jitter(width=0.1, size=0.5) +
+  labs(y="Mean OA Survival Scalar per Crab",x="Site")
+p3 <- ggplot(avg_OAscalar, aes(x=estuary,y=mean_ss)) +
+  geom_boxplot() +
+  geom_jitter(width=0.1, size=0.5) +
+  labs(y="Mean OA Survival Scalar per Crab",x="Estuary")
+
+p1;p2;p3
+
+png(here('../../','figs','figS_meanOAscalars_bySite_byEstuary.png'),res=300,height=1800,width=2100)
+bottom <- plot_grid(p2+theme(axis.text.x=element_text(angle=45,hjust=1)),p3+theme(axis.title.y=element_blank()),ncol=2, rel_widths=c(1,0.8))
+plot_grid(p1,bottom,nrow=2)
+dev.off()
+```
+
+Calculate weighted mean OA survival scalars for each estuary, weighted by the number of crab in which the given taxon was present. 
+
+
+#### subset for extremes 
 
 What is 1 standard deviation away from the mean? how many taxa are above / below that cutoff?
 ```{r}
