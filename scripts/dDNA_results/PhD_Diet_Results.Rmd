@@ -216,8 +216,8 @@ crab_metadat %>% group_by(site) %>% summarise(mean_cw=round(mean(CW_mm), 2), sde
 
 Graph CW x CH, and save as an object for figure 1.
 ```{r fig.height=3}
-fig1b <- ggplot(crab_metadat, aes(x=CW_mm,y=CH_mm,color=fct_relevel(estuary, estuary_colors$estuary))) + 
-  geom_point() + facet_grid(cols=vars(estuary)) +
+fig1b <- ggplot(crab_metadat, aes(x=CW_mm,y=CH_mm,color=fct_relevel(estuary, estuary_colors$estuary))) +
+  geom_point() + facet_grid(cols=vars(fct_relevel(estuary, estuary_colors$estuary))) +
   scale_color_manual(values=estuary_colors$key, name="estuary") +
   labs(x="Carapace width (mm)", y="Carapace height (mm)") +
   theme_bw() + theme(legend.position="none", strip.background=element_rect("white"))
@@ -247,6 +247,20 @@ ggplot(aes(x=mean_cw,y=mean_ch,pch=site_name,color=site_name)) +
 
 dev.off()
 ```
+```{r fig.height=3, fig.width=3}
+ggplot(crab_metadat, aes(x=CW_mm)) + 
+  geom_histogram() + theme_bw()
+```
+
+Make sure there aren't significant differences between carapace widths by estuary
+```{r}
+size.aov <- aov(CW_mm ~ estuary, data=crab_metadat)
+summary(size.aov)
+```
+```{r}
+TukeyHSD(size.aov)
+```
+
 
 
 
@@ -884,7 +898,7 @@ plot how within / between estuary differences change for larger and single-celle
 ```
 
 
-
+Supp Figure: pairwise beta diversity (y axis) for sites, within / between estuaries (faceted), with different data sets colored.  
 
 
 ### Zeta diversity
@@ -1588,13 +1602,6 @@ raretax <- plotdat.fo %>% group_by(plot.group) %>% mutate(grouptot=length(unique
                                            prare=nrare/grouptot) %>% distinct()
 ```
 
-
-### eDNA index of common prey
-
-What is the eDNA index across sites for the 10 most common prey items?
-```{r}
-fo.hi.sub <- (fo.hi %>% arrange(-pcrab))[1:10,]
-```
 
 
 

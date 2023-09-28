@@ -1,10 +1,10 @@
-Bay,Site,Habitat,Latitude,Longitude,N,DNA
-Port Susan,Kayak Point,Shell,48.13416,-122.36785,12,0
-Port Susan,Kayak Point,Eelgrass,48.13285,-122.36512,17,0
-Padilla Bay,Padilla NERR (main),Eelgrass,48.49566,-122.48854,1,0
-Padilla Bay,March Point,Eelgrass / Algae,48.50077,-122.55746,34,17
-Padilla Bay,Padilla NERR (WDFW),Eelgrass,48.55066,-122.51823,3,0
-Padilla Bay,Padilla NERR (north),Eelgrass,48.57247,-122.54383,3,0
-Samish Bay,Samish Island,Eelgrass / Algae,48.57719,-122.53373,20,0
-Samish Bay,Taylor Shellfish,Eelgrass,48.61086,-122.44974,2,0
-Samish Bay,Clayton Beach,Eelgrass,48.64162,-122.48496,27,10
+Bay,Site,site,Habitat,Latitude,Longitude,N,DNA
+Port Susan Bay,Kayak Point,Kayak Pt 2,Shell,48.13416,-122.36785,12,10
+Port Susan Bay,Kayak Point,Kayak Pt 1 ,Eelgrass,48.13285,-122.36512,17,12
+Padilla Bay,Padilla NERR (main),NERR 1,Eelgrass,48.49566,-122.48854,1,1
+Padilla Bay,March Point,March Pt,Eelgrass / Algae,48.50077,-122.55746,34,10
+Padilla Bay,Padilla NERR (WDFW),NERR 2,Eelgrass,48.55066,-122.51823,3,1
+Padilla Bay,Padilla NERR (north),NERR 3,Eelgrass,48.57247,-122.54383,3,0
+Samish Bay,Samish Island,Samish Isl,Eelgrass / Algae,48.57719,-122.53373,20,11
+Samish Bay,Taylor Shellfish,Samish Bay,Eelgrass,48.61086,-122.44974,2,2
+Samish Bay,Clayton Beach,Larrabee,Eelgrass,48.64162,-122.48496,27,11

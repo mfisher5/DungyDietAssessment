@@ -26,8 +26,9 @@ library(ggfortify)
 # Map of Sampling Sites
 
 ```{r include=FALSE}
-# read in data
-dat <- read.csv(here('data','metadata','sampling_data.csv'))
+## lab metadata (CH,CW,fullness) ##
+lab_metadat <- read_csv(here('data','metadata','crab_metadat.csv'))
+dat <- read_csv(here('data','metadata','sampling_data.csv'))
 
 # basemap
 base.map <- readRDS(here('data','metadata',"PugetSoundN_terrain_background.rds"))
@@ -36,30 +37,76 @@ wa.map <- map_data("state") %>%
 
 
 # colors for map points
-cl <- c("darkgreen","darkturquoise","darkgoldenrod4")
+
+estuary_colors <- data.frame(estuary=c("Port Susan Bay","Padilla Bay", "Samish Bay"),
+                             key=c("#33a02c","#1f78b4","chocolate3"))
+
+site_names <- data.frame(site=c("KAY","KAY-shell",
+                                "MARPT","PBNERR",
+                                "SAMI","SAMT","LAR"),
+                         site_name=c("Kayak Pt 1","Kayak Pt 2",
+                                     "March Pt","NERR",
+                                     "Samish Isl","Samish Bay","Larrabee"),
+                         key=c("darkgreen","chartreuse3",
+                               "#1f78b4","blue",
+                               "chocolate4","chocolate2","darksalmon"))
+
 ```
 <br>
 ```{r}
-dat[,c(1,2,6)]
+dat %<>% mutate(site=ifelse(site%in%c("NERR 1","NERR 2"),"NERR",site)) %>% left_join(site_names,by=c("site"="site_name"))
 
-dat <- dat %>% unite("Site_N", c(Site,N), remove=FALSE)
+plotdat <- dat %>% filter(site != "NERR 3")
 ```
 <br>
 
 ```{r fig.width=10, fig.height=10}
 ggmap(base.map) +
-  geom_point(data=dat, aes(x=Longitude,y=Latitude, col=Habitat), stroke=3, size=4, pch=1) + 
-  geom_label_repel(data=dat, aes(x=Longitude,y=Latitude, label=Site,segment.colour=Habitat),
-                   force=1, force_pull=0.25, segment.size=1, size=4, min.segment.length=0.1, show.legend=FALSE) +
+  geom_point(data=plotdat, aes(x=Longitude,y=Latitude, color=fct_relevel(Bay,estuary_colors$estuary)), stroke=c(3,3,1,3,1,3,1,3), size=4, pch=1) + 
+  geom_label_repel(data=plotdat, aes(x=Longitude,y=Latitude, label=site,segment.colour=fct_relevel(Bay,estuary_colors$estuary)),
+                   force=1, force_pull=0.25, segment.size=1, size=4, min.segment.length=0.1, show.legend=FALSE, nudge_x=0.5, nudge_y=c(0.05,0,0,0,-0.1,0,0,0)) +
   ylab("Latitude") + xlab("Longitude") +
-  scale_color_manual(aesthetics=c("color","segment.color"), values=cl) +
+  scale_color_manual(aesthetics=c("color","segment.color"), values=estuary_colors$key, name="Estuary") +
   theme(axis.title=element_text(size=14),
         axis.text=element_text(size=12),
-        legend.title=element_text(size=14),
-        legend.text=element_text(size=12)) +
+        legend.title=element_blank(),
+        legend.text=element_text(size=12), legend.position="bottom") +
   coord_cartesian(xlim = c(-122.9, -122), ylim = c(48, 48.75))
 ```
 <br>
+
+
+Carapace width figure (from PhD_Diet_results script)
+```{r}
+fig1b <- readRDS(here('figs','fig1b_obj.rds'))
+```
+
+
+Save together
+```{r}
+left <- ggmap(base.map) +
+  geom_point(data=plotdat, aes(x=Longitude,y=Latitude, color=fct_relevel(Bay,estuary_colors$estuary)), stroke=c(3,3,1,3,1,3,1,3), size=4, pch=1) + 
+  geom_label_repel(data=plotdat, aes(x=Longitude,y=Latitude, label=site,segment.colour=fct_relevel(Bay,estuary_colors$estuary)),
+                   force=1, force_pull=0.25, segment.size=1, size=4, min.segment.length=0.1, show.legend=FALSE, nudge_x=0.5, nudge_y=c(0.05,0,0,0,-0.1,0,0,0)) +
+  ylab("Latitude") + xlab("Longitude") +
+  scale_color_manual(aesthetics=c("color","segment.color"), values=estuary_colors$key, name="Estuary") +
+  theme(axis.title=element_text(size=14),
+        axis.text=element_text(size=12),
+        legend.title=element_blank(),
+        legend.text=element_text(size=12), legend.position="bottom") +
+  coord_cartesian(xlim = c(-122.9, -122), ylim = c(48, 48.75))
+
+right <- plot_grid(fig1b,NULL, nrow=2, rel_heights=c(1,0.6))
+
+
+png(here('figs','fig1_map_cws.png'), res=300, height=2000,width=3000)
+plot_grid(left,right,ncol=2, labels=c("(a)","(b)"), rel_widths=c(1,0.9))
+dev.off()
+```
+
+
+
+# Archived
 
 ```{r fig.width=10, fig.height=10}
 dat.part <- filter(dat, Site %in% c("Kayak Point","March Point", "Clayton Beach"))
