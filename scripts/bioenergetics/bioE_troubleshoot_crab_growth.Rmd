@@ -1,0 +1,279 @@
+---
+title: "troubleshoot x-l crabs"
+author: "M Fisher"
+date: "2023-09-27"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+library(here)
+library(tidyverse)
+library(janitor)
+library(cowplot)
+library(grid)
+
+knitr::opts_chunk$set(echo = TRUE,
+                      theme_set(theme_bw()))
+
+plot.sim <- function(sim.out,nd){
+  data.frame(day=seq(1:(nd+1)),
+             Weight=sim.out$W,
+             Carapace_Width=sim.out$CW) %>%
+    pivot_longer(cols=c(2:3), names_to="Metric") %>%
+    ggplot(aes(x=day,y=value)) +
+    geom_path() +
+    facet_wrap(~Metric, scales="free") + ylab("mm / grams")
+}
+
+
+dge_dir <- '../../../DungiGraciisBioenergetics'
+nrg_dir <- '../../../NRG'
+```
+```{r Part0, echo=FALSE, warning=FALSE}
+  # install.packages("devtools")
+  #library("devtools");devtools::install_github("kholsman/NRG")
+
+  #library("NRG")
+  #setwd("/Users/kholsman/GitHub/NRG/NRG")
+
+setwd('C:/Users/mfisher5/Documents/NRG')
+source("R/make.R")
+
+
+# source("R/G_fun.R")
+# source("R/bioE.R")
+# source("R/load_data.R")
+# source("R/cuml_curv.R")
+# source("R/ftc_fun.R")
+# source("R/find_ftcpar.R")
+# source("R/hello.R")
+# source("R/nrg.R")
+# source("R/plot_curve.R")
+# source("R/plot_curve3.R")
+# source("R/profileT.R")
+# source("R/profileW.R")
+# source("R/resp_fun.R")
+# source("R/rmd2md.R")
+# source("R/sim_W.R")
+# source("R/simul_ftc.R")
+# source("R/ultils.R")
+# source("R/waste_fun.R")
+source("R/subscripts/molty_IP.R")
+source("R/subscripts/molty_MI.R")
+source("R/subscripts/crab_afdw.R")
+```
+<br>
+
+## Test sim
+
+For now, use temperature loggers from the intertidal in Willapa Bay, WA. Provided by WSG Crab Team
+
+```{r}
+load(here(nrg_dir,'data','WillapaBayTemperature.rds'))
+Tdat_raw <- WillapaBayTemperature$WB.oysterville.2021
+
+Tdat <- Tdat_raw %>%
+  group_by(date) %>%
+  summarise(TempC=mean(TempC))
+
+summerTdat <- Tdat %>% filter(ymd(date) < ymd('2021-10-01') & ymd(date) > ymd('2021-07-01'))
+```
+
+starting and ending weight observations
+```{r}
+W_start <- 0.004518174
+W_end <-  1.494803
+```
+
+for now, make the crab a cannibal
+```{r}
+dcrab_data$Eprey <- dcrab_data$Epred
+```
+
+here are the parameter values
+```{r}
+parms <- crabPARMS_USE[1,]
+parms
+```
+
+```{r}
+sim_dat <- dcrab_data
+sim_dat$propDiet <- 1
+
+## temperatures
+sim_dat$TempC <- summerTdat$TempC     ## temperatures
+
+## starting crab weight
+sim_dat$W     <- W_start         ## set W data for the simulation to the first observed weight
+
+
+##
+nd     <-  dim(summerTdat)[1] # days of simulation
+
+## weights at start and end of simulation
+Wobs   <- data.frame(
+  day = c(1,nd),
+  W   = c(W_start,W_end)) 
+Wobs$date <- summerTdat$date[Wobs$day]
+
+# simulation data frames
+DCRBdat4sim   <- list(
+                  Wtarget  = Wobs,
+                  parSIM  = parms,
+                  simTdat = summerTdat,
+                  dataSIM  = sim_dat,
+                  dataMOLT = dataMOLT$Cmagister)
+
+sim_out       <- summerTdat %>% mutate(W=0)
+```
+
+simulate!
+```{r}
+test.sim <- sim_W(par=parms$RFR, dataIN=DCRBdat4sim, LL=F)
+plot.sim(sim.out =test.sim,nd=nd)
+```
+
+
+Weight is... large.
+
+```{r}
+data.frame(day=rep(1:(nd+1), 2),
+           type=c(rep("simulated",nd+1),rep("calc from CW",nd+1)),
+           gAFDW=c(test.sim$W,sapply(test.sim$CW,cw2afdw))) %>%
+  ggplot(aes(x=day,y=gAFDW)) +
+  geom_point() + geom_path() +
+  facet_wrap(~type, scales="free_y") + labs("RFR=1; pIloss=0; pIndigest=0")
+```
+
+
+
+
+### RFR to 0.75
+```{r}
+test.sim2 <- sim_W(par=0.75, dataIN=DCRBdat4sim, LL=F)
+plot.sim(sim.out =test.sim2,nd=nd)
+```
+```{r}
+data.frame(day=rep(1:(nd+1), 2),
+           type=c(rep("simulated",nd+1),rep("calc from CW",nd+1)),
+           gAFDW=c(test.sim2$W,sapply(test.sim2$CW,cw2afdw))) %>%
+  ggplot(aes(x=day,y=gAFDW)) +
+  geom_point() + geom_path() +
+  facet_wrap(~type, scales="free_y") + labs(title="RFR=0.75")
+```
+
+
+
+
+### RFR to 0.75, I loss > 0
+
+I found some graphs from Sean that make it look like Ingestion loss for Dungeness crab may vary across temperatures, but it mostly seems to be < 0.10
+```{r}
+sim_dat <- dcrab_data
+sim_dat$propDiet <- 1
+sim_dat$propIloss <- 0.10
+```
+
+```{r}
+## temperatures
+sim_dat$TempC <- summerTdat$TempC     ## temperatures
+
+## starting crab weight
+sim_dat$W     <- W_start         ## set W data for the simulation to the first observed weight
+
+
+##
+nd     <-  dim(summerTdat)[1] # days of simulation
+
+## weights at start and end of simulation
+Wobs   <- data.frame(
+  day = c(1,nd),
+  W   = c(W_start,W_end)) 
+Wobs$date <- summerTdat$date[Wobs$day]
+
+# simulation data frames
+DCRBdat4sim   <- list(
+                  Wtarget  = Wobs,
+                  parSIM  = parms,
+                  simTdat = summerTdat,
+                  dataSIM  = sim_dat,
+                  dataMOLT = dataMOLT$Cmagister)
+
+sim_out       <- summerTdat %>% mutate(W=0)
+```
+
+
+```{r}
+test.sim3 <- sim_W(par=0.75, dataIN=DCRBdat4sim, LL=F)
+plot.sim(sim.out =test.sim3,nd=nd)
+```
+
+
+compare simulated weight to weight based on carapace width:
+```{r}
+data.frame(day=rep(1:(nd+1), 2),
+           type=c(rep("simulated",nd+1),rep("calc from CW",nd+1)),
+           gAFDW=c(test.sim3$W,sapply(test.sim3$CW,cw2afdw))) %>%
+  ggplot(aes(x=day,y=gAFDW)) +
+  geom_point() + geom_path() +
+  facet_wrap(~type, scales="free_y") + labs(title="RFR=0.75; prop Ingest loss=0.10")
+```
+
+### RFR to 0.75, I loss > 0, Indigest > 0
+
+Just making up indigestable biomass of consumed prey as 0.40
+```{r}
+sim_dat <- dcrab_data
+sim_dat$propDiet <- 1
+sim_dat$propIloss <- 0.10
+sim_dat$propIndigest <- 0.40
+```
+
+```{r}
+## temperatures
+sim_dat$TempC <- summerTdat$TempC     ## temperatures
+
+## starting crab weight
+sim_dat$W     <- W_start         ## set W data for the simulation to the first observed weight
+
+
+##
+nd     <-  dim(summerTdat)[1] # days of simulation
+
+## weights at start and end of simulation
+Wobs   <- data.frame(
+  day = c(1,nd),
+  W   = c(W_start,W_end)) 
+Wobs$date <- summerTdat$date[Wobs$day]
+
+# simulation data frames
+DCRBdat4sim   <- list(
+                  Wtarget  = Wobs,
+                  parSIM  = parms,
+                  simTdat = summerTdat,
+                  dataSIM  = sim_dat,
+                  dataMOLT = dataMOLT$Cmagister)
+
+sim_out       <- summerTdat %>% mutate(W=0)
+```
+
+
+```{r}
+test.sim4 <- sim_W(par=0.75, dataIN=DCRBdat4sim, LL=F)
+plot.sim(sim.out =test.sim4,nd=nd)
+```
+
+
+compare simulated weight to weight based on carapace width:
+```{r}
+data.frame(day=rep(1:(nd+1), 2),
+           type=c(rep("simulated",nd+1),rep("calc from CW",nd+1)),
+           gAFDW=c(test.sim4$W,sapply(test.sim4$CW,cw2afdw))) %>%
+  ggplot(aes(x=day,y=gAFDW)) +
+  geom_point() + geom_path() +
+  facet_wrap(~type, scales="free_y") + labs("RFR=0.75; pIloss=0.10; pIndigest=0.40")
+```
+
+
+Nothing seems to be changing for proportion of indigestible prey > 0? But regardless, g AFDW for the simulation is too large.

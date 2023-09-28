@@ -16,7 +16,7 @@ Is diet variability correlated with instar size?
 https://rachaellappan.github.io/16S-analysis/correlation-between-otus-with-sparcc.html
 https://biovcnet.github.io/_pages/NetworkScience_SparCC.nb.html
 
-or, Kelly paper with weighted correlation network analysis https://www.nature.com/articles/s41467-019-14105-1#code-availability
+or, Djurhuus et al. paper with weighted correlation network analysis https://www.nature.com/articles/s41467-019-14105-1#code-availability
 
 In order to directly associate specific taxa to environmental variables (Fig. 3), we used sparse partial least square (sPLS) analysis from the R package mixOmics57,58. We applied the sPLS in regression mode, which will model a causal relationship between the lineages and the environmental traits, that is, PLS will predict environmental traits (e.g., temperature) from lineage abundances. This approach enabled us to identify strong correlations between certain taxa and environmental variables without taking into account the global structure of the planktonic community.
 
@@ -38,6 +38,7 @@ library(magrittr)
 # library(devtools)
 # devtools::install_github("mixOmicsTeam/mixOmics")
 library(mixOmics)
+library(zoid)
 
 source(here('R','eDNA_index.r'))
 
@@ -78,7 +79,7 @@ smdat %<>%
 ```
 
 
-## Prep data
+## Prep size data
 
 First, create a data frame with only the carapace width data, per technical replicate. 
 ```{r}
@@ -87,47 +88,25 @@ cw.techs.df <- lab_metadat %>% dplyr::select(sample_id,CW_mm) %>%
   left_join(bind_rows(dat,smdat) %>% dplyr::select(crab_id,sample_id,tech) %>% distinct,
             by=c("crab_id")) %>%
   filter(!is.na(tech))
+```
 
+
+Do the same, but only once per crab
+```{r}
 cw.df <- lab_metadat %>% dplyr::select(sample_id,CW_mm) %>%
   rename(crab_id=sample_id) %>%
   left_join(bind_rows(dat,smdat) %>% dplyr::select(crab_id) %>% distinct() %>% mutate(presence=1),
             by=c("crab_id")) %>%
   filter(!is.na(presence)) %>% dplyr::select(-presence)
+
+
+saveRDS(cw.df, here('data','metadata','carapace_widths_for_zoid.rds'))
 ```
 
 
-Then, calculate the eDNA index. I'm going to use all technical replicates.
+Then, calculate the eDNA index. I did this in two ways: first, for each technical replicate from the raw sequence abudance data, and then, for each crab. To collapse the replicates per crab, I summed reads across replicates and then divided by the number of replicates. 
 
-**large taxa only**
-```{r}
-crab.lreads.mat <- dat %>%
-  group_by(sample_id, new_taxon) %>% summarise(techReads=sum(nReads)) %>%
-  pivot_wider(id_cols="sample_id", names_from="new_taxon",values_from="techReads", values_fill=0) %>%
-  column_to_rownames("sample_id")
-
-index.lg.mat <- t(eDNA_index(x=t(crab.lreads.mat)))
-
-index.lg.df <- as.data.frame(t(index.lg.mat)) %>%
-  rownames_to_column("sample_id") %>% 
-  pivot_longer(cols=2:(dim(index.lg.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
-  left_join(dat %>% dplyr::select(sample_id,crab_id,tech,site,estuary) %>% distinct(),by="sample_id") %>%
-  left_join(site_names) %>%
-  pivot_wider(names_from=taxon,values_from=DNAindex)
-```
-
-
-**micro taxa only**
-```{r}
-crab.smreads.mat <- smdat %>%
-  group_by(sample_id, taxon) %>% summarise(techReads=sum(nReads)) %>%
-  pivot_wider(id_cols="sample_id", names_from="taxon",values_from="techReads", values_fill=0) %>%
-  column_to_rownames("sample_id")
-
-index.sm.mat <- t(eDNA_index(x=t(crab.smreads.mat)))
-```
-
-
-**all taxa**
+**all taxa**: each replicate
 ```{r}
 crab.reads.mat <- bind_rows(smdat,
                             dat %>% dplyr::select(-taxon) %>% rename(taxon=new_taxon)) %>%
@@ -150,7 +129,7 @@ check to make sure all technical replicates are in both data frames
 all(rownames(index.mat) %in% cw.techs.df$sample_id)
 ```
 
-For all taxa, also sum up the technical replicates, divide by the number of technical replicates, and calculate the eDNA index once per crab.
+**all taxa**: each crab
 ```{r}
 crabID.reads.mat <- bind_rows(smdat,
                             dat %>% dplyr::select(-taxon) %>% rename(taxon=new_taxon)) %>%
@@ -168,6 +147,577 @@ index.df2 <- as.data.frame(index.mat2) %>%
   left_join(dat %>% dplyr::select(crab_id,site,estuary) %>% distinct(),by="crab_id") %>%
   left_join(site_names) %>%
   pivot_wider(names_from=taxon,values_from=DNAindex)
+```
+
+
+
+**large taxa only**: each replicate
+```{r}
+crab.lreads.mat <- dat %>%
+  group_by(sample_id, new_taxon) %>% summarise(techReads=sum(nReads)) %>%
+  pivot_wider(id_cols="sample_id", names_from="new_taxon",values_from="techReads", values_fill=0) %>%
+  column_to_rownames("sample_id")
+
+index.lg.mat <- t(eDNA_index(x=t(crab.lreads.mat)))
+
+index.lg.df <- as.data.frame(t(index.lg.mat)) %>%
+  rownames_to_column("sample_id") %>% 
+  pivot_longer(cols=2:(dim(index.lg.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
+  left_join(dat %>% dplyr::select(sample_id,crab_id,tech,site,estuary) %>% distinct(),by="sample_id") %>%
+  left_join(site_names) %>%
+  pivot_wider(names_from=taxon,values_from=DNAindex)
+```
+
+**large taxa only**: each crab
+```{r}
+crabID.lreads.mat <- dat %>%
+  group_by(crab_id, taxon) %>% summarise(crabReads=sum(nReads),ntechs=length(unique(sample_id))) %>%
+  mutate(crabReads_std=crabReads/ntechs) %>% 
+  dplyr::select(-crabReads,ntechs) %>%
+  pivot_wider(id_cols="crab_id", names_from="taxon",values_from="crabReads_std", values_fill=0) %>%
+  column_to_rownames("crab_id")
+
+index.lg.mat2 <- t(eDNA_index(x=t(crabID.lreads.mat)))
+
+index.lg.df2 <- as.data.frame(t(index.lg.mat2)) %>%
+  rownames_to_column("crab_id") %>% 
+  pivot_longer(cols=2:(dim(index.lg.mat2)[1]+1), names_to="taxon",values_to="DNAindex") %>%
+  left_join(dat %>% dplyr::select(crab_id,site,estuary) %>% distinct(),by="crab_id") %>%
+  left_join(site_names) %>%
+  pivot_wider(names_from=taxon,values_from=DNAindex)
+```
+
+
+
+**micro taxa only**: each replicate
+```{r}
+crab.smreads.mat <- smdat %>%
+  group_by(sample_id, taxon) %>% summarise(techReads=sum(nReads)) %>%
+  pivot_wider(id_cols="sample_id", names_from="taxon",values_from="techReads", values_fill=0) %>%
+  column_to_rownames("sample_id")
+
+index.sm.mat <- t(eDNA_index(x=t(crab.smreads.mat)))
+```
+
+
+## Zoid
+
+Since we're only interested in the extent to which the prevalence of each taxon is upweighted / downweighted when size increases, it's ok to use the sequence abundances as the zoid input (?). 
+
+Then the covariate will be carapace width
+
+### all taxa
+
+Remove rare taxa that only occur in two crab (not super useful for comparing across sizes). the function `dropspc` assumes that the species are in columns of the matrix
+```{r}
+crabID.reads.filter.mat <- dropspc(crabID.reads.mat, minocc=2)
+crabID.reads.filter.mat <- crabID.reads.filter.mat[which(rowSums(crabID.reads.filter.mat) > 0),]
+
+dim(crabID.reads.mat); dim(crabID.reads.filter.mat)
+```
+standardize to proportions of total reads for the given crab (?) <-- but doesn't this also depend on the number of other species that were detected in the stomach contents, so not comparable across crab?
+```{r}
+crabID.preads.mat <- decostand(x=crabID.reads.filter.mat,method="total",MARGIN=1)
+```
+
+join with carapace widths
+```{r}
+zoidIN.reads <- crabID.reads.filter.mat %>%
+  rownames_to_column("crab_id") %>%
+  left_join(cw.df,by="crab_id") %>%
+  column_to_rownames("crab_id")
+
+
+zoidIN.preads <- crabID.preads.mat %>%
+  rownames_to_column("crab_id") %>%
+  left_join(cw.df,by="crab_id") %>%
+  column_to_rownames("crab_id")
+
+any(is.na(zoidIN.preads$CW_mm))
+any(is.na(zoidIN.reads$CW_mm))
+```
+
+
+create the design matrix (site / site type information per observation, aka per crab) and the data matrix (read counts only)
+```{r}
+design_matrix = zoidIN.preads[,which(names(zoidIN.preads)=="CW_mm"), drop=FALSE]
+data_matrix = zoidIN.preads[,which(names(zoidIN.preads)!="CW_mm")]
+design_matrix$y = 1 # dummy variable
+```
+
+attempt to zoid!
+```{r eval=FALSE}
+fit_1_prey <- fit_zoid(formula = y ~ CW_mm, 
+                      design_matrix = design_matrix, 
+                      data_matrix = as.matrix(data_matrix),
+                       overdispersion = TRUE,
+                       chains=1,
+                       iter=4000)
+```
+
+
+create the design matrix (site / site type information per observation, aka per crab) and the data matrix (read counts only)
+```{r}
+design_matrix = zoidIN.reads[,which(names(zoidIN.reads)=="CW_mm"), drop=FALSE]
+data_matrix = zoidIN.reads[,which(names(zoidIN.reads)!="CW_mm")]
+design_matrix$y = 1 # dummy variable
+```
+
+attempt to zoid!
+```{r eval=FALSE}
+fit_2_prey <- fit_zoid(formula = y ~ CW_mm, 
+                      design_matrix = design_matrix, 
+                      data_matrix = as.matrix(data_matrix),
+                       overdispersion = TRUE,
+                       chains=1,
+                       iter=4000)
+```
+
+
+save data
+```{r}
+saveRDS(zoidIN.reads,here(resultsdir,'zoidIN_nReads_allTaxa_by_CW.rds'))
+```
+
+
+
+### all taxa, to family
+
+run zoid at a higher taxonomic level -- remake the reads matrix 
+
+**all taxa**: each crab
+```{r}
+crabID.FAMreads.mat <- bind_rows(smdat,
+                            dat %>% dplyr::select(-taxon) %>% rename(taxon=new_taxon)) %>%
+  mutate(tax.group=ifelse(!is.na(family),family,taxon)) %>%
+  group_by(crab_id, tax.group) %>% summarise(crabReads=sum(nReads),ntechs=length(unique(sample_id))) %>%
+  mutate(crabReads_std=crabReads/ntechs) %>% 
+  dplyr::select(-crabReads,ntechs) %>%
+  pivot_wider(id_cols="crab_id", names_from="tax.group",values_from="crabReads_std", values_fill=0) %>%
+  column_to_rownames("crab_id")
+
+## remove rare families
+crabID.FAMreads.mat <- dropspc(crabID.FAMreads.mat, minocc=2)
+crabID.FAMreads.mat <- crabID.FAMreads.mat[which(rowSums(crabID.FAMreads.mat) > 0),]
+```
+
+
+join with carapace widths
+```{r}
+zoidIN.FAMreads <- crabID.FAMreads.mat %>%
+  rownames_to_column("crab_id") %>%
+  left_join(cw.df,by="crab_id") %>%
+  column_to_rownames("crab_id")
+```
+
+
+attempt to zoid!
+```{r}
+design_matrix = zoidIN.FAMreads[,which(names(zoidIN.FAMreads)=="CW_mm"), drop=FALSE]
+data_matrix = zoidIN.FAMreads[,which(names(zoidIN.FAMreads)!="CW_mm")]
+design_matrix$y = 1 # dummy variable
+```
+
+```{r eval=FALSE}
+fit_3_prey <- fit_zoid(formula = y ~ CW_mm, 
+                      design_matrix = design_matrix, 
+                      data_matrix = as.matrix(data_matrix)/1000,
+                       overdispersion = TRUE,
+                       chains=1,
+                       iter=500)
+```
+
+
+save data
+```{r}
+saveRDS(zoidIN.FAMreads,here(resultsdir,'zoidIN_nReads_allTaxaFamilies_by_CW.rds'))
+```
+
+### all taxa, to class
+
+run zoid at a higher taxonomic level -- remake the reads matrix 
+
+**all taxa**: each crab
+```{r}
+crabID.CLASSreads.mat <- bind_rows(smdat,
+                            dat %>% dplyr::select(-taxon) %>% rename(taxon=new_taxon)) %>%
+  mutate(tax.group=ifelse(!is.na(class),class,taxon)) %>%
+  group_by(crab_id, tax.group) %>% summarise(crabReads=sum(nReads),ntechs=length(unique(sample_id))) %>%
+  mutate(crabReads_std=crabReads/ntechs) %>% 
+  dplyr::select(-crabReads,ntechs) %>%
+  pivot_wider(id_cols="crab_id", names_from="tax.group",values_from="crabReads_std", values_fill=0) %>%
+  column_to_rownames("crab_id")
+
+## remove rare families
+crabID.CLASSreads.mat <- dropspc(crabID.CLASSreads.mat, minocc=2)
+crabID.CLASSreads.mat <- crabID.CLASSreads.mat[which(rowSums(crabID.CLASSreads.mat) > 0),]
+```
+
+
+join with carapace widths
+```{r}
+zoidIN.CLASSreads <- crabID.CLASSreads.mat %>%
+  rownames_to_column("crab_id") %>%
+  left_join(cw.df,by="crab_id") %>%
+  column_to_rownames("crab_id")
+```
+
+
+attempt to zoid!
+```{r}
+design_matrix = zoidIN.CLASSreads[,which(names(zoidIN.CLASSreads)=="CW_mm"), drop=FALSE]
+data_matrix = zoidIN.CLASSreads[,which(names(zoidIN.CLASSreads)!="CW_mm")]
+design_matrix$y = 1 # dummy variable
+```
+
+```{r eval=FALSE}
+fit_4_prey <- fit_zoid(formula = y ~ CW_mm, 
+                      design_matrix = design_matrix, 
+                      data_matrix = as.matrix(data_matrix),
+                       overdispersion = TRUE,
+                       chains=1,
+                       iter=4000)
+```
+
+
+save data
+```{r}
+saveRDS(zoidIN.CLASSreads,here(resultsdir,'zoidIN_nReads_allTaxaCLASS_by_CW.rds'))
+```
+
+
+
+
+
+
+### all taxa, to phylum
+
+run zoid at a higher taxonomic level -- remake the reads matrix 
+
+**all taxa**: each crab
+```{r}
+crabID.PHYreads.mat <- bind_rows(smdat,
+                            dat %>% dplyr::select(-taxon) %>% rename(taxon=new_taxon)) %>%
+  mutate(tax.group=ifelse(!is.na(phylum),phylum,taxon)) %>%
+  group_by(crab_id, tax.group) %>% summarise(crabReads=sum(nReads),ntechs=length(unique(sample_id))) %>%
+  mutate(crabReads_std=crabReads/ntechs) %>% 
+  dplyr::select(-crabReads,ntechs) %>%
+  pivot_wider(id_cols="crab_id", names_from="tax.group",values_from="crabReads_std", values_fill=0) %>%
+  column_to_rownames("crab_id")
+
+## remove rare families
+crabID.PHYreads.mat <- dropspc(crabID.PHYreads.mat, minocc=2)
+crabID.PHYreads.mat <- crabID.PHYreads.mat[which(rowSums(crabID.PHYreads.mat) > 0),]
+```
+
+
+join with carapace widths
+```{r}
+zoidIN.PHYreads <- crabID.PHYreads.mat %>%
+  rownames_to_column("crab_id") %>%
+  left_join(cw.df,by="crab_id") %>%
+  column_to_rownames("crab_id")
+```
+
+
+attempt to zoid!
+```{r}
+design_matrix = zoidIN.PHYreads[,which(names(zoidIN.PHYreads)=="CW_mm"), drop=FALSE]
+data_matrix = zoidIN.PHYreads[,which(names(zoidIN.PHYreads)!="CW_mm")]
+design_matrix$y = 1 # dummy variable
+```
+
+```{r eval=FALSE}
+fit_5_prey <- fit_zoid(formula = y ~ CW_mm, 
+                      design_matrix = design_matrix, 
+                      data_matrix = as.matrix(data_matrix)/100,
+                       overdispersion = TRUE,
+                       chains=1,   # for testing; change to 4
+                       iter=500)   # for testing; change to 5000
+```
+
+
+save data
+```{r}
+saveRDS(zoidIN.CLASSreads,here(resultsdir,'zoidIN_nReads_allTaxaCLASS_by_CW.rds'))
+```
+
+
+
+### all taxa, grouped by CW
+
+sum up reads according to carapace width
+```{r}
+readsxCW.mat <- bind_rows(smdat,
+                            dat %>% dplyr::select(-taxon) %>% rename(taxon=new_taxon)) %>%
+  group_by(crab_id, taxon) %>% summarise(crabReads=sum(nReads),ntechs=length(unique(sample_id))) %>%
+  mutate(crabReads_std=crabReads/ntechs) %>% 
+  dplyr::select(-crabReads,ntechs) %>%
+  pivot_wider(id_cols="crab_id", names_from="taxon",values_from="crabReads_std", values_fill=0) %>%
+  left_join(cw.df,by="crab_id") %>%
+  dplyr::select(-crab_id) %>%
+  group_by(CW_mm) %>%
+  summarise_if(is.numeric, sum) %>%
+  column_to_rownames("CW_mm")
+
+# remove rare taxa
+readsxCW.mat <- dropspc(readsxCW.mat, minocc=1)
+```
+
+```{r}
+zoidINxCW <- readsxCW.mat %>% rownames_to_column("CW_mm")
+
+design_matrix = zoidINxCW[,which(names(zoidINxCW)=="CW_mm"), drop=FALSE]
+data_matrix = zoidINxCW[,which(names(zoidINxCW)!="CW_mm")]
+design_matrix$y = 1 # dummy variable
+```
+
+attempt to zoid!
+```{r}
+fit_2_prey <- fit_zoid(formula = y ~ CW_mm, 
+                      design_matrix = design_matrix, 
+                      data_matrix = as.matrix(data_matrix)/10,
+                       overdispersion = TRUE,
+                       chains=4,
+                       iter=5000)
+```
+```
+SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 1).
+Chain 1: Rejecting initial value:
+Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 1:   Stan can't start sampling from this initial value.
+Chain 1: Rejecting initial value:
+Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 1:   Stan can't start sampling from this initial value.
+Chain 1: Rejecting initial value:
+Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 1:   Stan can't start sampling from this initial value.
+Chain 1: Rejecting initial value:
+Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 1:   Stan can't start sampling from this initial value.
+Chain 1: Rejecting initial value:
+Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 1:   Stan can't start sampling from this initial value.
+Chain 1: Rejecting initial value:
+Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 1:   Stan can't start sampling from this initial value.
+Chain 1: 
+Chain 1: Gradient evaluation took 0.004 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 40 seconds.
+Chain 1: Adjust your expectations accordingly!
+Chain 1: 
+Chain 1: 
+Chain 1: Iteration:    1 / 5000 [  0%]  (Warmup)
+Chain 1: Iteration:  500 / 5000 [ 10%]  (Warmup)
+Chain 1: Iteration: 1000 / 5000 [ 20%]  (Warmup)
+Chain 1: Iteration: 1500 / 5000 [ 30%]  (Warmup)
+Chain 1: Iteration: 2000 / 5000 [ 40%]  (Warmup)
+Chain 1: Iteration: 2500 / 5000 [ 50%]  (Warmup)
+Chain 1: Iteration: 2501 / 5000 [ 50%]  (Sampling)
+Chain 1: Iteration: 3000 / 5000 [ 60%]  (Sampling)
+Chain 1: Iteration: 3500 / 5000 [ 70%]  (Sampling)
+Chain 1: Iteration: 4000 / 5000 [ 80%]  (Sampling)
+Chain 1: Iteration: 4500 / 5000 [ 90%]  (Sampling)
+Chain 1: Iteration: 5000 / 5000 [100%]  (Sampling)
+Chain 1: 
+Chain 1:  Elapsed Time: 597.156 seconds (Warm-up)
+Chain 1:                620.286 seconds (Sampling)
+Chain 1:                1217.44 seconds (Total)
+Chain 1: 
+
+SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 2).
+Chain 2: Rejecting initial value:
+Chain 2:   Gradient evaluated at the initial value is not finite.
+Chain 2:   Stan can't start sampling from this initial value.
+Chain 2: Rejecting initial value:
+Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 2:   Stan can't start sampling from this initial value.
+Chain 2: Rejecting initial value:
+Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 2:   Stan can't start sampling from this initial value.
+Chain 2: Rejecting initial value:
+Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 2:   Stan can't start sampling from this initial value.
+Chain 2: Rejecting initial value:
+Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 2:   Stan can't start sampling from this initial value.
+Chain 2: Rejecting initial value:
+Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 2:   Stan can't start sampling from this initial value.
+Chain 2: Rejecting initial value:
+Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 2:   Stan can't start sampling from this initial value.
+Chain 2: 
+Chain 2: Gradient evaluation took 0.005 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 50 seconds.
+Chain 2: Adjust your expectations accordingly!
+Chain 2: 
+Chain 2: 
+Chain 2: Iteration:    1 / 5000 [  0%]  (Warmup)
+Chain 2: Iteration:  500 / 5000 [ 10%]  (Warmup)
+Chain 2: Iteration: 1000 / 5000 [ 20%]  (Warmup)
+Chain 2: Iteration: 1500 / 5000 [ 30%]  (Warmup)
+Chain 2: Iteration: 2000 / 5000 [ 40%]  (Warmup)
+Chain 2: Iteration: 2500 / 5000 [ 50%]  (Warmup)
+Chain 2: Iteration: 2501 / 5000 [ 50%]  (Sampling)
+Chain 2: Iteration: 3000 / 5000 [ 60%]  (Sampling)
+Chain 2: Iteration: 3500 / 5000 [ 70%]  (Sampling)
+Chain 2: Iteration: 4000 / 5000 [ 80%]  (Sampling)
+Chain 2: Iteration: 4500 / 5000 [ 90%]  (Sampling)
+Chain 2: Iteration: 5000 / 5000 [100%]  (Sampling)
+Chain 2: 
+Chain 2:  Elapsed Time: 589.694 seconds (Warm-up)
+Chain 2:                616.284 seconds (Sampling)
+Chain 2:                1205.98 seconds (Total)
+Chain 2: 
+
+SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 3).
+Chain 3: Rejecting initial value:
+Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 3:   Stan can't start sampling from this initial value.
+Chain 3: Rejecting initial value:
+Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 3:   Stan can't start sampling from this initial value.
+Chain 3: 
+Chain 3: Gradient evaluation took 0.004 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 40 seconds.
+Chain 3: Adjust your expectations accordingly!
+Chain 3: 
+Chain 3: 
+Chain 3: Iteration:    1 / 5000 [  0%]  (Warmup)
+Chain 3: Iteration:  500 / 5000 [ 10%]  (Warmup)
+Chain 3: Iteration: 1000 / 5000 [ 20%]  (Warmup)
+Chain 3: Iteration: 1500 / 5000 [ 30%]  (Warmup)
+Chain 3: Iteration: 2000 / 5000 [ 40%]  (Warmup)
+Chain 3: Iteration: 2500 / 5000 [ 50%]  (Warmup)
+Chain 3: Iteration: 2501 / 5000 [ 50%]  (Sampling)
+Chain 3: Iteration: 3000 / 5000 [ 60%]  (Sampling)
+Chain 3: Iteration: 3500 / 5000 [ 70%]  (Sampling)
+Chain 3: Iteration: 4000 / 5000 [ 80%]  (Sampling)
+Chain 3: Iteration: 4500 / 5000 [ 90%]  (Sampling)
+Chain 3: Iteration: 5000 / 5000 [100%]  (Sampling)
+Chain 3: 
+Chain 3:  Elapsed Time: 569.183 seconds (Warm-up)
+Chain 3:                626.436 seconds (Sampling)
+Chain 3:                1195.62 seconds (Total)
+Chain 3: 
+
+SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 4).
+Chain 4: Rejecting initial value:
+Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 4:   Stan can't start sampling from this initial value.
+Chain 4: Rejecting initial value:
+Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 4:   Stan can't start sampling from this initial value.
+Chain 4: Rejecting initial value:
+Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 4:   Stan can't start sampling from this initial value.
+Chain 4: Rejecting initial value:
+Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 4:   Stan can't start sampling from this initial value.
+Chain 4: Rejecting initial value:
+Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 4:   Stan can't start sampling from this initial value.
+Chain 4: 
+Chain 4: Gradient evaluation took 0.003 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 30 seconds.
+Chain 4: Adjust your expectations accordingly!
+Chain 4: 
+Chain 4: 
+Chain 4: Iteration:    1 / 5000 [  0%]  (Warmup)
+Chain 4: Iteration:  500 / 5000 [ 10%]  (Warmup)
+Chain 4: Iteration: 1000 / 5000 [ 20%]  (Warmup)
+Chain 4: Iteration: 1500 / 5000 [ 30%]  (Warmup)
+Chain 4: Iteration: 2000 / 5000 [ 40%]  (Warmup)
+Chain 4: Iteration: 2500 / 5000 [ 50%]  (Warmup)
+Chain 4: Iteration: 2501 / 5000 [ 50%]  (Sampling)
+Chain 4: Iteration: 3000 / 5000 [ 60%]  (Sampling)
+Chain 4: Iteration: 3500 / 5000 [ 70%]  (Sampling)
+Chain 4: Iteration: 4000 / 5000 [ 80%]  (Sampling)
+Chain 4: Iteration: 4500 / 5000 [ 90%]  (Sampling)
+Chain 4: Iteration: 5000 / 5000 [100%]  (Sampling)
+Chain 4: 
+Chain 4:  Elapsed Time: 595.84 seconds (Warm-up)
+Chain 4:                607.274 seconds (Sampling)
+Chain 4:                1203.11 seconds (Total)
+Chain 4: 
+```
+Get the fitted values and label the species / sizes
+```{r}
+fitted_2 <- get_fitted(fit_2_prey)
+
+## add in species / carapace width
+fitted_2 %<>% left_join(data.frame(group=seq(1:dim(data_matrix)[2]),
+                                         species=colnames(data_matrix)), by=c("group"))
+
+fitted_2 %<>% left_join(data.frame(obs=seq(1:dim(data_matrix)[1]),
+                                   CW_mm=design_matrix[,1]),by="obs")
+
+## remove estimated values for taxa that didn't actually show up in the data for a given carapace width
+fitted_2_filter <- fitted_2 %>%
+  left_join(
+    bind_cols(design_matrix,data_matrix) %>% 
+      pivot_longer(cols=2:(dim(data_matrix)[2]+2), names_to="species",values_to="reads")
+  ) %>%
+  filter(CW_mm==5 | (CW_mm!=5 & reads!=0))
+```
+
+
+```{r}
+saveRDS(fit_2_prey, here('data','results','zoid_AllTaxa_GroupedByCW_4chains50K.rds'))
+```
+
+Use the smallest crab size as the reference value (CW 5mm)
+```{r}
+fitted_2_ref <- fitted_2_filter %>%
+  mutate(mean=ifelse(CW_mm==5 & reads==0, 0, mean),
+         median=ifelse(CW_mm==5 & reads==0, 0, median)) %>%
+  filter(CW_mm==5) %>%
+  dplyr::select(group,species,mean,median) %>% rename(ref_mean=mean,ref_median=median) %>%
+  right_join(fitted_2_filter,by=c("group","species")) %>%
+  mutate(mean=ifelse(CW_mm==5 & reads==0, 0, mean),
+         median=ifelse(CW_mm==5 & reads==0, 0, median))
+```
+
+Get the difference between the value at carapace width X and the reference (so that if X > reference, difference is +)
+```{r}
+fitted_2_ref %<>% mutate(diff_mean=mean-ref_mean,
+                     diff_median=median-ref_median)
+```
+
+```{r}
+## add taxonomy
+fitted_2_ref %<>% left_join(bind_rows(dat, smdat %>% mutate(new_taxon=taxon)) %>%
+                          dplyr::select(new_taxon,phylum,class,order,family,genus,species) %>%
+                          distinct(), by=c("species"="new_taxon"))
+
+## remove estimated values for taxa that didn't actually show up in the data for a given carapace width
+
+
+## plot for each phylum 
+for(p in unique(fitted_2_ref$phylum)){
+  if(!is.na(p)){
+  tmp <- ggplot(fitted_2_ref %>% filter(phylum==p), aes(y=diff_mean,x=as.numeric(CW_mm))) +
+    geom_point() + geom_hline(aes(yintercept=0)) +
+    facet_wrap(~species, scales="free_y") + 
+    labs(x="Carapace Width (mm)", y="Difference from 5mm CW", subtitle=p) +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=45,hjust=1))
+  png(here(resultsdir,paste0('zoid_AllTaxa_GroupedByCW_4chains50K_',p,'.png')), res=300,height=2000,width=3000)
+  print(tmp)
+  dev.off()
+  } else{
+    tmp <- ggplot(fitted_2_ref %>% filter(is.na(phylum)), aes(y=diff_mean,x=as.numeric(CW_mm))) +
+    geom_point() + geom_hline(aes(yintercept=0)) +
+    facet_wrap(~species, scales="free_y") + 
+    labs(x="Carapace Width (mm)", y="Difference from 5mm CW", subtitle=p) +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=45,hjust=1))
+  png(here(resultsdir,paste0('zoid_AllTaxa_GroupedByCW_4chains50K_',p,'.png')), res=300,height=2000,width=3000)
+  print(tmp)
+  dev.off()
+  }
+}
 ```
 
 
@@ -259,7 +809,8 @@ coeftest(cw.glm, vcovHC(cw.glm , type="HC0"))
 ## Sparse partial least squares analysis
 
 
-Kelly et al. :
+Djurhuus et al. :
+
 > In order to directly associate specific taxa to environmental variables (Fig. 3), we used sparse partial least square (sPLS) analysis from the R package mixOmics. We applied the sPLS in regression mode, which will model a causal relationship between the lineages and the environmental traits, that is, PLS will predict environmental traits (e.g., temperature) from lineage abundances. This approach enabled us to identify strong correlations between certain taxa and environmental variables without taking into account the global structure of the planktonic community.
 
 
@@ -315,26 +866,6 @@ hist(index.lg.mat, main="histogram of eDNA index (X)")
 #### crab only
 
 Try again, for crab instead of replicates. The carapace width data will be "Y" in the sPLS, and the diet data will be "X"
-
-make the "X" data frame by crab, instead of by replicate. Do this by summing reads across replicates, dividing by the number of replicates in which that taxon was found, and then calculating the eDNA index. 
-```{r}
-crabID.lreads.mat <- dat %>%
-  group_by(crab_id, taxon) %>% summarise(crabReads=sum(nReads),ntechs=length(unique(sample_id))) %>%
-  mutate(crabReads_std=crabReads/ntechs) %>% 
-  dplyr::select(-crabReads,ntechs) %>%
-  pivot_wider(id_cols="crab_id", names_from="taxon",values_from="crabReads_std", values_fill=0) %>%
-  column_to_rownames("crab_id")
-
-index.lg.mat2 <- t(eDNA_index(x=t(crabID.lreads.mat)))
-
-index.lg.df2 <- as.data.frame(t(index.lg.mat2)) %>%
-  rownames_to_column("crab_id") %>% 
-  pivot_longer(cols=2:(dim(index.lg.mat2)[1]+1), names_to="taxon",values_to="DNAindex") %>%
-  left_join(dat %>% dplyr::select(crab_id,site,estuary) %>% distinct(),by="crab_id") %>%
-  left_join(site_names) %>%
-  pivot_wider(names_from=taxon,values_from=DNAindex)
-```
-
 
 ```{r fig.width=3, fig.height=3}
 cw.lg.mat <- as.matrix(cw.df %>% filter(crab_id %in% rownames(index.lg.mat2)) %>%

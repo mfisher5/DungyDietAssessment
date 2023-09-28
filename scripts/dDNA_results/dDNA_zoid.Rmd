@@ -1,0 +1,159 @@
+---
+title: "Zoid - troubleshooting"
+subtitle: "run date: `r format(Sys.time(), '%B %d, %Y')`"
+author: "M Fisher"
+date: 'written 2023-09-26'
+output: 
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+## Goal:
+
+Use zoid to understand how diet varies with instar size (measured as carapace width, mm). 
+Diet information generated with DNA metabarcoding, values in the data matrix represent sequence abundance. 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(here)
+library(vegan)
+library(labdsv)
+library(magrittr)
+library(zoid)
+
+# User inputs
+resultsdir <- 'data/results'
+```
+
+```{r data, include=FALSE}
+cw.df <- readRDS(here('data','metadata','carapace_widths_for_zoid.rds'))
+```
+
+Variation in carapace width looks like: 
+```{r}
+ggplot(cw.df, aes(x=CW_mm)) +
+  geom_histogram() + theme_bw()
+```
+
+
+## All taxa, species or lowest tax level
+
+```{r}
+zoidIN.reads <- readRDS(here(resultsdir,'zoidIN_nReads_allTaxa_by_CW.rds'))
+dim(zoidIN.reads)
+
+```
+
+```{r echo=FALSE}
+zoidIN.reads %>%
+  pivot_longer(1:(dim(zoidIN.reads)[2]-1),names_to="taxon",values_to="reads") %>%
+  ggplot(aes(x=reads/100)) + geom_histogram() +
+  theme_bw() + theme(axis.text.x=element_text(angle=45,hjust=1))
+```
+
+create the design matrix (site / site type information per observation, aka per crab) and the data matrix (read counts only)
+```{r}
+design_matrix = zoidIN.reads[,which(names(zoidIN.reads)=="CW_mm"), drop=FALSE]
+data_matrix = zoidIN.reads[,which(names(zoidIN.reads)!="CW_mm")]
+design_matrix$y = 1 # dummy variable
+```
+
+attempt to zoid!
+```{r eval=FALSE}
+fit_1_prey <- fit_zoid(formula = y ~ CW_mm, 
+                      design_matrix = design_matrix, 
+                      data_matrix = as.matrix(data_matrix),
+                       overdispersion = TRUE,
+                       chains=1,   # for testing; change to 4
+                       iter=20)   # for testing; change to 5000
+```
+
+
+Chain 1: Rejecting initial value:
+Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 1:   Stan can't start sampling from this initial value.
+Chain 1: 
+Chain 1: Initialization between (-2, 2) failed after 100 attempts. 
+Chain 1:  Try specifying initial values, reducing ranges of constrained values, or reparameterizing the model.
+[1] "Error : Initialization failed."
+[1] "error occurred during calling the sampler; sampling not done"
+
+
+
+## All taxa, family
+```{r}
+zoidIN.FAMreads <- readRDS(here(resultsdir,'zoidIN_nReads_allTaxaFamilies_by_CW.rds'))
+dim(zoidIN.FAMreads)
+
+```
+
+```{r echo=FALSE}
+zoidIN.FAMreads %>%
+  pivot_longer(1:(dim(zoidIN.FAMreads)[2]-1),names_to="family",values_to="reads") %>%
+  ggplot(aes(x=family,y=reads/1000)) + geom_boxplot() +
+  theme_bw() + theme(axis.text.x=element_text(angle=45,hjust=1))
+```
+
+create the design matrix (site / site type information per observation, aka per crab) and the data matrix (read counts only)
+```{r}
+design_matrix = zoidIN.FAMreads[,which(names(zoidIN.FAMreads)=="CW_mm"), drop=FALSE]
+data_matrix = zoidIN.FAMreads[,which(names(zoidIN.FAMreads)!="CW_mm")]
+design_matrix$y = 1 # dummy variable
+```
+
+
+attempt to zoid!
+```{r eval=FALSE}
+fit_2_prey <- fit_zoid(formula = y ~ CW_mm, 
+                      design_matrix = design_matrix, 
+                      data_matrix = as.matrix(data_matrix),
+                       overdispersion = TRUE,
+                       chains=1,   # for testing; change to 4
+                       iter=500)   # for testing; change to 5000
+```
+
+Chain 1: Rejecting initial value:
+Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 1:   Stan can't start sampling from this initial value.
+Chain 1: 
+Chain 1: Initialization between (-2, 2) failed after 100 attempts. 
+Chain 1:  Try specifying initial values, reducing ranges of constrained values, or reparameterizing the model.
+[1] "Error : Initialization failed."
+[1] "error occurred during calling the sampler; sampling not done"
+
+
+## All taxa, class
+
+```{r}
+zoidIN.CLASSreads <- readRDS(here(resultsdir,'zoidIN_nReads_allTaxaCLASS_by_CW.rds'))
+dim(zoidIN.CLASSreads)
+```
+```{r echo=FALSE}
+zoidIN.CLASSreads %>%
+  pivot_longer(1:(dim(zoidIN.CLASSreads)[2]-1),names_to="class",values_to="reads") %>%
+  ggplot(aes(x=class,y=reads/1000)) + geom_boxplot() +
+  theme_bw() + theme(axis.text.x=element_text(angle=45,hjust=1))
+```
+
+create the design matrix (site / site type information per observation, aka per crab) and the data matrix (read counts only)
+```{r}
+design_matrix = zoidIN.CLASSreads[,which(names(zoidIN.CLASSreads)=="CW_mm"), drop=FALSE]
+data_matrix = zoidIN.CLASSreads[,which(names(zoidIN.CLASSreads)!="CW_mm")]
+design_matrix$y = 1 # dummy variable
+```
+
+
+
+attempt to zoid!
+```{r eval=FALSE}
+fit_3_prey <- fit_zoid(formula = y ~ CW_mm, 
+                      design_matrix = design_matrix, 
+                      data_matrix = as.matrix(data_matrix),
+                       overdispersion = TRUE,
+                       chains=1,   # for testing; change to 4
+                       iter=500)   # for testing; change to 5000
+```
+
