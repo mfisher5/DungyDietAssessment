@@ -51,6 +51,9 @@ smdat %<>%
                                     ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
 
 alldat <- bind_rows(dat,smdat)
+
+## carapace width
+cw.df <- readRDS(here('../../','data','metadata','carapace_widths_for_zoid.rds'))
 ```
 <br>
 
@@ -151,7 +154,11 @@ colnames(oadat)
 ```
 
 ```{r}
-taxdat %<>% left_join(oadat, by="functional_group")
+if(!knitting){
+  
+  taxdat %<>% left_join(oadat, by="functional_group")
+  
+}
 ```
 
 
@@ -161,8 +168,10 @@ Check the raw survival scalar frequencies across all prey taxa identified in 3 p
 ```{r}
 ggplot(taxdat, aes(x=raw_survival_scalar)) +
   geom_histogram() + 
-  geom_vline(aes(xintercept=mean(taxdat$raw_survival_scalar))) +
+  geom_vline(aes(xintercept=0)) +
+  geom_vline(aes(xintercept=mean(taxdat$raw_survival_scalar)),lty=2) +
   geom_text(aes(x=mean(taxdat$raw_survival_scalar), y=5, label=round(mean(taxdat$raw_survival_scalar),2))) +
+  labs(x="OA survival scalar",y="Count of Taxa", subtitle="Prey in 3 or more crab") +
   theme_bw()
 ```
 
@@ -243,6 +252,18 @@ diets_out <- taxdat %>% mutate(OA.diet.group=ifelse(raw_survival_scalar < q25, "
 write_csv(diets_out, here(bdir,'OAdiets_HiLo.csv'))
 
 }
+```
+
+```{r}
+ggplot(taxdat, aes(x=raw_survival_scalar)) +
+  geom_histogram() + 
+  annotate(geom="rect",xmax=q25-0.01,xmin=min(taxdat$raw_survival_scalar)-0.1, ymin=0,ymax=19, fill="red",alpha=0.1) +
+  annotate(geom="rect",xmin=q75, xmax=max(taxdat$raw_survival_scalar)+0.1, ymin=0,ymax=19, fill="blue",alpha=0.1) +
+  geom_vline(aes(xintercept=0)) +
+  geom_vline(aes(xintercept=mean(taxdat$raw_survival_scalar)),lty=2) +
+  geom_text(aes(x=mean(taxdat$raw_survival_scalar), y=5, label=round(mean(taxdat$raw_survival_scalar),2))) +
+  labs(x="OA survival scalar",y="Count of Taxa", subtitle="Prey in 3 or more crab") +
+  theme_bw()
 ```
 
 
@@ -334,5 +355,59 @@ content, 5994 callg DW, and 7103 callg DW (Table 1). The caloric content of the 
 
 
 
+
+
+
+
+### exposure
+
+What % of diet for each crab is made up of “strong negative impact” taxa?
+
+```{r}
+crab_exposure <- alldat %>% mutate(new_taxon=ifelse(new_taxon=="too small", taxon, new_taxon)) %>%
+  filter(taxon %in% taxdat$new_taxon | new_taxon %in% taxdat$new_taxon) %>%
+  left_join(diets_out %>% 
+              filter(OA.diet.group=="low") %>% mutate(OA.diet.group="high"))
+
+crab_exposure %<>% mutate(OA.diet.group=ifelse(is.na(OA.diet.group), "other",OA.diet.group)) %>%
+  group_by(estuary,site,crab_id) %>%
+  mutate(total_common_taxa=length(unique(new_taxon))) %>% ungroup() %>%
+  group_by(estuary,site,crab_id,total_common_taxa, OA.diet.group) %>%
+  summarise(OA.group.taxa=length(unique(new_taxon))) %>%
+  mutate(p.group.taxa=OA.group.taxa/total_common_taxa)
+```
+```{r}
+crab_exposure %>% filter(OA.diet.group=="high") %>%
+  ggplot(aes(x=p.group.taxa)) +
+  geom_histogram() +
+  geom_vline(aes(xintercept=mean(filter(crab_exposure,OA.diet.group=="high")$p.group.taxa)),lty=2) +
+  labs(x="Prop. Diet with High OA Impact", y="Crab count")
+```
+
+
+```{r}
+crab_exposure %>% filter(OA.diet.group=="high") %>%
+  ggplot(aes(x=estuary, y=p.group.taxa)) +
+  geom_boxplot(color="gray30") +
+  geom_jitter(width=0.1) +
+  labs(x="Estuary",y="Prop. Diet with High OA Impact")
+```
+
+
+```{r}
+crab_exposure %>% filter(OA.diet.group=="high") %>%
+  left_join(cw.df, by=c("crab_id")) %>%
+  ggplot(aes(x=CW_mm, y=p.group.taxa)) +
+  geom_point() +
+  labs(y="Prop. Diet with High OA Impact", x="Carapace Width (mm)")
+```
+
+
+```{r}
+shapiro.test(filter(crab_exposure,OA.diet.group=="high")$p.group.taxa)
+summary(lm(p.group.taxa ~ CW_mm, data=crab_exposure %>% filter(OA.diet.group=="high") %>%
+             left_join(cw.df, by=c("crab_id"))))
+
+```
 
 
