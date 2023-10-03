@@ -1155,7 +1155,7 @@ ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) +
                   aes(x=CCA1,y=CA1), pch=1,inherit.aes = FALSE) +
   geom_text_repel(data=filter(cc1.species, label %in% lowest_cca) %>% mutate(label2=paste0("italic('",label,"')")),
                   aes(x=CCA1,y=CA1, label=label2), 
-                  min.segment.length=0.01,nudge_y=-1,inherit.aes = FALSE,parse=TRUE) +
+                  min.segment.length=0.01, nudge_y=-1,inherit.aes = FALSE,parse=TRUE) +
   geom_point(data=filter(cc1.species, label %in% lowest_cca),
                   aes(x=CCA1,y=CA1),pch=1,inherit.aes = FALSE) +
   geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*6,yend=cc1.biplot$CA1),
@@ -1168,7 +1168,28 @@ ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) +
 
 
 
-
+```{r}
+png(here('figs','Fig4_CCA_AllTaxa_v_CW_label90CI.png'), res=300,width=2100,height=1500)
+ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) + 
+  geom_point() + 
+  geom_text_repel(data=filter(cc1.species, label %in% highest_cca),
+                  aes(x=CCA1,y=CA1, label=label), 
+                  min.segment.length=0.01,nudge_y=1,inherit.aes = FALSE) +
+  geom_point(data=filter(cc1.species, label %in% highest_cca),
+                  aes(x=CCA1,y=CA1), pch=1,inherit.aes = FALSE) +
+  geom_text_repel(data=filter(cc1.species, label %in% lowest_cca) %>% mutate(label2=paste0("italic('",label,"')")),
+                  aes(x=CCA1,y=CA1, label=label2), 
+                  min.segment.length=0.01,nudge_y=-1,inherit.aes = FALSE,parse=TRUE) +
+  geom_point(data=filter(cc1.species, label %in% lowest_cca),
+                  aes(x=CCA1,y=CA1),pch=1,inherit.aes = FALSE) +
+  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*6,yend=cc1.biplot$CA1),
+               arrow = arrow(length = unit(0.2, "cm")),
+                         colour = "gray50", inherit.aes = FALSE) +
+  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*5, y = cc1.biplot$CA1+0.3, label = "label"), 
+            colour = "gray50", inherit.aes = FALSE) +
+   theme_bw()
+dev.off()
+```
 
 
 ## Sparse partial least squares analysis
@@ -1177,6 +1198,11 @@ ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) +
 Djurhuus et al. :
 
 > In order to directly associate specific taxa to environmental variables (Fig. 3), we used sparse partial least square (sPLS) analysis from the R package mixOmics. We applied the sPLS in regression mode, which will model a causal relationship between the lineages and the environmental traits, that is, PLS will predict environmental traits (e.g., temperature) from lineage abundances. This approach enabled us to identify strong correlations between certain taxa and environmental variables without taking into account the global structure of the planktonic community.
+
+
+### quick start
+
+
 
 
 
