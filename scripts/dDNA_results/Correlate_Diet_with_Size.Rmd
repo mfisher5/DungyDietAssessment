@@ -233,21 +233,20 @@ index.sm.df2 <- as.data.frame(index.sm.mat2) %>%
 
 Since we're only interested in the extent to which the prevalence of each taxon is upweighted / downweighted when size increases, it's ok to use the sequence abundances as the zoid input (?). 
 
-Then the covariate will be carapace width
+Then the covariate will be carapace width.
+
+As with the green crab diet data, the general sparsity of the data is still a problem for zoid. So the option is to either drop species or aggregate them into groups. 
 
 ### all taxa
 
-Remove rare taxa that only occur in two crab (not super useful for comparing across sizes). the function `dropspc` assumes that the species are in columns of the matrix
+Remove taxa that occur in fewer than ten crab (not super useful for comparing across sizes). the function `dropspc` assumes that the species are in columns of the matrix. Otherwise, **zoid will not run**
 ```{r}
-crabID.reads.filter.mat <- dropspc(crabID.reads.mat, minocc=2)
+crabID.reads.filter.mat <- dropspc(crabID.reads.mat, minocc=9)
 crabID.reads.filter.mat <- crabID.reads.filter.mat[which(rowSums(crabID.reads.filter.mat) > 0),]
 
 dim(crabID.reads.mat); dim(crabID.reads.filter.mat)
 ```
-standardize to proportions of total reads for the given crab (?) <-- but doesn't this also depend on the number of other species that were detected in the stomach contents, so not comparable across crab?
-```{r}
-crabID.preads.mat <- decostand(x=crabID.reads.filter.mat,method="total",MARGIN=1)
-```
+
 
 join with carapace widths
 ```{r}
@@ -257,33 +256,9 @@ zoidIN.reads <- crabID.reads.filter.mat %>%
   column_to_rownames("crab_id")
 
 
-zoidIN.preads <- crabID.preads.mat %>%
-  rownames_to_column("crab_id") %>%
-  left_join(cw.df,by="crab_id") %>%
-  column_to_rownames("crab_id")
 
-any(is.na(zoidIN.preads$CW_mm))
 any(is.na(zoidIN.reads$CW_mm))
 ```
-
-
-create the design matrix (site / site type information per observation, aka per crab) and the data matrix (read counts only)
-```{r}
-design_matrix = zoidIN.preads[,which(names(zoidIN.preads)=="CW_mm"), drop=FALSE]
-data_matrix = zoidIN.preads[,which(names(zoidIN.preads)!="CW_mm")]
-design_matrix$y = 1 # dummy variable
-```
-
-attempt to zoid!
-```{r eval=FALSE}
-fit_1_prey <- fit_zoid(formula = y ~ CW_mm, 
-                      design_matrix = design_matrix, 
-                      data_matrix = as.matrix(data_matrix),
-                       overdispersion = TRUE,
-                       chains=1,
-                       iter=4000)
-```
-
 
 create the design matrix (site / site type information per observation, aka per crab) and the data matrix (read counts only)
 ```{r}
@@ -296,71 +271,41 @@ attempt to zoid!
 ```{r eval=FALSE}
 fit_2_prey <- fit_zoid(formula = y ~ CW_mm, 
                       design_matrix = design_matrix, 
-                      data_matrix = as.matrix(data_matrix),
-                       overdispersion = TRUE,
-                       chains=1,
-                       iter=4000)
-```
-
-
-save data
-```{r}
-saveRDS(zoidIN.reads,here(resultsdir,'zoidIN_nReads_allTaxa_by_CW.rds'))
-```
-
-
-
-### all taxa, to family
-
-run zoid at a higher taxonomic level -- remake the reads matrix 
-
-**all taxa**: each crab
-```{r}
-crabID.FAMreads.mat <- bind_rows(smdat,
-                            dat %>% dplyr::select(-taxon) %>% rename(taxon=new_taxon)) %>%
-  mutate(tax.group=ifelse(!is.na(family),family,taxon)) %>%
-  group_by(crab_id, tax.group) %>% summarise(crabReads=sum(nReads),ntechs=length(unique(sample_id))) %>%
-  mutate(crabReads_std=crabReads/ntechs) %>% 
-  dplyr::select(-crabReads,ntechs) %>%
-  pivot_wider(id_cols="crab_id", names_from="tax.group",values_from="crabReads_std", values_fill=0) %>%
-  column_to_rownames("crab_id")
-
-## remove rare families
-crabID.FAMreads.mat <- dropspc(crabID.FAMreads.mat, minocc=2)
-crabID.FAMreads.mat <- crabID.FAMreads.mat[which(rowSums(crabID.FAMreads.mat) > 0),]
-```
-
-
-join with carapace widths
-```{r}
-zoidIN.FAMreads <- crabID.FAMreads.mat %>%
-  rownames_to_column("crab_id") %>%
-  left_join(cw.df,by="crab_id") %>%
-  column_to_rownames("crab_id")
-```
-
-
-attempt to zoid!
-```{r}
-design_matrix = zoidIN.FAMreads[,which(names(zoidIN.FAMreads)=="CW_mm"), drop=FALSE]
-data_matrix = zoidIN.FAMreads[,which(names(zoidIN.FAMreads)!="CW_mm")]
-design_matrix$y = 1 # dummy variable
-```
-
-```{r eval=FALSE}
-fit_3_prey <- fit_zoid(formula = y ~ CW_mm, 
-                      design_matrix = design_matrix, 
                       data_matrix = as.matrix(data_matrix)/1000,
                        overdispersion = TRUE,
                        chains=1,
-                       iter=500)
+                       iter=4000,overdispersion_sd = 0.1)
 ```
 
 
 save data
 ```{r}
-saveRDS(zoidIN.FAMreads,here(resultsdir,'zoidIN_nReads_allTaxaFamilies_by_CW.rds'))
+saveRDS(zoidIN.reads,here(resultsdir,'zoidIN_nReads_allTaxa10plus_by_CW.rds'))
 ```
+
+
+standardize to proportions of total reads for the given crab (?) <-- but doesn't this also depend on the number of other species that were detected in the stomach contents, so not comparable across crab?
+```{r eval=FALSE}
+# crabID.preads.mat <- decostand(x=crabID.reads.filter.mat,method="total",MARGIN=1)
+# zoidIN.preads <- crabID.preads.mat %>%
+#   rownames_to_column("crab_id") %>%
+#   left_join(cw.df,by="crab_id") %>%
+#   column_to_rownames("crab_id")
+
+# any(is.na(zoidIN.preads$CW_mm))
+
+# design_matrix = zoidIN.preads[,which(names(zoidIN.preads)=="CW_mm"), drop=FALSE]
+# data_matrix = zoidIN.preads[,which(names(zoidIN.preads)!="CW_mm")]
+# design_matrix$y = 1 # dummy variable
+#
+# fit_1_prey <- fit_zoid(formula = y ~ CW_mm,
+#                       design_matrix = design_matrix,
+#                       data_matrix = as.matrix(data_matrix),
+#                        overdispersion = TRUE,
+#                        chains=1,
+#                        iter=4000)
+```
+
 
 ### all taxa, to class
 
@@ -378,7 +323,7 @@ crabID.CLASSreads.mat <- bind_rows(smdat,
   column_to_rownames("crab_id")
 
 ## remove rare families
-crabID.CLASSreads.mat <- dropspc(crabID.CLASSreads.mat, minocc=2)
+crabID.CLASSreads.mat <- dropspc(crabID.CLASSreads.mat, minocc=7)
 crabID.CLASSreads.mat <- crabID.CLASSreads.mat[which(rowSums(crabID.CLASSreads.mat) > 0),]
 ```
 
@@ -397,15 +342,13 @@ attempt to zoid!
 design_matrix = zoidIN.CLASSreads[,which(names(zoidIN.CLASSreads)=="CW_mm"), drop=FALSE]
 data_matrix = zoidIN.CLASSreads[,which(names(zoidIN.CLASSreads)!="CW_mm")]
 design_matrix$y = 1 # dummy variable
-```
 
-```{r eval=FALSE}
 fit_4_prey <- fit_zoid(formula = y ~ CW_mm, 
                       design_matrix = design_matrix, 
-                      data_matrix = as.matrix(data_matrix),
+                      data_matrix = as.matrix(data_matrix)/1000,
                        overdispersion = TRUE,
                        chains=1,
-                       iter=4000)
+                       iter=4000, overdispersion_sd = 0.1)
 ```
 
 
@@ -435,7 +378,7 @@ crabID.PHYreads.mat <- bind_rows(smdat,
   column_to_rownames("crab_id")
 
 ## remove rare families
-crabID.PHYreads.mat <- dropspc(crabID.PHYreads.mat, minocc=2)
+crabID.PHYreads.mat <- dropspc(crabID.PHYreads.mat, minocc=4)
 crabID.PHYreads.mat <- crabID.PHYreads.mat[which(rowSums(crabID.PHYreads.mat) > 0),]
 ```
 
@@ -454,15 +397,14 @@ attempt to zoid!
 design_matrix = zoidIN.PHYreads[,which(names(zoidIN.PHYreads)=="CW_mm"), drop=FALSE]
 data_matrix = zoidIN.PHYreads[,which(names(zoidIN.PHYreads)!="CW_mm")]
 design_matrix$y = 1 # dummy variable
-```
 
-```{r eval=FALSE}
 fit_5_prey <- fit_zoid(formula = y ~ CW_mm, 
                       design_matrix = design_matrix, 
-                      data_matrix = as.matrix(data_matrix)/100,
+                      data_matrix = as.matrix(data_matrix)/1000,
                        overdispersion = TRUE,
                        chains=1,   # for testing; change to 4
-                       iter=500)   # for testing; change to 5000
+                       iter=500,
+                      overdispersion_sd = 0.1)   # for testing; change to 5000
 ```
 
 
@@ -502,7 +444,7 @@ design_matrix$y = 1 # dummy variable
 ```
 
 attempt to zoid!
-```{r}
+```{r eval=FALSE}
 fit_2_prey <- fit_zoid(formula = y ~ CW_mm, 
                       design_matrix = design_matrix, 
                       data_matrix = as.matrix(data_matrix)/10,
@@ -671,6 +613,17 @@ Chain 4:                607.274 seconds (Sampling)
 Chain 4:                1203.11 seconds (Total)
 Chain 4: 
 ```
+
+
+```{r eval=FALSE}
+saveRDS(fit_2_prey, here('data','results','zoid_AllTaxa_GroupedByCW_4chains50K.rds'))
+```
+```{r echo=FALSE}
+fit_2_prey <- readRDS(here('data','results','zoid_AllTaxa_GroupedByCW_4chains50K.rds'))
+```
+
+
+
 Get the fitted values and label the species / sizes
 ```{r}
 fitted_2 <- get_fitted(fit_2_prey)
@@ -692,9 +645,6 @@ fitted_2_filter <- fitted_2 %>%
 ```
 
 
-```{r}
-saveRDS(fit_2_prey, here('data','results','zoid_AllTaxa_GroupedByCW_4chains50K.rds'))
-```
 
 Use the smallest crab size as the reference value (CW 5mm)
 ```{r}
@@ -837,251 +787,13 @@ coeftest(cw.glm, vcovHC(cw.glm , type="HC0"))
 
 ### CCA 
 
-#### Large Taxa
-Use the eDNA index values to conduct a canonical correlation analysis. 
-
-Drop rare species (occur in < 3 crab) 
-```{r}
-lg.index.filter.mat <- dropspc(as.matrix(index.lg.df2[,5:dim(index.lg.df2)[2]]), minocc=2)
-# add row names back on
-rownames(lg.index.filter.mat) <- index.lg.df2$crab_id
-lg.index.filter.mat <- lg.index.filter.mat[which(rowSums(lg.index.filter.mat) > 0),]
-
-dim(lg.index.filter.mat); dim(index.lg.df2)
-```
-
-add carapace widths
-```{r}
-lg.index.filter.df <- as.data.frame(lg.index.filter.mat) %>%
-  rownames_to_column(var="crab_id") %>%
-  left_join(cw.df,by="crab_id")
-
-n <- dim(lg.index.filter.df)[2]
-```
-
-run CCA
-```{r}
-cc1 <- cca(X=as.matrix(lg.index.filter.df[,2:(n-1)]), Y=lg.index.filter.df[,n, drop=FALSE])
-plot(cc1)
-```
-Plot without *Sepulidae* and sites 50/27
-```{r}
-cc1.obj <- fortify(cc1)
-
-cc1.sites <- cc1.obj %>% filter(score=="sites") %>% dplyr::select(label,CCA1,CA1) %>% 
-  mutate(CCA1=as.numeric(CCA1), CA1=as.numeric(CA1)) %>%
-  mutate(crab_id=as.character(lg.index.filter.df[,1])) %>%
-  left_join(dplyr::select(index.df2, crab_id, site, estuary) %>% distinct(), by="crab_id")
-
-cc1.species <- cc1.obj %>% filter(score=="species") %>% dplyr::select(label,CCA1,CA1) %>% 
-  mutate(CCA1=as.numeric(CCA1), CA1=as.numeric(CA1))
-```
-
-```{r}
-want <- cc1.obj$score == "biplot"
-cc1.biplot <- as.data.frame(cc1.obj[want, , drop = FALSE ]) %>%
-  mutate(label="Carapace\nwidth")
-```
-
-```{r}
-ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) + 
-  geom_point() + 
-  geom_text(data=cc1.species,aes(x=CCA1,y=CA1, label=label), inherit.aes = FALSE) +
-  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*4,yend=cc1.biplot$CA1),
-               arrow = arrow(length = unit(0.2, "cm")),
-                         colour = "darkblue", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*3.5, y = cc1.biplot$CA1+0.3, label = "label"), 
-            colour = "darkblue", inherit.aes = FALSE) +
-   theme_bw()
-```
-
-Plot without sites 50/27, and *Serpulidae*
-
-```{r}
-ggplot(filter(cc1.sites, !(label %in% c("sit50","sit27"))),aes(x=CCA1,y=CA1,color=estuary)) + 
-  geom_point() + 
-  geom_text(data=filter(cc1.species, label!= "Serpulidae"),aes(x=CCA1,y=CA1, label=label), inherit.aes = FALSE) +
-  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*4,yend=cc1.biplot$CA1),
-               arrow = arrow(length = unit(0.2, "cm")),
-                         colour = "darkblue", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*3.5, y = cc1.biplot$CA1+0.3, label = "label"), 
-            colour = "darkblue", inherit.aes = FALSE) +
-   theme_bw()
-```
-
-
-Plot only with species labels for taxa on far ends of CCA1
-```{r}
-tmp.lm <- lm(CCA1 ~ 1,data=cc1.species)
-ci99.species <- confint(tmp.lm,level=0.99)
-
-lowest_cca <- cc1.species %>% filter(CCA1 < ci99.species[1]) %>% arrange(CCA1) %>% pull(label)
-highest_cca <- cc1.species %>% filter(CCA1 > ci99.species[2]) %>% arrange(CCA1) %>% pull(label)
-```
-
-
-```{r}
-p.cca.high <- ggplot(filter(cc1.sites, !(label %in% c("sit50","sit27"))),aes(x=CCA1,y=CA1,color=estuary)) + 
-  geom_point() + 
-  geom_text_repel(data=filter(cc1.species, label %in% highest_cca & label !="Serpulidae"),
-                  aes(x=CCA1,y=CA1, label=label), 
-                  min.segment.length=0.01,size=3, inherit.aes = FALSE) +
-  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*4,yend=cc1.biplot$CA1),
-               arrow = arrow(length = unit(0.2, "cm")),
-                         colour = "darkblue", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*3.5, y = cc1.biplot$CA1+0.3, label = "label"), 
-            colour = "darkblue", inherit.aes = FALSE) +
-   theme_bw()
-
-p.cca.low <- ggplot(filter(cc1.sites, !(label %in% c("sit50","sit27"))),aes(x=CCA1,y=CA1,color=estuary)) + 
-  geom_point() + 
-  geom_text_repel(data=filter(cc1.species, label %in% lowest_cca & label !="Serpulidae"),
-                  aes(x=CCA1,y=CA1, label=label), 
-                  min.segment.length=0.01,size=3,inherit.aes = FALSE) +
-  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*4,yend=cc1.biplot$CA1),
-               arrow = arrow(length = unit(0.2, "cm")),
-                         colour = "darkblue", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*3.5, y = cc1.biplot$CA1+0.3, label = "label"), 
-            colour = "darkblue", inherit.aes = FALSE) +
-   theme_bw()
-
-plot_grid(p.cca.low+theme(legend.position="none"),p.cca.high, rel_widths=c(0.8,1))
-```
-
-```{r}
-png(here('figs','Fig4_CCA_lgTax_v_CW.png'),res=300,height=1400,width=3000)
-plot_grid(p.cca.low+theme(legend.position="none"),p.cca.high + theme(axis.title.y=element_blank(),axis.text.y=element_blank()), rel_widths=c(0.8,1), labels=c("(a)","(b)"))
-dev.off()
-```
-
-
-
-#### Single-celled Taxa
-
-Use the eDNA index values to conduct a canonical correlation analysis. 
-
-Drop rare species (occur in < 3 crab) 
-```{r}
-sm.index.filter.mat <- dropspc(as.matrix(index.sm.df2[,5:dim(index.sm.df2)[2]]), minocc=2)
-# add row names back on
-rownames(sm.index.filter.mat) <- index.sm.df2$crab_id
-sm.index.filter.mat <- sm.index.filter.mat[which(rowSums(sm.index.filter.mat) > 0),]
-
-dim(sm.index.filter.mat); dim(index.sm.df2)
-```
-
-add carapace widths
-```{r}
-sm.index.filter.df <- as.data.frame(sm.index.filter.mat) %>%
-  rownames_to_column(var="crab_id") %>%
-  left_join(cw.df,by="crab_id")
-
-n <- dim(sm.index.filter.df)[2]
-```
-
-run CCA
-```{r}
-cc1 <- cca(X=as.matrix(sm.index.filter.df[,2:(n-1)]), Y=sm.index.filter.df[,n, drop=FALSE])
-plot(cc1)
-```
-
-```{r}
-cc1.obj <- fortify(cc1)
-
-cc1.sites <- cc1.obj %>% filter(score=="sites") %>% dplyr::select(label,CCA1,CA1) %>% 
-  mutate(CCA1=as.numeric(CCA1), CA1=as.numeric(CA1)) %>%
-  mutate(crab_id=as.character(sm.index.filter.df[,1])) %>%
-  left_join(dplyr::select(index.sm.df2, crab_id, site, estuary) %>% distinct(), by="crab_id")
-
-cc1.species <- cc1.obj %>% filter(score=="species") %>% dplyr::select(label,CCA1,CA1) %>% 
-  mutate(CCA1=as.numeric(CCA1), CA1=as.numeric(CA1))
-```
-
-```{r}
-want <- cc1.obj$score == "biplot"
-cc1.biplot <- as.data.frame(cc1.obj[want, , drop = FALSE ]) %>%
-  mutate(label="Carapace\nwidth")
-```
-
-```{r}
-ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) + 
-  geom_point() + 
-  geom_text(data=cc1.species,aes(x=CCA1,y=CA1, label=label), inherit.aes = FALSE) +
-  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*4,yend=cc1.biplot$CA1),
-               arrow = arrow(length = unit(0.2, "cm")),
-                         colour = "darkblue", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*3.5, y = cc1.biplot$CA1+0.3, label = "label"), 
-            colour = "darkblue", inherit.aes = FALSE) +
-   theme_bw()
-```
-
-Plot without site 32, and *Ditylum brightwelliie*
-
-```{r}
-ggplot(filter(cc1.sites, !(label %in% c("sit32"))),aes(x=CCA1,y=CA1,color=estuary)) + 
-  geom_point() + 
-  geom_text(data=filter(cc1.species, label!= "Ditylum brightwellii"),aes(x=CCA1,y=CA1, label=label), inherit.aes = FALSE) +
-  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*4,yend=cc1.biplot$CA1),
-               arrow = arrow(length = unit(0.2, "cm")),
-                         colour = "darkblue", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*3.5, y = cc1.biplot$CA1+0.3, label = "label"), 
-            colour = "darkblue", inherit.aes = FALSE) +
-   theme_bw()
-```
-
-
-Plot only with species labels for taxa on far ends of CCA1
-```{r}
-tmp.lm <- lm(CCA1 ~ 1,data=cc1.species)
-ci99.species <- confint(tmp.lm,level=0.99)
-
-lowest_cca <- cc1.species %>% filter(CCA1 < ci99.species[1]) %>% arrange(CCA1) %>% pull(label)
-highest_cca <- cc1.species %>% filter(CCA1 > ci99.species[2]) %>% arrange(CCA1) %>% pull(label)
-```
-
-
-```{r}
-p.cca.high <- ggplot(filter(cc1.sites, !(label %in% c("sit32"))),aes(x=CCA1,y=CA1,color=estuary)) + 
-  geom_point() + 
-  geom_text_repel(data=filter(cc1.species, label %in% highest_cca & label !="Ditylum brightwellii"),
-                  aes(x=CCA1,y=CA1, label=label), 
-                  min.segment.length=0.01,size=3, inherit.aes = FALSE) +
-  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*4,yend=cc1.biplot$CA1),
-               arrow = arrow(length = unit(0.2, "cm")),
-                         colour = "darkblue", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*3.5, y = cc1.biplot$CA1+0.3, label = "label"), 
-            colour = "darkblue", inherit.aes = FALSE) +
-   theme_bw()
-
-p.cca.low <- ggplot(filter(cc1.sites, !(label %in% c("sit32"))),aes(x=CCA1,y=CA1,color=estuary)) + 
-  geom_point() + 
-  geom_text_repel(data=filter(cc1.species, label %in% lowest_cca & label !="Ditylum brightwellii"),
-                  aes(x=CCA1,y=CA1, label=label), 
-                  min.segment.length=0.01,size=3,inherit.aes = FALSE) +
-  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*4,yend=cc1.biplot$CA1),
-               arrow = arrow(length = unit(0.2, "cm")),
-                         colour = "darkblue", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*3.5, y = cc1.biplot$CA1+0.3, label = "label"), 
-            colour = "darkblue", inherit.aes = FALSE) +
-   theme_bw()
-
-plot_grid(p.cca.low+theme(legend.position="none"),p.cca.high, rel_widths=c(0.8,1))
-```
-
-```{r}
-png(here('figs','Fig4_CCA_smTax_v_CW.png'),res=300,height=1400,width=3000)
-plot_grid(p.cca.low+theme(legend.position="none"),p.cca.high + theme(axis.title.y=element_blank(),axis.text.y=element_blank()), rel_widths=c(0.8,1), labels=c("(a)","(b)"))
-dev.off()
-```
-
-
 #### All Taxa
 
 Use the eDNA index values to conduct a canonical correlation analysis. 
 
-Drop rare species (occur in < 10 crab) 
+Drop rare species (occur in < 5 crab) 
 ```{r}
-crabID.index.filter.mat <- dropspc(as.matrix(index.df2[,5:dim(index.df2)[2]]), minocc=)
+crabID.index.filter.mat <- dropspc(as.matrix(index.df2[,5:dim(index.df2)[2]]), minocc=5)
 # add row names back on
 rownames(crabID.index.filter.mat) <- index.df2$crab_id
 crabID.index.filter.mat <- crabID.index.filter.mat[which(rowSums(crabID.index.filter.mat) > 0),]
@@ -1150,12 +862,12 @@ ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) +
   geom_point() + 
   geom_text_repel(data=filter(cc1.species, label %in% highest_cca),
                   aes(x=CCA1,y=CA1, label=label), 
-                  min.segment.length=0.01,nudge_y=1,inherit.aes = FALSE) +
+                  min.segment.length=0.01,ylim=c(2,4),inherit.aes = FALSE) +
   geom_point(data=filter(cc1.species, label %in% highest_cca),
                   aes(x=CCA1,y=CA1), pch=1,inherit.aes = FALSE) +
   geom_text_repel(data=filter(cc1.species, label %in% lowest_cca) %>% mutate(label2=paste0("italic('",label,"')")),
                   aes(x=CCA1,y=CA1, label=label2), 
-                  min.segment.length=0.01, nudge_y=-1,inherit.aes = FALSE,parse=TRUE) +
+                  min.segment.length=0.01, nudge_y=-1,nudge_x=-0.75,inherit.aes = FALSE,parse=TRUE) +
   geom_point(data=filter(cc1.species, label %in% lowest_cca),
                   aes(x=CCA1,y=CA1),pch=1,inherit.aes = FALSE) +
   geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*6,yend=cc1.biplot$CA1),
@@ -1172,14 +884,14 @@ ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) +
 png(here('figs','Fig4_CCA_AllTaxa_v_CW_label90CI.png'), res=300,width=2100,height=1500)
 ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) + 
   geom_point() + 
-  geom_text_repel(data=filter(cc1.species, label %in% highest_cca),
+ geom_text_repel(data=filter(cc1.species, label %in% highest_cca),
                   aes(x=CCA1,y=CA1, label=label), 
-                  min.segment.length=0.01,nudge_y=1,inherit.aes = FALSE) +
+                  min.segment.length=0.01,ylim=c(2,4),inherit.aes = FALSE) +
   geom_point(data=filter(cc1.species, label %in% highest_cca),
                   aes(x=CCA1,y=CA1), pch=1,inherit.aes = FALSE) +
   geom_text_repel(data=filter(cc1.species, label %in% lowest_cca) %>% mutate(label2=paste0("italic('",label,"')")),
                   aes(x=CCA1,y=CA1, label=label2), 
-                  min.segment.length=0.01,nudge_y=-1,inherit.aes = FALSE,parse=TRUE) +
+                  min.segment.length=0.01, nudge_y=-1,nudge_x=-0.75,inherit.aes = FALSE,parse=TRUE) +
   geom_point(data=filter(cc1.species, label %in% lowest_cca),
                   aes(x=CCA1,y=CA1),pch=1,inherit.aes = FALSE) +
   geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*6,yend=cc1.biplot$CA1),
@@ -1200,92 +912,223 @@ Djurhuus et al. :
 > In order to directly associate specific taxa to environmental variables (Fig. 3), we used sparse partial least square (sPLS) analysis from the R package mixOmics. We applied the sPLS in regression mode, which will model a causal relationship between the lineages and the environmental traits, that is, PLS will predict environmental traits (e.g., temperature) from lineage abundances. This approach enabled us to identify strong correlations between certain taxa and environmental variables without taking into account the global structure of the planktonic community.
 
 
+I don't see a good linear correlation between carapace width and crab diet. 
+
+
 ### quick start
 
+samples as rows, species as columns. "expression measure" = eDNA index
 
-
-
-
-
-### large taxa
-
-#### all replicates
-
-The carapace width data will be "Y" in the sPLS, and the diet data will be "X"
-
-```{r fig.width=3, fig.height=3}
-cw.lg.mat <- as.matrix(cw.techs.df %>% filter(sample_id %in% rownames(index.lg.mat)) %>%
-  arrange(match(sample_id, rownames(index.lg.mat))) %>%
-  column_to_rownames(var="sample_id") %>% dplyr::select(CW_mm))
-
-hist(cw.lg.mat[,1], main="histogram of carapace width")
-```
-
-make sure the rows in the carapace width data exactly match the rows in the diet data. 
 ```{r}
-all(rownames(cw.lg.mat) == rownames(index.lg.mat))
+mixin <- as.matrix(index.df2[,5:dim(index.df2)[2]])
+rownames(mixin) <- index.df2$crab_id
+
+# remove species present in < 3 crab
+mixin <- dropspc(mixin, minocc=5)
+# make sure all crabs still have species
+mixin <- mixin[which(rowSums(mixin) > 0),]
+
+dim(mixin)
 ```
 
-
-Defining the ‘best’ number of dimensions to explain the data requires we first launch a PLS1 model with a large number of components. Some of the outputs from the PLS1 object are then retrieved in the perf() function to calculate the Q2
-
-criterion using repeated 10-fold cross-validation.
-```{r eval=FALSE}
-cw.lgtax.pls4 <- pls(Y = cw.lg.mat, X = index.lg.mat,  ncomp=4, mode = 'regression')
-
-# test.pls4 <- pls(Y = liver.toxicity$clinic[,"ALB.g.dL."], X = liver.toxicity$gene,  ncomp=4, mode = 'regression')
-
-set.seed(33)  # For reproducibility with this handbook, remove otherwise
-Q2.lgtax.pls4 <- perf(cw.lgtax.pls4, validation = 'Mfold', 
-                      folds = 10, nrepeat = 5)
-plot(Q2.lgtax.pls4, criterion = 'Q2')
-```
-Error in X.test %*% a.cv : non-conformable arguments (from `perf`)
-
-
-```{r eval=FALSE}
-out.list <- list(index.lg.mat, cw.lg.mat); names(out.list) <- c("X","Y")
-saveRDS(out.list, here('data','results','test_spls.rds'))
-rm(out.list)
-readRDS(here('data','results','test_spls.rds'))
-
-
-hist(index.lg.mat, main="histogram of eDNA index (X)")
-```
-
-
-#### crab only
-
-Try again, for crab instead of replicates. The carapace width data will be "Y" in the sPLS, and the diet data will be "X"
-
-```{r fig.width=3, fig.height=3}
-cw.lg.mat <- as.matrix(cw.df %>% filter(crab_id %in% rownames(index.lg.mat2)) %>%
-  arrange(match(crab_id, rownames(index.lg.mat2))) %>%
-  column_to_rownames(var="crab_id") %>% dplyr::select(CW_mm))
-
-hist(cw.lg.mat[,1], main="histogram of carapace width")
-```
-
-make sure the rows in the carapace width data exactly match the rows in the diet data. 
 ```{r}
-all(rownames(cw.lg.mat) == rownames(index.lg.mat2))
+MyResult.pca <- pca(mixin)  # 1 Run the method
+plotIndiv(MyResult.pca) # 2 Plot the samples
+plotVar(MyResult.pca) # 3 Plot the variables
 ```
 
 
-Defining the ‘best’ number of dimensions to explain the data requires we first launch a PLS1 model with a large number of components. Some of the outputs from the PLS1 object are then retrieved in the perf() function to calculate the Q2
+### sPLS1
 
-criterion using repeated 10-fold cross-validation.
-```{r eval=FALSE}
-cw.lgtax.pls4 <- pls(Y = cw.lg.mat, X = index.lg.mat2,  ncomp=4, mode = 'regression')
+```{r}
+x <- mixin
 
-# test.pls4 <- pls(Y = liver.toxicity$clinic[,"ALB.g.dL."], X = liver.toxicity$gene,  ncomp=4, mode = 'regression')
+y <- as.matrix(data.frame(crab_id=rownames(mixin)) %>%
+  left_join(cw.df, by="crab_id") %>%
+  column_to_rownames("crab_id"))
 
+
+all(rownames(mixin) == rownames(y))
+```
+Defining the ‘best’ number of dimensions to explain the data requires we first launch a PLS1 model with a large number of components. Some of the outputs from the PLS1 object are then retrieved in the perf() function to calculate the Q2 criterion using repeated 10-fold cross-validation.
+```{r}
+cw.pls1 <- pls(X = mixin, Y = y, ncomp = 4, mode = 'regression')
 set.seed(33)  # For reproducibility with this handbook, remove otherwise
-Q2.lgtax.pls4 <- perf(cw.lgtax.pls4, validation = 'Mfold', 
+Q2.cw.pls1 <- perf(cw.pls1, validation = 'Mfold', 
                       folds = 10, nrepeat = 5)
-plot(Q2.lgtax.pls4, criterion = 'Q2')
+plot(Q2.cw.pls1, criterion = 'Q2')
 ```
-Error in X.test %*% a.cv : non-conformable arguments (from `perf`)
+
+
+Ideally, one of these would be above the '0' line...
+
+```{r}
+cor(cw.pls1$variates$X, cw.pls1$variates$Y)
+```
+
+```{r}
+data.frame(x=cw.pls1$variates$X,
+                  y=cw.pls1$variates$Y,
+                  cw=y[,1]) %>%
+  ggplot(aes(x=x.comp2,y=y.comp2,color=cw)) + 
+  geom_point() +
+  geom_point(aes(x=x.comp1,y.comp1,color=cw), inherit.aes=FALSE) +
+  labs(x = 'X component', y = 'y component / scaled y') + theme_bw()
+```
+
+
+#### tuning
+
+We now set a grid of values - thin at the start, but also restricted to a small number of genes for a parsimonious model, which we will test for each of the two components in the tune.spls() function, using the MAE criterion.
+```{r}
+# Set up a grid of values: 
+list.keepX <- c(1:10, c(15,20,25,28))     
+
+# list.keepX  # Inspect the keepX grid
+set.seed(33)  # For reproducibility with this handbook, remove otherwise
+tune.spls1.MAE <- tune.spls(x, y, ncomp= 2, 
+                            test.keepX = list.keepX, 
+                            validation = 'Mfold', 
+                            folds = 10,
+                            nrepeat = 5, 
+                            progressBar = FALSE, 
+                            measure = 'MAE')
+plot(tune.spls1.MAE)
+```
+```{r}
+set.seed(33)  # For reproducibility with this handbook, remove otherwise
+tune.spls1.MSE <- tune.spls(x, y, ncomp= 2, 
+                            test.keepX = list.keepX, 
+                            validation = 'Mfold', 
+                            folds = 10,
+                            nrepeat = 5, 
+                            progressBar = FALSE, 
+                            measure = 'MSE')
+plot(tune.spls1.MSE)
+```
+
+```{r} 
+set.seed(33)  # For reproducibility with this handbook, remove otherwise
+tune.spls1.R <- tune.spls(x, y, ncomp= 2, 
+                            test.keepX = list.keepX, 
+                            validation = 'Mfold', 
+                            folds = 10,
+                            nrepeat = 5, 
+                            progressBar = FALSE, 
+                            measure = 'R2')
+plot(tune.spls1.R)
+```
+
+```{r}
+set.seed(33)  # For reproducibility with this handbook, remove otherwise
+tune.spls1.B <- tune.spls(x, y, ncomp= 2, 
+                            test.keepX = list.keepX, 
+                            validation = 'Mfold', 
+                            folds = 10,
+                            nrepeat = 5, 
+                            progressBar = FALSE, 
+                            measure = 'Bias')
+plot(tune.spls1.B)
+```
+
+
+Based on the tune.spls() function we extract the final parameters:
+```{r}
+choice.ncomp.MAE <- tune.spls1.MAE$choice.ncomp$ncomp
+# Optimal number of variables to select in X based on the MAE criterion
+# We stop at choice.ncomp
+choice.keepX.MAE <- tune.spls1.MAE$choice.keepX[1:choice.ncomp]  
+
+choice.ncomp.MAE
+
+choice.keepX.MAE
+```
+```{r}
+choice.ncomp.B <- tune.spls1.B$choice.ncomp$ncomp
+# Optimal number of variables to select in X based on the MAE criterion
+# We stop at choice.ncomp
+choice.keepX.B <- tune.spls1.B$choice.keepX[1:choice.ncomp]  
+
+choice.ncomp.B
+
+choice.keepX.B
+```
+
+#### final model
+Here is our final model with the tuned parameters:
+```{r}
+spls1.cw <- spls(x, y, ncomp = choice.ncomp.B, keepX = c(rep(choice.keepX.B,2)), 
+                    mode = "regression")
+```
+
+The list of genes selected on component 1 can be extracted with the command line (not output here):
+```{r}
+selectVar(spls1.cw, comp = 1)$X$name
+selectVar(spls1.cw, comp = 2)$X$name
+```
+
+We can compare the amount of explained variance for the X data set based on the sPLS1 (on 1 component) versus PLS1 (that was run on 4 components during the tuning step):
+```{r}
+spls1.cw$prop_expl_var$X
+
+cw.pls1$prop_expl_var$X
+```
+
+The amount of explained variance in X is lower in sPLS1 than PLS1 for the first component. 
+
+Is the Mean Squared Error Prediction is also lower (better) in sPLS1 compared to PLS1?
+
+#### sample plots
+
+plot each sample (crab) across the two components (x/y axis, selected with ncomp) for the "X" data set of prey items, and the "Y" data set of carapace widths.
+
+```{r}
+plotIndiv(spls1.cw,
+          group = y[,1], legend=TRUE)
+```
+
+plot each sample (crab) for both y / both x components: a reduced representation of a multivariate regression
+
+```{r}
+data.frame(x=spls1.cw$variates$X,
+                  y=spls1.cw$variates$Y,
+                  cw=y[,1],
+           label=rownames(y)) %>%
+  ggplot(aes(x=x.comp2,y=y.comp2,color=cw)) + 
+  geom_point() +
+  # geom_label(aes(label=label)) +
+  geom_point(aes(x=x.comp1,y.comp1,color=cw), inherit.aes=FALSE) +
+  labs(x = 'X component', y = 'y component / scaled y') + theme_bw()
+```
+
+Does PLS1 effectively models a linear relationship between carapace width and the combination of the two prey items selected in X.? This doesn't look much like a linear correlation - maybe if you removed all of those crabs lined up below 0 on the x component.
+
+
+```{r}
+selectVar(spls1.cw, comp = 1)$X$name
+cor(spls1.cw$variates$X, spls1.cw$variates$Y)
+
+
+selectVar(spls1.cw, comp = 2)$X$name
+cor(spls1.cw$variates$X, spls1.cw$variates$Y)
+```
+
+correlation between carapace width and the diet data when "Cryptophyceae" and "Fucus distichus" are used in the regression: 0.44
+
+Correlation when "Naviculales" and "Nitzschia" are used in the regression: 0.3
+
+
+Run this in the console. It gives the crab clustered on the y axis, the two x 2 components species on the x axis, and heatmap colors for correlation. 
+```{r eval=FALSE}
+cim(spls1.cw, comp = 1:2, xlab = "prey", ylab = "crab",
+# To save the plot, uncomment:
+# save = 'pdf', name.save = 'cim_liver'
+)
+```
+
+ok, here we can see why the regression is crap. only about 15 crab actually have these two species (the rest of the heatmap values are zero). so the remaining crab can't have their diet explained by the data. If I dig into the labels, these are the crab with an x component > 0 on the scatterplot above.
+
+
 
 
 
