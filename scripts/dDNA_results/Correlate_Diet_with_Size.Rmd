@@ -228,6 +228,60 @@ index.sm.df2 <- as.data.frame(index.sm.mat2) %>%
 
 
 
+### student's t-test
+
+Does carapace width vary significantly between estuaries?
+```{r}
+cw.est.df <- cw.df %>%
+  left_join(dplyr::select(lab_metadat, sample_id,estuary), by=c("crab_id"="sample_id"))
+
+t.test(x=filter(cw.est.df, estuary=="Padilla Bay")$CW_mm, y=filter(cw.est.df, estuary=="Port Susan Bay")$CW_mm)
+t.test(x=filter(cw.est.df, estuary=="Padilla Bay")$CW_mm, y=filter(cw.est.df, estuary=="Samish Bay")$CW_mm)
+t.test(x=filter(cw.est.df, estuary=="Port Susan Bay")$CW_mm, y=filter(cw.est.df, estuary=="Samish Bay")$CW_mm)
+```
+
+```
+Welch Two Sample t-test
+
+data:  filter(cw.est.df, estuary == "Padilla Bay")$CW_mm and filter(cw.est.df, estuary == "Port Susan Bay")$CW_mm
+t = 2.2191, df = 14.633, p-value = 0.04274
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ 0.08005857 4.20024446
+sample estimates:
+mean of x mean of y 
+10.708333  8.568182 
+
+
+	Welch Two Sample t-test
+
+data:  filter(cw.est.df, estuary == "Padilla Bay")$CW_mm and filter(cw.est.df, estuary == "Samish Bay")$CW_mm
+t = 1.6536, df = 17.828, p-value = 0.1157
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ -0.4580056  3.8330056
+sample estimates:
+mean of x mean of y 
+10.708333  9.020833 
+
+
+	Welch Two Sample t-test
+
+data:  filter(cw.est.df, estuary == "Port Susan Bay")$CW_mm and filter(cw.est.df, estuary == "Samish Bay")$CW_mm
+t = -0.74458, df = 41.291, p-value = 0.4607
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ -1.6801266  0.7748236
+sample estimates:
+mean of x mean of y 
+ 8.568182  9.020833 
+```
+
+Multiply by three for Bonferroni correction:
+```{r}
+p  <-  0.04274; p*3
+```
+
 
 ## Zoid
 
@@ -1619,9 +1673,10 @@ coeftest(cw.glm, vcovHC(cw.glm , type="HC0"))
 
 Use the eDNA index values to conduct a canonical correlation analysis. 
 
-Drop rare species (occur in < 5 crab) 
+Drop rare species (occur in < `mo` crab) 
 ```{r}
-crabID.index.filter.mat <- dropspc(as.matrix(index.df2[,5:dim(index.df2)[2]]), minocc=5)
+mo <- 9
+crabID.index.filter.mat <- dropspc(as.matrix(index.df2[,5:dim(index.df2)[2]]), minocc=mo)
 # add row names back on
 rownames(crabID.index.filter.mat) <- index.df2$crab_id
 crabID.index.filter.mat <- crabID.index.filter.mat[which(rowSums(crabID.index.filter.mat) > 0),]
@@ -1644,6 +1699,12 @@ cc1 <- cca(X=as.matrix(crabID.index.filter.df[,2:(n-1)]), Y=crabID.index.filter.
 plot(cc1)
 ```
 
+```{r}
+anova(cc1)
+```
+
+
+PLOT CCA
 
 ```{r}
 cc1.obj <- fortify(cc1)
@@ -1706,10 +1767,35 @@ ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) +
    theme_bw()
 ```
 
+```{r}
+lowest2_cca <- cc1.species %>% top_n(n=2,wt=desc(CCA1)) %>% pull(label)
+highest2_cca <- cc1.species %>% top_n(n=2,wt=CCA1) %>% arrange(CCA1) %>% pull(label)
 
+
+ggplot(cc1.species,aes(x=CCA1,y=CA1)) + 
+  geom_point(data=cc1.sites,aes(x=CCA1,y=CA1,color=estuary), pch=1,inherit.aes = FALSE) +
+  geom_point(pch=16) + 
+  geom_text_repel(data=filter(cc1.species, label %in% highest2_cca),
+                  aes(x=CCA1,y=CA1, label=label), 
+                  min.segment.length=0.01,ylim=c(2,4),inherit.aes = FALSE) +
+  geom_point(data=filter(cc1.species, label %in% highest2_cca),
+                  aes(x=CCA1,y=CA1), pch=15,size=2,inherit.aes = FALSE) +
+  geom_text_repel(data=filter(cc1.species, label %in% lowest2_cca) %>% mutate(label2=paste0("italic('",label,"')")),
+                  aes(x=CCA1,y=CA1, label=label2), 
+                  min.segment.length=0.01, nudge_y=-1,nudge_x=-0.75,inherit.aes = FALSE,parse=TRUE) +
+  geom_point(data=filter(cc1.species, label %in% lowest2_cca),
+                  aes(x=CCA1,y=CA1),pch=15,size=2,inherit.aes = FALSE) +
+  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*3,yend=cc1.biplot$CA1),
+               arrow = arrow(length = unit(0.2, "cm")),
+                         colour = "gray50", inherit.aes = FALSE) +
+  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*1.7, y = cc1.biplot$CA1+0.3, label = "label"), 
+            colour = "gray50", inherit.aes = FALSE) +
+  xlim(c(-3.5, 3.5)) +
+   theme_bw()
+```
 
 ```{r}
-png(here('figs','Fig4_CCA_AllTaxa_v_CW_label90CI.png'), res=300,width=2100,height=1500)
+png(here('figs','Fig4_CCA_AllTaxa10plus_v_CW_label90CI.png'), res=300,width=2100,height=1500)
 ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) + 
   geom_point() + 
  geom_text_repel(data=filter(cc1.species, label %in% highest_cca),
@@ -1727,6 +1813,32 @@ ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) +
                          colour = "gray50", inherit.aes = FALSE) +
   geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*5, y = cc1.biplot$CA1+0.3, label = "label"), 
             colour = "gray50", inherit.aes = FALSE) +
+   theme_bw()
+dev.off()
+```
+
+
+```{r}
+png(here('figs','Fig4_CCA_AllTaxa10plus_v_CW_labeltop2.png'), res=300,width=2100,height=1500)
+ggplot(cc1.species,aes(x=CCA1,y=CA1)) + 
+  geom_point(data=cc1.sites,aes(x=CCA1,y=CA1,color=estuary), pch=1,inherit.aes = FALSE) +
+  geom_point(pch=16) + 
+  geom_text_repel(data=filter(cc1.species, label %in% highest2_cca),
+                  aes(x=CCA1,y=CA1, label=label), 
+                  min.segment.length=0.01,ylim=c(2,4),inherit.aes = FALSE) +
+  geom_point(data=filter(cc1.species, label %in% highest2_cca),
+                  aes(x=CCA1,y=CA1), pch=15,size=2,inherit.aes = FALSE) +
+  geom_text_repel(data=filter(cc1.species, label %in% lowest2_cca) %>% mutate(label2=paste0("italic('",label,"')")),
+                  aes(x=CCA1,y=CA1, label=label2), 
+                  min.segment.length=0.01, nudge_y=-1,nudge_x=-0.75,inherit.aes = FALSE,parse=TRUE) +
+  geom_point(data=filter(cc1.species, label %in% lowest2_cca),
+                  aes(x=CCA1,y=CA1),pch=15,size=2,inherit.aes = FALSE) +
+  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*3,yend=cc1.biplot$CA1),
+               arrow = arrow(length = unit(0.2, "cm")),
+                         colour = "gray50", inherit.aes = FALSE) +
+  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*1.7, y = cc1.biplot$CA1+0.3, label = "label"), 
+            colour = "gray50", inherit.aes = FALSE) +
+  xlim(c(-3.5, 3.5)) +
    theme_bw()
 dev.off()
 ```
