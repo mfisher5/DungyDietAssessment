@@ -22,3 +22,5 @@ figs/*
 scripts/*.html
 scripts/explore_results/*.html
 .Rproj.user
+data/bioE/OAimpact_runs1-2_lerayxt_allTaxa.csv
+data/bioE/OAdiets_all_taxa_toMatch.csv

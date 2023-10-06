@@ -291,7 +291,7 @@ Then the covariate will be carapace width.
 
 As with the green crab diet data, the general sparsity of the data is still a problem for zoid. So the option is to either drop species or aggregate them into groups. 
 
-### raw reads
+### raw reads INCORRECT
 
 #### prep data
 Remove taxa that occur in fewer than ten crab (not super useful for comparing across sizes). the function `dropspc` assumes that the species are in columns of the matrix. Otherwise, **zoid will not run**
@@ -695,7 +695,7 @@ dev.off()
 ```
 
 
-### common taxa: standardized reads
+### common taxa: standardized reads CORRECT
 
 standardize to proportions of total reads for the given crab, then generate a new value from a multinomial
 

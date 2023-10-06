@@ -75,13 +75,27 @@ Calculate the frequency of occurrence for all prey items, across all crabs. *I'v
 prey.fo <- read_csv( here(resultsdir,'freqoccur_runs1-2_lerayxt_presence.csv'))
 ```
 
+Calculate the frequency of occurrence for prey items, across crabs within a given estuary.
+```{r}
+prey.fo.estuary <- bind_rows(dat, mutate(smdat, new_taxon=taxon)) %>% 
+  group_by(estuary) %>% mutate(ncrab.estuary=length(unique(crab_id))) %>%
+  ungroup() %>%
+  group_by(estuary, new_taxon, ncrab.estuary) %>%
+  summarise(ncrab=length(unique(crab_id))) %>%
+  mutate(pcrab=(ncrab/ncrab.estuary))
+
+```
+
+
 ## OA impact to prey
 
 Match all prey to the OA list, according to the manually identified functional groups. 
 
 ```{r}
+taxdat <- read_csv( here(bdir, 'OAdiets_all_taxa_toMatch.csv'))
 
-
+# how many functional groups are missing?
+with(filter(taxdat,is.na(functional_group)), table(ncrab))
 ```
 
 
@@ -92,7 +106,11 @@ Uncertainties in manual matching:
 
 - Tunicates (Botrylloides) and rotifers (Euchlanis dilatata) not in the species database. Euchlanis dilatata is a tofier that is generally 170-250uM in length. Compare to Alexandrium, a genus of dinoflagellites classified as microzooplankton at about 50uM, and the copepod Paracalanus, classified as a mesozooplankton at 0.5-1mm (500uM). Euclanis dilatata therefore classified as a microzooplankton. Green Colonial Tunicate was listed as a Shallow benthic filter feeder, therefore Botrylloides as that functional group.
 
-- nematodes not in the species database. both nematodes occurring in diet data can be free-living. many free-living nematodes are predatory carnivores.
+- Nematodes not in the species database ("Nematode community" in species key, but no family reference to link to functional group). But listed as meiobenthos in functional groups.
+
+- Grouped free-living platyhelminthes in with nematodes, in the meiobenthos
+
+- Snails that were facultative carnivores / omnivores did not strictly fit into the category "Benthic herbivorous grazers" or "Sea stars moonsnail whelk", so they were conservatively put into the category with the lowest OA impact.  (n=1 taxa in n=1 crab)
 
 
 ```{r}
@@ -103,7 +121,8 @@ colnames(oadat)
 ```{r}
 if(!knitting){
   
-  taxdat %<>% left_join(oadat, by="functional_group")
+  taxdat %<>% filter(!is.na(functional_group)) %>% left_join(oadat, by="functional_group")
+  sum(is.na(taxdat$raw_survival_scalar))
   
 }
 ```
@@ -115,6 +134,71 @@ if(!knitting){
 write_csv(taxdat, here(bdir,'OAimpact_runs1-2_lerayxt_allTaxa.csv'))
 
 }
+```
+
+
+## Crab Index of Exposure: Prey Exposure x Freq
+
+### all data
+
+Calculate the crab index of exposure for each prey item $i$ from the Euclidean distance between $x_i$ = prey item frequency of occurrance (`pcrab`) and $y_i$ = OA impact on prey item (`relative survival scalar`)
+```{r}
+eindex.dat <- taxdat %>% left_join(prey.fo,by=c("new_taxon"="taxon")) %>%
+  mutate(pcrab=pcrab/100) %>%
+  mutate(std_survival_scalar=decostand(x=matrix(data=taxdat$raw_survival_scalar, ncol=1), method="range", MARGIN=2)) %>%
+  mutate(eindex=sqrt(pcrab^2 + std_survival_scalar^2))
+
+eindex.dat %<>% mutate(eindex.rescaled=decostand(x=matrix(data=eindex.dat$eindex, ncol=1), method="range", MARGIN=2))
+```
+
+```{r}
+p.eindex1 <- eindex.dat %>%
+  ggplot(aes(x=pcrab,y=std_survival_scalar, col=eindex.rescaled)) +
+  geom_point(size=2) +
+  labs(x="Frequency of Prey Occurrence", y="OA Impact on Prey") +
+  xlim(c(0,1)) +
+  scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
+p.eindex1 
+```
+
+Remove points that lie above the 99th percentile
+```{r}
+fo.max <- as.numeric(quantile(x=eindex.dat$pcrab, probs=0.99))
+p2.eindex <- eindex.dat %>%
+  filter(pcrab < fo.max) %>%
+  ggplot(aes(x=pcrab,y=std_survival_scalar, col=eindex.rescaled)) +
+  geom_point(size=2) +
+  labs(x="Frequency of Prey Occurrence", y="OA Impact on Prey") +
+  xlim(c(0,0.4)) +
+  scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
+p2.eindex
+```
+
+for each estuary
+```{r}
+eindexByEstuary <- taxdat %>% left_join(prey.fo.estuary,by=c("new_taxon"))
+eindexByEstuary %<>%
+  mutate(std_survival_scalar=decostand(x=matrix(data=eindexByEstuary$raw_survival_scalar, ncol=1), method="range", MARGIN=2)) %>%
+  mutate(eindex=sqrt(pcrab^2 + std_survival_scalar^2))
+eindexByEstuary %<>% mutate(eindex.rescaled=decostand(x=matrix(data=eindexByEstuary$eindex, ncol=1), method="range", MARGIN=2))
+```
+```{r}
+p.eindex3 <- eindexByEstuary %>%
+  ggplot(aes(x=pcrab,y=std_survival_scalar, col=eindex.rescaled)) +
+  geom_point(size=2) +
+  facet_grid(cols=vars(estuary)) +
+  labs(x="Frequency of Prey Occurrence", y="OA Impact on Prey") +
+  xlim(c(0,1)) +
+  scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
+p.eindex3 
+```
+
+save the plots
+```{r}
+png(here('../../','figs','fig5a_crab_eindex_all.png'))
+
+
+
 ```
 
 
