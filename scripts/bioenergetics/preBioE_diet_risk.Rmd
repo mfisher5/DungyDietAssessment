@@ -152,13 +152,13 @@ eindex.dat %<>% mutate(eindex.rescaled=decostand(x=matrix(data=eindex.dat$eindex
 ```
 
 ```{r}
-p.eindex1 <- eindex.dat %>%
+p1.eindex <- eindex.dat %>%
   ggplot(aes(x=pcrab,y=std_survival_scalar, col=eindex.rescaled)) +
   geom_point(size=2) +
   labs(x="Frequency of Prey Occurrence", y="OA Impact on Prey") +
   xlim(c(0,1)) +
   scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
-p.eindex1 
+p1.eindex
 ```
 
 Remove points that lie above the 99th percentile
@@ -193,13 +193,58 @@ p.eindex3 <- eindexByEstuary %>%
 p.eindex3 
 ```
 
-save the plots
+save the plot. first for all crab:
 ```{r}
-png(here('../../','figs','fig5a_crab_eindex_all.png'))
+png(here('../../','figs','fig5a_crab_eindex_all.png'),res=300,height=2000,width=2300)
 
+ggdraw(p2.eindex) +
+  draw_plot(p1.eindex + 
+              scale_x_continuous(limits=c(0,1),breaks=c(0,0.5,1),labels=c(0,0.5,1)) +
+              scale_y_continuous(limits=c(0,1),breaks=c(0,0.5,1),labels=c(0,0.5,1)) +
+              theme(axis.title=element_blank(),legend.position="none"), 
+            x=.54, y=0.08, width=0.3, height=.3)
 
-
+dev.off()
 ```
+
+and then by estuary:
+```{r}
+png(here('../../','figs','figS_crab_OAexposure_index_byEstuary.png'),res=300,height=1200,width=2200)
+p.eindex3 + theme(axis.text.x=element_text(angle=25, hjust=1))
+dev.off()
+```
+
+
+## Crab Risk: Exposure Index x Sensitivity
+
+Combine the exposure index above ($x$) with crab sensitivity to get risk. Sensitivity is defined as the energy density of the prey item. 
+
+I don't currently have all energy densities, just those for the prey items with the highest / lowest OA impact scalars. 
+```{r}
+ed.dat <- read_csv(here(bdir, 'OAdiets_HiLo_energy_Densities.csv')) %>% dplyr::select(-OA.diet.group)
+```
+
+```{r}
+risk.dat <- eindex.dat %>%
+  left_join(ed.dat %>% dplyr::select(-functional_group,-raw_survival_scalar,-ncrab), by=c("new_taxon")) %>%
+  filter(!is.na(ed_JgAFDW))
+
+risk.dat %<>% mutate(std_ed=decostand(matrix(risk.dat$ed_JgAFDW,ncol=1),method="range",MARGIN=2))
+```
+
+
+```{r}
+# p1.eindex <- 
+risk.dat %>%
+  ggplot(aes(x=std_survival_scalar,y=std_ed)) +
+  geom_point(size=2) +
+  geom_text_repel(aes(label=new_taxon)) +
+  labs(x="Crab Exposure Index", y="Crab Sensitivity")
+# p1.eindex
+```
+
+
+
 
 
 ### first pass: dDNA data only

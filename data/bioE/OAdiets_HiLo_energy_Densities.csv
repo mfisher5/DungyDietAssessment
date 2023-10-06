@@ -1,29 +1,29 @@
-new_taxon,OA.diet.group,ncrab,functional_group,ed_JgAFDW,ed_JgWW,ed_taxon,raw_survival_scalar,
-Balanus crenatus,low,22,Shallow benthic filter feeders,21878,,Balanus balanoides,-0.75,
-Clinocardium nuttallii,low,6,Bivalves,22719,,Clinocardium ciliatum,-1.22,
-Limecola,low,3,Bivalves,18371,1.76,Macoma balthica,-1.22,
-Modiolus modiolus,low,7,Bivalves,22593,,Modiolus modiolus,-1.22,
-Mytilus trossulus,low,3,Bivalves,23300,,Mytilus edulis,-1.22,
-Saxidomus,low,3,Bivalves,20404,,Venus spp.,-1.22,
-Tellinidae,low,6,Bivalves,18371,,Macoma balthica,-1.22,
-Chordariaceae,high,19,Macroalgae,,,,0.14,
-Ectocarpaceae,high,4,Macroalgae,,,,0.14,
-Fucales,high,9,Macroalgae,,,,0.14,
-Fucus distichus,high,6,Macroalgae,,,,0.14,
-Ralfsiaceae,high,3,Macroalgae,,,,0.14,
-Sargassum,high,3,Macroalgae,,,,0.14,
-Membranipora membranacea,low,3,Shallow benthic filter feeders,,,,-0.75,
-Paracalanus,low,5,Mesozooplankton,22610,,Calanus helgolandicus,-1.36,
-Hemigrapsus oregonensis,low,4,Crabs,28605,,Hemigrapsus oregonensis megalope,-0.96,
-Ulvales,high,7,Macroalgae,,,,0.14,
-Tresus,low,9,Bivalves,19811,,Spisula spp.,-1.22,
-Phacellophora camtschatica,high,5,Gelatinous zooplankton,13891,,Semaeostomeae,0.16,
-Rhodomelaceae,high,7,Macroalgae,,,,0.14,
-Crangon,low,3,Crangon shrimp,23490,,Decapoda (zoea),-0.61,
-Botrylloides,low,4,Shallow benthic filter feeders,20040,,Urichordates,-0.75,
-Veneridae,low,4,Bivalves,20404,,Venus spp.,-1.22,*same as saxidomus
-Micromonas pusilla,high,17,Small phytoplankton,,,,0.09,
-Euchlanis dilatata,high,17,Microzooplankton,,,,0.1,
-Cryptomonas curvata,high,3,Small phytoplankton,,,,0.09,
-Cryptophyceae,high,6,Small phytoplankton,,,,0.09,
-Dinophyceae,high,12,Microzooplankton,,,,0.1,
+new_taxon,OA.diet.group,ncrab,functional_group,ed_JgAFDW,ed_JgWW,ed_taxon,raw_survival_scalar
+Balanus crenatus,low,22,Shallow benthic filter feeders,21878,,Balanus balanoides,-0.75
+Clinocardium nuttallii,low,6,Bivalves,22719,,Clinocardium ciliatum,-1.22
+Limecola,low,3,Bivalves,18371,1.76,Macoma balthica,-1.22
+Modiolus modiolus,low,7,Bivalves,22593,,Modiolus modiolus,-1.22
+Mytilus trossulus,low,3,Bivalves,23300,,Mytilus edulis,-1.22
+Saxidomus,low,3,Bivalves,20404,,Venus spp.,-1.22
+Tellinidae,low,6,Bivalves,18371,,Macoma balthica,-1.22
+Chordariaceae,high,19,Macroalgae,13805,,Chordariaceae,0.14
+Ectocarpaceae,high,4,Macroalgae,21295,,Ectocarpus dimorphus,0.14
+Fucales,high,9,Macroalgae,19415,,Fucus distichus,0.14
+Fucus distichus,high,6,Macroalgae,19415,,Fucus distichus,0.14
+Ralfsiaceae,high,3,Macroalgae,17405,,Ralfsia sp.,0.14
+Sargassum,high,3,Macroalgae,19415,,Fucus distichus,0.14
+Membranipora membranacea,low,3,Shallow benthic filter feeders,20750,,Bryozoa and Brachiopoda,-0.75
+Paracalanus,low,5,Mesozooplankton,22610,,Calanus helgolandicus,-1.36
+Hemigrapsus oregonensis,low,4,Crabs,28605,,Hemigrapsus oregonensis megalope,-0.96
+Ulvales,high,7,Macroalgae,20325,,Ulva spp.,0.14
+Tresus,low,9,Bivalves,19811,,Spisula spp.,-1.22
+Phacellophora camtschatica,high,5,Gelatinous zooplankton,13891,,Semaeostomeae,0.16
+Rhodomelaceae,high,7,Macroalgae,20325,,Polysiphonia spp.,0.14
+Crangon,low,3,Crangon shrimp,23490,,Decapoda (zoea),-0.61
+Botrylloides,low,4,Shallow benthic filter feeders,20040,,Urichordates,-0.75
+Veneridae,low,4,Bivalves,20404,,Venus spp.,-1.22
+Micromonas pusilla,high,17,Small phytoplankton,25735,,Phytoplankton bloom,0.09
+Euchlanis dilatata,high,17,Microzooplankton,,,,0.1
+Cryptomonas curvata,high,3,Small phytoplankton,25735,,Phytoplankton bloom,0.09
+Cryptophyceae,high,6,Small phytoplankton,25735,,Phytoplankton bloom,0.09
+Dinophyceae,high,12,Microzooplankton,,,,0.1
