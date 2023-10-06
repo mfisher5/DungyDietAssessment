@@ -157,7 +157,8 @@ p1.eindex <- eindex.dat %>%
   geom_point(size=2) +
   labs(x="Frequency of Prey Occurrence", y="OA Impact on Prey") +
   xlim(c(0,1)) +
-  scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
+  scale_color_distiller(palette="PuRd", name="Crab Index\nof Exposure", direction=1) 
+  # scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
 p1.eindex
 ```
 
@@ -170,7 +171,8 @@ p2.eindex <- eindex.dat %>%
   geom_point(size=2) +
   labs(x="Frequency of Prey Occurrence", y="OA Impact on Prey") +
   xlim(c(0,0.4)) +
-  scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
+  scale_color_distiller(palette="PuRd", name="Crab Index\nof Exposure", direction=1) 
+  # scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
 p2.eindex
 ```
 
@@ -189,7 +191,8 @@ p.eindex3 <- eindexByEstuary %>%
   facet_grid(cols=vars(estuary)) +
   labs(x="Frequency of Prey Occurrence", y="OA Impact on Prey") +
   xlim(c(0,1)) +
-  scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
+  scale_color_distiller(palette="PuRd", name="Crab Index\nof Exposure", direction=1) 
+  # scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
 p.eindex3 
 ```
 
@@ -229,340 +232,47 @@ risk.dat <- eindex.dat %>%
   left_join(ed.dat %>% dplyr::select(-functional_group,-raw_survival_scalar,-ncrab), by=c("new_taxon")) %>%
   filter(!is.na(ed_JgAFDW))
 
+# standardize energy densities
 risk.dat %<>% mutate(std_ed=decostand(matrix(risk.dat$ed_JgAFDW,ncol=1),method="range",MARGIN=2))
+```
+
+Calculate overall risk
+```{r}
+risk.dat %<>% mutate(crab.risk=sqrt(eindex.rescaled^2 + std_ed^2))
+
+risk.dat %<>% mutate(crab.risk=as.numeric(decostand(x=matrix(data=risk.dat$crab.risk, ncol=1), method="range", MARGIN=2)))
 ```
 
 
 ```{r}
 # p1.eindex <- 
 risk.dat %>%
-  ggplot(aes(x=std_survival_scalar,y=std_ed)) +
+  ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
   geom_point(size=2) +
-  geom_text_repel(aes(label=new_taxon)) +
+  geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01) +
+  scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
   labs(x="Crab Exposure Index", y="Crab Sensitivity")
 # p1.eindex
 ```
 
-
-
-
-
-### first pass: dDNA data only
-
-Produce four diets: Hi/Lo OA Sensitivity x Hi/Lo Energy Density
-
-First, grab only the "large" prey that were present in three or more crab
 ```{r}
-summary_dat <- dat %>% 
-  group_by(group, new_taxon) %>% summarise(ncrab=length(unique(crab_id)))
-
-dat_3plus <- dat %>%
-  filter(new_taxon %in% filter(summary_dat, ncrab > 2)$new_taxon)
-
-## how many prey?
-length(unique(dat_3plus$new_taxon))
-
-## how many crab? 
-length(unique(dat_3plus$crab_id))
-
-```
-```{r}
-if(!knitting){write_csv(summary_dat %>% filter(ncrab > 2), here(bdir,'OAdiets_all_taxa_3plus_crab.csv'))}
-```
-
-Grab "small" prey that were present in three or more crab.
-```{r}
-summary_smdat <- smdat %>% 
-  group_by(phylum,taxon) %>% summarise(ncrab=length(unique(crab_id)))
-
-smdat_3plus <- smdat %>%
-  filter(taxon %in% filter(summary_smdat, ncrab > 2)$taxon)
-
-## how many prey?
-length(unique(smdat_3plus$taxon))
-
-## how many crab? 
-length(unique(smdat_3plus$crab_id))
-
-```
-```{r}
-if(!knitting){write_csv(summary_smdat %>% filter(ncrab > 2), here(bdir,'OAdiets_small_taxa_3plus_crab.csv'))}
-```
-
-
-### match to OA list functional groups
-
-Then, match these prey to the OA list, according to the manually identified functional groups. 
-
-Uncertainties in manual matching: 
-
-- Microzooplankton the agreement score is low. This seems to be because some do make caco3, and some don’t. Could potentially fine-tune this value according to species-level IDs in stomach content data?
-
-- Tunicates (Botrylloides) and rotifers (Euchlanis dilatata) not in the species database. Euchlanis dilatata is a tofier that is generally 170-250uM in length. Compare to Alexandrium, a genus of dinoflagellites classified as microzooplankton at about 50uM, and the copepod Paracalanus, classified as a mesozooplankton at 0.5-1mm (500uM). Euclanis dilatata therefore classified as a microzooplankton. Green Colonial Tunicate was listed as a Shallow benthic filter feeder, therefore Botrylloides as that functional group.
-
-
-```{r}
-taxdat <- read_csv(here(bdir,'OAdiets_all_taxa_3plus_crab_OAinfo.csv'))
-oadat <- read_csv(here(bdir,'BuschMcElhany2016_OAscores_by_functionalGroup.csv'),skip=1) %>% clean_names()
-
-colnames(oadat)
+risk.dat %<>% mutate(std_survival_scalar=as.numeric(std_survival_scalar),
+                     eindex=as.numeric(eindex),
+                     eindex.rescaled=as.numeric(eindex.rescaled),
+                     std_ed=as.numeric(std_ed))
+write_csv(risk.dat, here(bdir,'OArisk_runs1-2_lerayxt_2023-10-06.csv'))
 ```
 
 ```{r}
-if(!knitting){
-  
-  taxdat %<>% left_join(oadat, by="functional_group")
-  
-}
-```
 
+png(here('../../','figs','fig5b_crab_OArisk_all.png'),res=300,height=1800,width=2100)
 
-#### explore exposure
+risk.dat %>%
+  ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
+  geom_point(size=2) +
+  geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01) +
+  scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
+  labs(x="Crab Exposure Index", y="Crab Sensitivity")
 
-Check the raw survival scalar frequencies across all prey taxa identified in 3 plus crab
-```{r}
-ggplot(taxdat, aes(x=raw_survival_scalar)) +
-  geom_histogram() + 
-  geom_vline(aes(xintercept=0)) +
-  geom_vline(aes(xintercept=mean(taxdat$raw_survival_scalar)),lty=2) +
-  geom_text(aes(x=mean(taxdat$raw_survival_scalar), y=5, label=round(mean(taxdat$raw_survival_scalar),2))) +
-  labs(x="OA survival scalar",y="Count of Taxa", subtitle="Prey in 3 or more crab") +
-  theme_bw()
-```
-
-Now calculate the average survival scalar per crab, based on taxa presence/absence in the diet. I calculated this just by taking the mean of the raw survival scalars across species, and then dividing by the total number of species present in the diet that were in the "3 plus" list. 
-```{r}
-avg_OAscalar <- dat %>% filter(new_taxon %in% taxdat$new_taxon) %>%
-  dplyr::select(crab_id,site,crab_num,new_taxon,estuary) %>% distinct() %>%
-  left_join(taxdat,by=c("new_taxon")) %>%
-  bind_rows(smdat %>% filter(taxon %in% taxdat$new_taxon) %>% 
-              mutate(new_taxon=taxon) %>%
-              dplyr::select(crab_id,site,crab_num,new_taxon,estuary) %>% distinct() %>%
-              left_join(taxdat,by=c("new_taxon"))) %>%
-  group_by(crab_id,site,crab_num,estuary) %>% summarise(mean_ss=mean(raw_survival_scalar),sd_ss=sd(raw_survival_scalar),
-                                                alphadiv=length(unique(new_taxon)))
-```
-```{r echo=FALSE}
-p1 <- ggplot(avg_OAscalar, aes(x=mean_ss)) + geom_histogram() +
-  labs(x="Mean OA Survival Scalar per Crab",y="Count")
-p2 <- ggplot(avg_OAscalar, aes(x=site,y=mean_ss)) +
-  geom_boxplot() +
-  geom_jitter(width=0.1, size=0.5) +
-  labs(y="Mean OA Survival Scalar per Crab",x="Site")
-p3 <- ggplot(avg_OAscalar, aes(x=estuary,y=mean_ss)) +
-  geom_boxplot() +
-  geom_jitter(width=0.1, size=0.5) +
-  labs(y="Mean OA Survival Scalar per Crab",x="Estuary")
-
-p1;p2;p3
-
-png(here('../../','figs','figS_meanOAscalars_bySite_byEstuary.png'),res=300,height=1800,width=2100)
-bottom <- plot_grid(p2+theme(axis.text.x=element_text(angle=45,hjust=1)),p3+theme(axis.title.y=element_blank()),ncol=2, rel_widths=c(1,0.8))
-plot_grid(p1,bottom,nrow=2)
 dev.off()
 ```
-
-Calculate weighted mean OA survival scalars for each estuary, weighted by the number of crab in which the given taxon was present. 
-
-
-#### subset for extremes 
-
-What is 1 standard deviation away from the mean? how many taxa are above / below that cutoff?
-```{r}
-xbar <- mean(taxdat$raw_survival_scalar)
-sdev <- sd(taxdat$raw_survival_scalar)
-upper <- xbar + sdev; lower <- xbar - sdev
-
-upper
-taxdat %>% filter(raw_survival_scalar > upper) %>% pull(new_taxon)
-
-lower
-taxdat %>% filter(raw_survival_scalar < lower) %>% pull(new_taxon)
-```
-
-what is the 50% IQR? how many taxa are above / below that cutoff?
-```{r}
-xmed <- median(taxdat$raw_survival_scalar)
-q75 <- quantile(taxdat$raw_survival_scalar, probs=0.75)
-q25 <- quantile(taxdat$raw_survival_scalar, probs=0.25)
-xmed
-
-q75
-taxdat %>% filter(raw_survival_scalar > q75) %>% pull(new_taxon)
-
-q25
-taxdat %>% filter(raw_survival_scalar < q25) %>% pull(new_taxon)
-```
-
-Write these out!
-```{r echo=TRUE}
-if(!knitting){
-  
-write_csv(taxdat, here(bdir,'OAdiets_all_taxa_3plus_crab_OAinfo.csv'))
-
-diets_out <- taxdat %>% mutate(OA.diet.group=ifelse(raw_survival_scalar < q25, "low",
-                                                    ifelse(raw_survival_scalar > q75, "high",NA))) %>%
-  filter(!is.na(OA.diet.group)) %>%
-  dplyr::select(new_taxon,OA.diet.group,colnames(taxdat)[-1])
-write_csv(diets_out, here(bdir,'OAdiets_HiLo.csv'))
-
-}
-```
-
-```{r}
-ggplot(taxdat, aes(x=raw_survival_scalar)) +
-  geom_histogram() + 
-  annotate(geom="rect",xmax=q25-0.01,xmin=min(taxdat$raw_survival_scalar)-0.1, ymin=0,ymax=19, fill="red",alpha=0.1) +
-  annotate(geom="rect",xmin=q75, xmax=max(taxdat$raw_survival_scalar)+0.1, ymin=0,ymax=19, fill="blue",alpha=0.1) +
-  geom_vline(aes(xintercept=0)) +
-  geom_vline(aes(xintercept=mean(taxdat$raw_survival_scalar)),lty=2) +
-  geom_text(aes(x=mean(taxdat$raw_survival_scalar), y=5, label=round(mean(taxdat$raw_survival_scalar),2))) +
-  labs(x="OA survival scalar",y="Count of Taxa", subtitle="Prey in 3 or more crab") +
-  theme_bw()
-```
-
-
-
-### second pass: combine similar groups
-
-
-*Limecola* + *Tellinidae*
-
-*Veneridae* + *Saxidomus*
-
-*Ectocarpaceae* + *Ectocarpus*
-
-*Rhodomelaceae* + *Polysiphonia*
-
-*Cryptophyceae* + *Cryptomonas curvata* [and] *Micromonas pusilla* as "small phytoplankton"
-```{r}
-small_phytoplankton_taxa <- c("Cryptophyceae","Cryptomonas curvata","Micromonas pusilla")
-```
-
-
-```{r}
-taxdat <- read_csv(here(bdir,'OAdiets_all_taxa_3plus_crab_OAinfo.csv'))
-diets_out <- read_csv(here(bdir,'OAdiets_HiLo.csv'))
-```
-
-```{r}
-diets2.lg <- diets_out %>% dplyr::select(new_taxon,functional_group) %>% 
-  mutate(new_taxon2=ifelse(new_taxon %in% c("Limecola","Tellinidae"), "Tellinidae (incl. Limecola)",
-                           ifelse(new_taxon %in% c("Veneridae","Saxidomus"), "Veneridae (incl. Saxidomus)",
-                                  ifelse(new_taxon %in% c("Ectocarpaceae","Ectocarpus"), "Ectocarpaceae (incl. Ectocarpus spp.)",
-                                         ifelse(new_taxon %in% c("Rhodomelaceae","Polysiphonia"),"Rhodomelaceae (incl. Polysiphonia sp.)",new_taxon))))) %>%
-  filter(new_taxon != "Fucales") %>%
-  bind_rows(
-    data.frame(functional_group=c("Macroalgae","Macroalgae","Macroalgae"),
-               new_taxon=c("Polysiphonia paniculata","Ectocarpus","Ectocarpus siliculosus"),
-               new_taxon2=c("Rhodomelaceae (incl. Polysiphonia sp.)","Ectocarpaceae (incl. Ectocarpus spp.)","Ectocarpaceae (incl. Ectocarpus spp.)"), 
-               ncrab=c(NA,NA,NA))
-    
-    ) %>%
-  filter(!(new_taxon %in% small_phytoplankton_taxa) & !(functional_group %in% c("Microzooplankton"))) %>%
-  left_join(dat_3plus %>% dplyr::select(-group)) %>% ungroup() %>%
-  group_by(new_taxon2, functional_group) %>% summarise(ncrab=length(unique(crab_id)))
-  
-
-```
-
-```{r}
-diets2.sm <- diets_out %>% 
-  filter((new_taxon %in% small_phytoplankton_taxa) | (functional_group %in% c("Microzooplankton"))) %>%
-  dplyr::select(new_taxon,functional_group) %>%
-  mutate(new_taxon2=ifelse(new_taxon %in% small_phytoplankton_taxa, "Small phytoplankton",new_taxon)) %>%
-  left_join(smdat %>% dplyr::select(-new_taxon),by=c("new_taxon"="taxon")) %>%
-  group_by(new_taxon2,new_taxon,functional_group) %>% summarise(ncrab=length(unique(crab_id)))
-```
-
-```{r}
-diets2 <- bind_rows(diets2.lg,diets2.sm) %>%
-  left_join(oadat, by="functional_group") %>%
-   mutate(OA.diet.group=ifelse(raw_survival_scalar < q25, "low",
-                                                    ifelse(raw_survival_scalar > q75, "high",NA)))
-
-any(is.na(diets2$raw_survival_scalar))
-```
-
-Write these out!
-```{r echo=TRUE}
-if(!knitting){
-write_csv(diets2, here(bdir,'OAdiets_HiLo_Condensed.csv'))
-
-}
-```
-
-
-
-
-**For energy density:** generally...
-
-Cnidaria (4091 callg AFDW) and Ctenophora (3240 callg AFDW) had the lowest caloric
-value of the organisms surveyed --> Pelagic polychaetes (Tomopterus helgolandica 7518
-callg AFDW), copepods (Chiridius armatus 7698 callg AFDW), mysids (Boreomysis arctica
-8525 callg AFDW), arrow worms (Sagitta elegans 7546 call AFDW), and euphausiids
-(Meganyctiphanes norvegica 8574 caIJAFDW) all exhibited high caloric content 
-
-Among the fishes, herring (Clupea harengus harengus) and lake char, (Salve linus namaycush) had a high caloric
-content, 5994 callg DW, and 7103 callg DW (Table 1). The caloric content of the Pacific salmon ranged from 3345 ca]lg DW to 6227 call g DW.
-
-
-
-
-
-
-
-
-
-### exposure
-
-What % of diet for each crab is made up of “strong negative impact” taxa?
-
-```{r}
-crab_exposure <- alldat %>% mutate(new_taxon=ifelse(new_taxon=="too small", taxon, new_taxon)) %>%
-  filter(taxon %in% taxdat$new_taxon | new_taxon %in% taxdat$new_taxon) %>%
-  left_join(diets_out %>% 
-              filter(OA.diet.group=="low") %>% mutate(OA.diet.group="high"))
-
-crab_exposure %<>% mutate(OA.diet.group=ifelse(is.na(OA.diet.group), "other",OA.diet.group)) %>%
-  group_by(estuary,site,crab_id) %>%
-  mutate(total_common_taxa=length(unique(new_taxon))) %>% ungroup() %>%
-  group_by(estuary,site,crab_id,total_common_taxa, OA.diet.group) %>%
-  summarise(OA.group.taxa=length(unique(new_taxon))) %>%
-  mutate(p.group.taxa=OA.group.taxa/total_common_taxa)
-```
-```{r}
-crab_exposure %>% filter(OA.diet.group=="high") %>%
-  ggplot(aes(x=p.group.taxa)) +
-  geom_histogram() +
-  geom_vline(aes(xintercept=mean(filter(crab_exposure,OA.diet.group=="high")$p.group.taxa)),lty=2) +
-  labs(x="Prop. Diet with High OA Impact", y="Crab count")
-```
-
-
-```{r}
-crab_exposure %>% filter(OA.diet.group=="high") %>%
-  ggplot(aes(x=estuary, y=p.group.taxa)) +
-  geom_boxplot(color="gray30") +
-  geom_jitter(width=0.1) +
-  labs(x="Estuary",y="Prop. Diet with High OA Impact")
-```
-
-
-```{r}
-crab_exposure %>% filter(OA.diet.group=="high") %>%
-  left_join(cw.df, by=c("crab_id")) %>%
-  ggplot(aes(x=CW_mm, y=p.group.taxa)) +
-  geom_point() +
-  labs(y="Prop. Diet with High OA Impact", x="Carapace Width (mm)")
-```
-
-
-```{r}
-shapiro.test(filter(crab_exposure,OA.diet.group=="high")$p.group.taxa)
-summary(lm(p.group.taxa ~ CW_mm, data=crab_exposure %>% filter(OA.diet.group=="high") %>%
-             left_join(cw.df, by=c("crab_id"))))
-
-```
-
-
