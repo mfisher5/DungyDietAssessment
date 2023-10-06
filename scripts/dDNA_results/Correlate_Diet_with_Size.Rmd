@@ -283,7 +283,7 @@ p  <-  0.04274; p*3
 ```
 
 
-## Zoid
+## Zoid: common taxa
 
 Since we're only interested in the extent to which the prevalence of each taxon is upweighted / downweighted when size increases, it's ok to use the sequence abundances as the zoid input (?). 
 
@@ -291,8 +291,9 @@ Then the covariate will be carapace width.
 
 As with the green crab diet data, the general sparsity of the data is still a problem for zoid. So the option is to either drop species or aggregate them into groups. 
 
-### all taxa
+### raw reads
 
+#### prep data
 Remove taxa that occur in fewer than ten crab (not super useful for comparing across sizes). the function `dropspc` assumes that the species are in columns of the matrix. Otherwise, **zoid will not run**
 ```{r}
 crabID.reads.filter.mat <- dropspc(crabID.reads.mat, minocc=9)
@@ -314,6 +315,8 @@ zoidIN.reads <- crabID.reads.filter.mat %>%
 any(is.na(zoidIN.reads$CW_mm))
 ```
 
+
+#### run zoid
 create the design matrix (site / site type information per observation, aka per crab) and the data matrix (read counts only)
 ```{r}
 design_matrix = zoidIN.reads[,which(names(zoidIN.reads)=="CW_mm"), drop=FALSE]
@@ -592,29 +595,9 @@ saveRDS(fit_1_prey,here(resultsdir,'zoidOUT_nReads_allTaxa10plus_by_CW.rds'))
 ```
 
 
-standardize to proportions of total reads for the given crab (?) <-- but doesn't this also depend on the number of other species that were detected in the stomach contents, so not comparable across crab?
-```{r eval=FALSE}
-# crabID.preads.mat <- decostand(x=crabID.reads.filter.mat,method="total",MARGIN=1)
-# zoidIN.preads <- crabID.preads.mat %>%
-#   rownames_to_column("crab_id") %>%
-#   left_join(cw.df,by="crab_id") %>%
-#   column_to_rownames("crab_id")
-
-# any(is.na(zoidIN.preads$CW_mm))
-
-# design_matrix = zoidIN.preads[,which(names(zoidIN.preads)=="CW_mm"), drop=FALSE]
-# data_matrix = zoidIN.preads[,which(names(zoidIN.preads)!="CW_mm")]
-# design_matrix$y = 1 # dummy variable
-#
-# fit_1_prey <- fit_zoid(formula = y ~ CW_mm,
-#                       design_matrix = design_matrix,
-#                       data_matrix = as.matrix(data_matrix),
-#                        overdispersion = TRUE,
-#                        chains=1,
-#                        iter=4000)
-```
 
 
+#### zoid output
 Get the fitted values and label the species / sizes
 ```{r}
 fitted_1 <- get_fitted(fit_1_prey)
@@ -657,9 +640,31 @@ dev.off()
 
 compare the medians of the fitted values to the median read counts
 ```{r}
-fitted_1_filter %>% dplyr::select(CW_mm,median,taxon) %>% distinct() %>%
-ggplot(aes(x=CW_mm,y=median, fill=taxon)) +
-  geom_col(position="stack") + theme_bw()
+fitted_readsVest <- fitted_1_filter %>% 
+  left_join(data.frame(crab_id=rownames(data_matrix), total_reads=as.numeric(rowSums(data_matrix)))) %>%
+  mutate(preads=reads/total_reads) %>%
+  group_by(taxon,CW_mm) %>% 
+  summarise(mean_preads=mean(preads),sd_preads=sd(preads), n=length(unique(crab_id))) %>%
+  mutate(sd_preads=ifelse(is.na(sd_preads),0,sd_preads)) %>%
+  left_join(fitted_1_filter %>% dplyr::select(CW_mm,mean,lo,hi,taxon) %>% distinct())
+
+p1 <- ggplot(data=fitted_readsVest, aes(x=CW_mm,y=mean)) +
+  geom_point() + geom_errorbar(aes(ymin=lo,ymax=hi), width=0.25) + 
+  geom_hline(aes(yintercept=0)) +
+  facet_grid(rows=vars(taxon), scales="free_y") +
+  xlim(c(5, 20)) +
+  theme_bw() + theme(strip.placement = "outside")
+
+p2 <- ggplot(data=fitted_readsVest, aes(x=CW_mm,y=mean_preads)) +
+  geom_point() + geom_errorbar(aes(ymin=mean_preads-sd_preads,ymax=mean_preads+sd_preads), width=0.25) + 
+  geom_hline(aes(yintercept=0)) +
+  facet_grid(rows=vars(taxon)) +
+  ylim(c(0,1)) + xlim(c(5, 20)) +
+  theme_bw() + theme(strip.placement = "inside")
+
+png(here(resultsdir,'zoid_AllPhyla10plus_4chains50K_fittedVals_v_pReads.png'), res=300,height=4000,width=2000)
+plot_grid(p1,p2,ncol=2)
+dev.off()
 ```
 
 
@@ -690,50 +695,103 @@ dev.off()
 ```
 
 
+### common taxa: standardized reads
+
+standardize to proportions of total reads for the given crab, then generate a new value from a multinomial
 
 
-
-### all taxa, to phylum
-
-run zoid at a higher taxonomic level -- remake the reads matrix 
+first, get the proportion of each crab's total reads that belong to each species
 ```{r}
-crabID.PHYreads.mat <- bind_rows(smdat,
-                            dat %>% dplyr::select(-taxon) %>% rename(taxon=new_taxon)) %>%
-  mutate(tax.group=ifelse(!is.na(phylum),phylum,taxon)) %>%
-  group_by(crab_id, tax.group) %>% summarise(crabReads=sum(nReads),ntechs=length(unique(sample_id))) %>%
-  mutate(crabReads_std=crabReads/ntechs) %>% 
-  dplyr::select(-crabReads,ntechs) %>%
-  pivot_wider(id_cols="crab_id", names_from="tax.group",values_from="crabReads_std", values_fill=0) %>%
-  column_to_rownames("crab_id")
-
-## remove rare families
-crabID.PHYreads.mat <- dropspc(crabID.PHYreads.mat, minocc=9)
-crabID.PHYreads.mat <- crabID.PHYreads.mat[which(rowSums(crabID.PHYreads.mat) > 0),]
+crabID.preads.mat <- decostand(x=crabID.reads.filter.mat,method="total",MARGIN=1)
 ```
 
+then, get the average total reads per crab (for the 11 species we're including in the matrix)
+```{r}
+avg_reads_all <- round(median(rowSums(data_matrix)),0)
+```
+
+calculate reads per species using the average total read depth, by drawing from a multinomially distributed random number vector
+```{r}
+set.seed(555)
+std.reads.df <- crabID.preads.mat %>%
+  rownames_to_column("crab") %>%
+  pivot_longer(cols=2:(dim(crabID.preads.mat)[2]+1), names_to="taxon",values_to="value") %>%
+  group_by(crab) %>%
+  nest() %>%
+  summarise(new_counts=purrr::map(data, ~rmultinom(n=1,size=726, prob=.x$value))) %>%
+  unnest_longer(new_counts, indices_include=FALSE) %>% arrange(crab,desc(new_counts)) %>%
+  bind_cols(crabID.preads.mat %>%
+              rownames_to_column("crab") %>%
+              pivot_longer(cols=2:(dim(crabID.preads.mat)[2]+1), names_to="taxon",values_to="value") %>% 
+              rename(crab2=crab) %>% arrange(crab2,desc(value))) %>%
+  mutate(sp_reads=new_counts[,1]) %>% dplyr::select(-new_counts,-crab2)
+```
+
+Because many species contribute super low (but non-zero) proportion of DNA, the `rmultinom` function may return 0 reads. re-run `rmultinom` with a new seed until there are no zeroes remaining.
+```{r}
+to_fix <- length(filter(std.reads.df, sp_reads==0 & value != 0) %>% pull(crab))
+max_trials <- 1200
+
+s <- 560
+i <- 0
+while(to_fix > 0 & i < max_trials){
+  set.seed(s)
+  std.reads.df %<>% mutate(sp_reads=ifelse(sp_reads==0 & value != 0, 
+                                            rmultinom(n=1,size=avg_reads_all, prob=value),sp_reads))
+  
+  to_fix <- length(filter(std.reads.df, sp_reads==0 & value != 0) %>% pull(crab))
+  s <- s+5
+  i <- i + 1
+  message(to_fix, " crab with zeros remaining.")
+}
+```
+
+do you need to manually fix the remaining to sp_reads=1?
+```{r}
+filter(std.reads.df, sp_reads==0 & value != 0)
+
+std.reads.df %<>% mutate(sp_reads=ifelse((crab=="CLAY_08" & taxon=="Chordariaceae"), 1,sp_reads))
+```
+
+
+make matrix of the expected number of reads
+```{r}
+std.reads.mat <- std.reads.df %>% 
+  dplyr::select(crab,taxon,sp_reads) %>%
+  pivot_wider(names_from="taxon",values_from="sp_reads", values_fill=0)
+```
 
 join with carapace widths
 ```{r}
-zoidIN.PHYreads <- crabID.PHYreads.mat %>%
-  rownames_to_column("crab_id") %>%
-  left_join(cw.df,by="crab_id") %>%
-  column_to_rownames("crab_id")
+# zoidIN.std.reads <- std.reads.mat %>%
+#   left_join(cw.df,by=c("crab"="crab_id")) %>%
+#   column_to_rownames("crab")
+
+zoidIN.std.reads <- crabID.preads.mat %>%
+  rownames_to_column("crab") %>%
+  left_join(cw.df,by=c("crab"="crab_id")) %>%
+  column_to_rownames("crab")
+
+any(is.na(zoidIN.std.reads$CW_mm))
 ```
 
+#### run zoid
+create the design matrix (site / site type information per observation, aka per crab) and the data matrix (read counts only)
+```{r}
+design_matrix = zoidIN.std.reads[,which(names(zoidIN.std.reads)=="CW_mm"), drop=FALSE]
+data_matrix = zoidIN.std.reads[,which(names(zoidIN.std.reads)!="CW_mm")]
+design_matrix$y = 1 # dummy variable
+```
 
 attempt to zoid!
 ```{r}
-design_matrix = zoidIN.PHYreads[,which(names(zoidIN.PHYreads)=="CW_mm"), drop=FALSE]
-data_matrix = zoidIN.PHYreads[,which(names(zoidIN.PHYreads)!="CW_mm")]
-design_matrix$y = 1 # dummy variable
-
-fit_phy_prey <- fit_zoid(formula = y ~ CW_mm, 
-                      design_matrix = design_matrix, 
-                      data_matrix = as.matrix(data_matrix)/10,
+fit_2_prey <- fit_zoid(formula = y ~ CW_mm, 
+                       design_matrix = design_matrix, 
+                       data_matrix = as.matrix(data_matrix),
                        overdispersion = TRUE,
-                       chains=4,   # for testing; change to 4
-                       iter=5000,  # for testing; change to 5000
-                      overdispersion_sd = 0.1)   
+                       chains=4,
+                       iter=5000,
+                       overdispersion_sd = 0.1)
 ```
 ```
 SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 1).
@@ -746,27 +804,9 @@ Chain 1:   Stan can't start sampling from this initial value.
 Chain 1: Rejecting initial value:
 Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
 Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
 Chain 1: 
-Chain 1: Gradient evaluation took 0.001 seconds
-Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 10 seconds.
+Chain 1: Gradient evaluation took 0.002 seconds
+Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 20 seconds.
 Chain 1: Adjust your expectations accordingly!
 Chain 1: 
 Chain 1: 
@@ -783,9 +823,9 @@ Chain 1: Iteration: 4000 / 5000 [ 80%]  (Sampling)
 Chain 1: Iteration: 4500 / 5000 [ 90%]  (Sampling)
 Chain 1: Iteration: 5000 / 5000 [100%]  (Sampling)
 Chain 1: 
-Chain 1:  Elapsed Time: 77.828 seconds (Warm-up)
-Chain 1:                81.022 seconds (Sampling)
-Chain 1:                158.85 seconds (Total)
+Chain 1:  Elapsed Time: 140.109 seconds (Warm-up)
+Chain 1:                109.753 seconds (Sampling)
+Chain 1:                249.862 seconds (Total)
 Chain 1: 
 
 SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 2).
@@ -813,51 +853,9 @@ Chain 2:   Stan can't start sampling from this initial value.
 Chain 2: Rejecting initial value:
 Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
 Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
 Chain 2: 
-Chain 2: Gradient evaluation took 0 seconds
-Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 0 seconds.
+Chain 2: Gradient evaluation took 0.002 seconds
+Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 20 seconds.
 Chain 2: Adjust your expectations accordingly!
 Chain 2: 
 Chain 2: 
@@ -874,9 +872,9 @@ Chain 2: Iteration: 4000 / 5000 [ 80%]  (Sampling)
 Chain 2: Iteration: 4500 / 5000 [ 90%]  (Sampling)
 Chain 2: Iteration: 5000 / 5000 [100%]  (Sampling)
 Chain 2: 
-Chain 2:  Elapsed Time: 76.703 seconds (Warm-up)
-Chain 2:                89.911 seconds (Sampling)
-Chain 2:                166.614 seconds (Total)
+Chain 2:  Elapsed Time: 168.262 seconds (Warm-up)
+Chain 2:                113.358 seconds (Sampling)
+Chain 2:                281.62 seconds (Total)
 Chain 2: 
 
 SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 3).
@@ -895,258 +893,9 @@ Chain 3:   Stan can't start sampling from this initial value.
 Chain 3: Rejecting initial value:
 Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
 Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
 Chain 3: 
-Chain 3: Gradient evaluation took 0.001 seconds
-Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 10 seconds.
+Chain 3: Gradient evaluation took 0.002 seconds
+Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 20 seconds.
 Chain 3: Adjust your expectations accordingly!
 Chain 3: 
 Chain 3: 
@@ -1163,9 +912,9 @@ Chain 3: Iteration: 4000 / 5000 [ 80%]  (Sampling)
 Chain 3: Iteration: 4500 / 5000 [ 90%]  (Sampling)
 Chain 3: Iteration: 5000 / 5000 [100%]  (Sampling)
 Chain 3: 
-Chain 3:  Elapsed Time: 27.1 seconds (Warm-up)
-Chain 3:                537.144 seconds (Sampling)
-Chain 3:                564.244 seconds (Total)
+Chain 3:  Elapsed Time: 143.379 seconds (Warm-up)
+Chain 3:                111.802 seconds (Sampling)
+Chain 3:                255.181 seconds (Total)
 Chain 3: 
 
 SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 4).
@@ -1196,9 +945,12 @@ Chain 4:   Stan can't start sampling from this initial value.
 Chain 4: Rejecting initial value:
 Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
 Chain 4:   Stan can't start sampling from this initial value.
+Chain 4: Rejecting initial value:
+Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
+Chain 4:   Stan can't start sampling from this initial value.
 Chain 4: 
-Chain 4: Gradient evaluation took 0.001 seconds
-Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 10 seconds.
+Chain 4: Gradient evaluation took 0.003 seconds
+Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 30 seconds.
 Chain 4: Adjust your expectations accordingly!
 Chain 4: 
 Chain 4: 
@@ -1215,64 +967,92 @@ Chain 4: Iteration: 4000 / 5000 [ 80%]  (Sampling)
 Chain 4: Iteration: 4500 / 5000 [ 90%]  (Sampling)
 Chain 4: Iteration: 5000 / 5000 [100%]  (Sampling)
 Chain 4: 
-Chain 4:  Elapsed Time: 73.431 seconds (Warm-up)
-Chain 4:                73.54 seconds (Sampling)
-Chain 4:                146.971 seconds (Total)
+Chain 4:  Elapsed Time: 101.639 seconds (Warm-up)
+Chain 4:                89.855 seconds (Sampling)
+Chain 4:                191.494 seconds (Total)
 Chain 4: 
 ```
 
-save data
-```{r}
-saveRDS(fit_phy_prey,here(resultsdir,'zoidOUT_nReads_allTaxaPHY10plus_by_CW.rds'))
-```
 
+#### zoid output
 Get the fitted values and label the species / sizes
 ```{r}
-fitted_phy <- get_fitted(fit_phy_prey)
+fitted_2 <- get_fitted(fit_2_prey)
 
-## add in phylum / carapace width / crab id 
-fitted_phy %<>% left_join(data.frame(group=seq(1:dim(data_matrix)[2]),
-                                         phylum=colnames(data_matrix)), by=c("group"))
+## add in taxa / carapace width / crab id 
+fitted_2 %<>% left_join(data.frame(group=seq(1:dim(data_matrix)[2]),
+                                         taxon=colnames(data_matrix)), by=c("group"))
 
-fitted_phy %<>% left_join(data.frame(obs=seq(1:dim(data_matrix)[1]),
-                                   CW_mm=design_matrix[,1]),
-                                     crab_id=rownames(data_matrix),by="obs")
+fitted_2 %<>% left_join(data.frame(obs=seq(1:dim(data_matrix)[1]),
+                                   CW_mm=design_matrix[,1],
+                                     crab_id=rownames(data_matrix)),by="obs")
 
 ## remove estimated values for taxa that didn't actually show up in the data for a given carapace width
-fitted_phy_filter <- fitted_phy %>%
+fitted_2_filter <- fitted_2 %>%
   left_join(
     data_matrix %>% 
       rownames_to_column("crab_id") %>%
-      pivot_longer(cols=2:(dim(data_matrix)[2]+1), names_to="phylum",values_to="reads"),
-    by=c("crab_id","phylum")
+      pivot_longer(cols=2:(dim(data_matrix)[2]+1), names_to="taxon",values_to="reads"),
+    by=c("crab_id","taxon")
   ) %>%
   filter(reads!=0)
 ```
 
 Plot the fitted values
 ```{r}
-png(here(resultsdir,paste0('zoid_raw_AllPhyla10plus_GroupedByCW_4chains50K.png')), res=300,height=2000,width=3000)
-fitted_phy_filter %>%
-  group_by(phylum,CW_mm) %>%
-  summarise(mean_cw=mean, sd_cw=sd(mean), n=length(unique(obs))) %>%
+png(here(resultsdir,paste0('zoid_rawMeans_AllTaxa10plus_pReads_4chains50K.png')), res=300,height=2000,width=3000)
+fitted_2_filter %>%
+  group_by(taxon,CW_mm) %>%
+  summarise(mean_cw=mean, upper_cw=lo,lower_cw=hi, n=length(unique(obs))) %>%
 ggplot(aes(y=mean_cw,x=as.numeric(CW_mm))) +
-    geom_point() + geom_errorbar(aes(ymin=mean_cw-sd_cw,ymax=mean_cw+sd_cw), width=0.25) + 
+    geom_point() + geom_errorbar(aes(ymin=lower_cw,ymax=upper_cw), width=0.25) + 
   geom_hline(aes(yintercept=0)) +
-    facet_wrap(~phylum, scales="free_y") + 
-    labs(x="Carapace Width (mm)", y="Bayesian posterior mean", subtitle="Phyla present in 10+ crab") +
+  geom_text(aes(y=0.001,x=as.numeric(CW_mm),label=n)) +
+    facet_wrap(~taxon, scales="free_y") + 
+    labs(x="Carapace Width (mm)", y="Bayesian posterior mean", subtitle="Taxa present in 10+ crab") +
     theme_bw() +
     theme(axis.text.x=element_text(angle=45,hjust=1))
 dev.off()
 ```
 
+compare the medians of the fitted values to the median read counts
+```{r}
+fitted_readsVest <- fitted_2_filter %>% 
+  left_join(data_matrix %>% rownames_to_column("crab_id") %>% 
+              pivot_longer(cols=2:(ncol(data_matrix)+1), names_to="taxon",values_to="preads")) %>%
+  group_by(taxon,CW_mm) %>% 
+  summarise(mean_preads=mean(preads),sd_preads=sd(preads), n=length(unique(crab_id))) %>%
+  mutate(sd_preads=ifelse(is.na(sd_preads),0,sd_preads)) %>%
+  left_join(fitted_2_filter %>% dplyr::select(CW_mm,mean,lo,hi,taxon) %>% distinct())
+
+p1 <- ggplot(data=fitted_readsVest, aes(x=CW_mm,y=mean)) +
+  geom_point() + geom_errorbar(aes(ymin=lo,ymax=hi), width=0.25) + 
+  geom_hline(aes(yintercept=0)) +
+  facet_grid(rows=vars(taxon), scales="free_y") +
+  xlim(c(5, 20)) +
+  theme_bw() + theme(strip.placement = "outside")
+
+p2 <- ggplot(data=fitted_readsVest, aes(x=CW_mm,y=mean_preads)) +
+  geom_point() + geom_errorbar(aes(ymin=mean_preads-sd_preads,ymax=mean_preads+sd_preads), width=0.25) + 
+  geom_hline(aes(yintercept=0)) +
+  facet_grid(rows=vars(taxon)) +
+  ylim(c(0,1)) + xlim(c(5, 20)) +
+  theme_bw() + theme(strip.placement = "inside")
+
+png(here(resultsdir,'zoid_fittedVals_v_pReads_AllTaxa10plus_4chains50K.png'), res=300,height=4000,width=2000)
+plot_grid(p1,p2,ncol=2)
+dev.off()
+```
+
+
 Use the smallest crab size *for which the phylum was present* as the reference value (min possible = CW 5mm), and Get the difference between the value at carapace width X and the reference (so that if X > reference, difference is +)
 ```{r}
-fitted_phy_ref <- fitted_phy_filter %>%
-  # set the reference according to minimum CW in which that phylum was detected
-  group_by(phylum) %>% mutate(min_cw=min(CW_mm)) %>% ungroup() %>%
+fitted_2_ref <- fitted_2_filter %>%
+  # set the reference according to minimum CW in which that taxon was detected
+  group_by(taxon) %>% mutate(min_cw=min(CW_mm)) %>% ungroup() %>%
   filter(CW_mm==min_cw) %>%
-  dplyr::select(group,phylum,mean,median) %>% rename(ref_mean=mean,ref_median=median) %>%
-  right_join(fitted_phy_filter,by=c("group","phylum")) %>%
+  dplyr::select(group,taxon,mean,median) %>% rename(ref_mean=mean,ref_median=median) %>%
+  right_join(fitted_2_filter,by=c("group","taxon")) %>%
   # calculate change from reference
   mutate(scaled_mean=mean-ref_mean,
          scaled_median=median-ref_median)
@@ -1280,12 +1060,12 @@ fitted_phy_ref <- fitted_phy_filter %>%
 
 
 ```{r}
-## plot for each phylum 
-png(here(resultsdir,paste0('zoid_AllPhyla10plus_GroupedByCW_4chains50K.png')), res=300,height=2000,width=3000)
-ggplot(fitted_phy_ref, aes(y=scaled_mean,x=as.numeric(CW_mm))) +
+## plot for each taxon
+png(here(resultsdir,paste0('zoid_relMeans_AllTaxa10plus_pReads_4chains50K.png')), res=300,height=2000,width=3000)
+ggplot(fitted_2_ref, aes(y=scaled_mean,x=as.numeric(CW_mm))) +
     geom_point() + geom_hline(aes(yintercept=0)) +
-    facet_wrap(~phylum, scales="free_y") + 
-    labs(x="Carapace Width (mm)", y="Difference from 5mm CW", subtitle=p) +
+    facet_wrap(~taxon, scales="free_y") + 
+    labs(x="Carapace Width (mm)", y="Difference from 5mm CW") +
     theme_bw() +
     theme(axis.text.x=element_text(angle=45,hjust=1))
 dev.off()
@@ -1604,7 +1384,8 @@ cw_diffs.df <- cw_diffs %>%
   pivot_longer(cols=2:(dim(cw_diffs)[2]+1), names_to="crab_id_2",values_to="CW_diff")
 
 ggplot(cw_diffs.df, aes(x=CW_diff)) + 
-  geom_histogram(aes(y=after_stat(density)))
+  geom_histogram(aes(y=after_stat(density))) +
+  labs(x="Differences in Carapace Width (mm)", y="density") + theme_bw()
 ```
 
 Calculate the distances between each sample's prey composition (eDNA index, bray-curtis distance)
@@ -1614,6 +1395,7 @@ index.mat.filter <- dropspc(index.mat2, minocc=2)
 index.mat.filter <- index.mat.filter[which(rowSums(index.mat.filter) > 0),]
 
 dim(index.mat2); dim(index.mat.filter)
+
 
 # calculate bray-curtis distance
 index.bc <- vegdist(index.mat.filter, method="bray")
@@ -1626,7 +1408,8 @@ as.matrix(index.bc) %>%
   rownames_to_column("crab_id") %>%
   pivot_longer(cols=2:(dim(as.matrix(index.bc))[2]+1), names_to="crab_id_2",values_to="BCdistance") %>%
   ggplot(aes(x=BCdistance)) + 
-  geom_histogram(aes(y=after_stat(density))) + theme_bw()
+  geom_histogram(aes(y=after_stat(density))) + 
+  labs(x="Bray-Curtis Distance",y="density") +theme_bw()
 ```
 
 combine the differences / distances into one data frame.
@@ -1656,14 +1439,40 @@ cw.glm <- glm(BCdistance ~ CW_diff, data = reg.in, family = quasibinomial('logit
 summary(cw.glm)
 ```
 
+```
+Call:
+glm(formula = BCdistance ~ CW_diff, family = quasibinomial("logit"), 
+    data = reg.in)
+
+Deviance Residuals: 
+    Min       1Q   Median       3Q      Max  
+-1.9574  -0.0908   0.2079   0.4182   0.5644  
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  1.75653    0.04609   38.11   <2e-16 ***
+CW_diff      0.13223    0.01556    8.50   <2e-16 ***
+
+
+(Dispersion parameter for quasibinomial family taken to be 0.274319)
+
+Null deviance: 791.97  on 3363  degrees of freedom
+Residual deviance: 770.65  on 3362  degrees of freedom
+AIC: NA
+
+Number of Fisher Scoring iterations: 5
+```
+
 Address potential heteroskedasticity of errors:
 ```{r}
 robust.se.glm1 <- sqrt(diag(vcovHC(cw.glm , type="HC0")))
 coeftest(cw.glm, vcovHC(cw.glm , type="HC0"))
 ```
 
-
-
+Diagnostics
+```{r}
+plot(cw.glm)
+```
 
 
 
@@ -1700,7 +1509,7 @@ plot(cc1)
 ```
 
 ```{r}
-anova(cc1)
+anova(cc1,permutations = how(nperm=10000))
 ```
 
 
