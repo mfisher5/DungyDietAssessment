@@ -65,11 +65,13 @@ source("R/subscripts/crab_afdw.R")
 ```
 <br>
 
+
+
 ## Test sim
 
 For now, use temperature loggers from the intertidal in Willapa Bay, WA. Provided by WSG Crab Team
 
-```{r}
+```{r echo=FALSE}
 load(here(nrg_dir,'data','WillapaBayTemperature.rds'))
 Tdat_raw <- WillapaBayTemperature$WB.oysterville.2021
 
@@ -131,6 +133,8 @@ sim_out       <- summerTdat %>% mutate(W=0)
 simulate!
 ```{r}
 test.sim <- sim_W(par=parms$RFR, dataIN=DCRBdat4sim, LL=F)
+```
+```{r echo=FALSE}
 plot.sim(sim.out =test.sim,nd=nd)
 ```
 
@@ -220,7 +224,7 @@ data.frame(day=rep(1:(nd+1), 2),
   facet_wrap(~type, scales="free_y") + labs(title="RFR=0.75; prop Ingest loss=0.10")
 ```
 
-### RFR to 0.75, I loss > 0, Indigest > 0
+### RFR to 0.4, I loss > 0, Indigest > 0
 
 Just making up indigestable biomass of consumed prey as 0.40
 ```{r}
@@ -260,7 +264,7 @@ sim_out       <- summerTdat %>% mutate(W=0)
 
 
 ```{r}
-test.sim4 <- sim_W(par=0.75, dataIN=DCRBdat4sim, LL=F)
+test.sim4 <- sim_W(par=0.4, dataIN=DCRBdat4sim, LL=F)
 plot.sim(sim.out =test.sim4,nd=nd)
 ```
 
@@ -277,3 +281,226 @@ data.frame(day=rep(1:(nd+1), 2),
 
 
 Nothing seems to be changing for proportion of indigestible prey > 0? But regardless, g AFDW for the simulation is too large.
+
+
+
+
+## bioE
+
+Plot growth / consumption / respiration across temperature range
+```{r}
+tmp.g <- data.frame(bioE(par=parms,
+                                  data=dcrab_data)[[2]]) %>%
+  dplyr::select(TempC,G_ggd,G_som_ggd,G_lipid_ggd,G_shell_ggd,
+                Cmax_ggd,C_ggd,
+                R_ggd,R_Act_ggd)
+
+tmp.g.long <- tmp.g %>% pivot_longer(cols=c(2:ncol(tmp.g)), names_to="variable", values_to="ggd")
+```
+```{r echo=FALSE}
+tmp.g.long %>% filter(variable %in% c("G_ggd","G_som_ggd","G_lipid_ggd","G_shell_ggd")) %>%
+ggplot(aes(x=TempC,y=ggd,col=variable)) +
+  geom_point(size=0.5) +
+  geom_path() +
+  geom_hline(aes(yintercept=0)) +
+  labs(subtitle="RFR=1, Ingestion loss 0")
+
+tmp.g.long %>% filter(variable %in% c("Cmax_ggd","C_ggd","R_ggd","R_Act_ggd")) %>%
+ggplot(aes(x=TempC,y=ggd,col=variable)) +
+  geom_point(size=0.5) +
+  geom_path() +
+  geom_hline(aes(yintercept=0)) +
+  labs(subtitle="RFR=1, Ingestion loss 0")
+```
+
+As in the last simulation, reduce RFR to 0.4, make Ingestion loss 10%
+
+```{r}
+sim_dat <- dcrab_data
+sim_dat$propDiet <- 1
+sim_dat$propIloss <- 0.10
+
+parms2 <- parms
+parms2$RFR <- 0.40
+
+
+## rerun bioE
+tmp.g2 <- data.frame(bioE(par=parms2,
+                                  data=sim_dat)[[2]]) %>%
+  dplyr::select(TempC,G_ggd,G_som_ggd,G_lipid_ggd,G_shell_ggd,
+                Cmax_ggd,C_ggd,
+                R_ggd,R_Act_ggd)
+
+tmp.g2.long <- tmp.g2 %>% pivot_longer(cols=c(2:ncol(tmp.g2)), names_to="variable", values_to="ggd")
+```
+
+```{r echo=FALSE}
+g.subtitle <- "RFR=0.40, Ingestion loss 0.10"
+tmp.g2.long %>% filter(variable %in% c("G_ggd","G_som_ggd","G_lipid_ggd","G_shell_ggd")) %>%
+ggplot(aes(x=TempC,y=ggd,col=variable)) +
+  geom_point(size=0.5) +
+  geom_path() +
+  geom_hline(aes(yintercept=0)) +
+  labs(subtitle=g.subtitle)
+
+tmp.g2.long %>% filter(variable %in% c("Cmax_ggd","C_ggd","R_ggd","R_Act_ggd")) %>%
+ggplot(aes(x=TempC,y=ggd,col=variable)) +
+  geom_point(size=0.5) +
+  geom_path() +
+  geom_hline(aes(yintercept=0)) +
+  labs(subtitle=g.subtitle)
+```
+
+Consumption is waaaay higher than respiration. 
+
+There is a note where I was supposed to make sure the Act intercept parameter in the respiration function (`11.336`) was in the correct units. It looks like I had to convert respiration from g AFDW / hr to g AFDW / day. Maybe I needed to also do this with the `Act` intercept? Test this by adjusting the `customresp` aregument in the crab dataframe.
+
+```{r}
+sim_dat <- dcrab_data
+
+sim_dat$customresp <- function(par,data){
+  lnR_ulO2_gAFDWhr  <- par$RA*(data$TempC^2) + (par$RB*data$TempC*log(data$W + 10^-9)) + (data$RC*data$TempC) + data$RD
+  R_ulO2_gAFDWhr    <- exp(lnR_ulO2_gAFDWhr)
+  R_ulO2_gAFDWhr *24  -> R_ulO2_gAFDWd
+  R_ulO2_gAFDWd*0.001 -> R_mlO2_gAFDWd
+  R_mlO2_gAFDWd*4.8   -> R_cal_gAFDWd
+  R_cal_gAFDWd*4.186  -> R_jgAFDWd
+  R_jgAFDWd/1000      -> R_kjgAFDWd
+  Act <- (0.147*data$W) + (-0.533*data$TempC) + (11.336*24)
+  # return(list(R_jgd=R_kjgAFDWd, Act=Act))
+  return(list(R_jgd=R_jgAFDWd, Act=Act))
+}
+
+
+## rerun bioE
+tmp.g3 <- data.frame(bioE(par=parms,
+                                  data=sim_dat)[[2]]) %>%
+  dplyr::select(TempC,G_ggd,G_som_ggd,G_lipid_ggd,G_shell_ggd,
+                Cmax_ggd,C_ggd,
+                R_ggd,R_Act_ggd)
+
+tmp.g3.long <- tmp.g3 %>% pivot_longer(cols=c(2:ncol(tmp.g3)), names_to="variable", values_to="ggd")
+```
+
+```{r echo=FALSE}
+tmp.g3.long %>% filter(variable %in% c("G_ggd","G_som_ggd","G_lipid_ggd","G_shell_ggd")) %>%
+ggplot(aes(x=TempC,y=ggd,col=variable)) +
+  geom_point(size=0.5) +
+  geom_path() +
+  geom_hline(aes(yintercept=0)) +
+  labs(subtitle="Act intercept * 24hr")
+
+tmp.g3.long %>% filter(variable %in% c("Cmax_ggd","C_ggd","R_ggd","R_Act_ggd")) %>%
+ggplot(aes(x=TempC,y=ggd,col=variable)) +
+  geom_point(size=0.5) +
+  geom_path() +
+  geom_hline(aes(yintercept=0)) +
+  labs(subtitle="Act intercept * 24hr")
+```
+
+
+And when RFR / Prop I Loss are lower?
+```{r}
+sim_dat <- dcrab_data
+sim_dat$propDiet <- 1
+sim_dat$propIloss <- 0.10
+sim_dat$propIndigest <- 0.40
+
+# parms2 <- parms
+# parms2$RFR <- 0.40
+
+sim_dat$customresp <- function(par,data){
+  lnR_ulO2_gAFDWhr  <- par$RA*(data$TempC^2) + (par$RB*data$TempC*log(data$W + 10^-9)) + (data$RC*data$TempC) + data$RD
+  R_ulO2_gAFDWhr    <- exp(lnR_ulO2_gAFDWhr)
+  R_ulO2_gAFDWhr *24  -> R_ulO2_gAFDWd
+  R_ulO2_gAFDWd*0.001 -> R_mlO2_gAFDWd
+  R_mlO2_gAFDWd*4.8   -> R_cal_gAFDWd
+  R_cal_gAFDWd*4.186  -> R_jgAFDWd
+  R_jgAFDWd/1000      -> R_kjgAFDWd
+  Act <- (0.147*data$W) + (-0.533*data$TempC) + (11.336*24)
+  # return(list(R_jgd=R_kjgAFDWd, Act=Act))
+  return(list(R_jgd=R_jgAFDWd, Act=Act))
+}
+
+## rerun bioE
+tmp.g4 <- data.frame(bioE(par=parms2,
+                                  data=sim_dat)[[2]]) %>%
+  dplyr::select(TempC,G_ggd,G_som_ggd,G_lipid_ggd,G_shell_ggd,
+                Cmax_ggd,C_ggd,
+                R_ggd,R_Act_ggd)
+
+tmp.g4.long <- tmp.g4 %>% pivot_longer(cols=c(2:ncol(tmp.g4)), names_to="variable", values_to="ggd")
+```
+
+```{r echo=FALSE}
+g.subtitle <- "Act Intercept Ajudst; RFR=0.40, Ingestion loss 0.10"
+tmp.g4.long %>% filter(variable %in% c("G_ggd","G_som_ggd","G_lipid_ggd","G_shell_ggd")) %>%
+ggplot(aes(x=TempC,y=ggd,col=variable)) +
+  geom_point(size=0.5) +
+  geom_path() +
+  geom_hline(aes(yintercept=0)) +
+  labs(subtitle=g.subtitle)
+
+tmp.g4.long %>% filter(variable %in% c("Cmax_ggd","C_ggd","R_ggd","R_Act_ggd")) %>%
+ggplot(aes(x=TempC,y=ggd,col=variable)) +
+  geom_point(size=0.5) +
+  geom_path() +
+  geom_hline(aes(yintercept=0)) +
+  labs(subtitle=g.subtitle)
+```
+
+Check that this doesn't make a difference in the simulation
+
+```{r}
+sim_dat <- dcrab_data
+sim_dat$propDiet <- 1
+sim_dat$propIloss <- 0.10
+sim_dat$propIndigest <- 0.40
+
+sim_dat$customresp <- function(par,data){
+  lnR_ulO2_gAFDWhr  <- par$RA*(data$TempC^2) + (par$RB*data$TempC*log(data$W + 10^-9)) + (data$RC*data$TempC) + data$RD
+  R_ulO2_gAFDWhr    <- exp(lnR_ulO2_gAFDWhr)
+  R_ulO2_gAFDWhr *24  -> R_ulO2_gAFDWd
+  R_ulO2_gAFDWd*0.001 -> R_mlO2_gAFDWd
+  R_mlO2_gAFDWd*4.8   -> R_cal_gAFDWd
+  R_cal_gAFDWd*4.186  -> R_jgAFDWd
+  R_jgAFDWd/1000      -> R_kjgAFDWd
+  Act <- (0.147*data$W) + (-0.533*data$TempC) + (11.336*24)
+  # return(list(R_jgd=R_kjgAFDWd, Act=Act))
+  return(list(R_jgd=R_jgAFDWd, Act=Act))
+}
+```
+
+```{r}
+## temperatures
+sim_dat$TempC <- summerTdat$TempC     ## temperatures
+
+## starting crab weight
+sim_dat$W     <- W_start         ## set W data for the simulation to the first observed weight
+
+
+##
+nd     <-  dim(summerTdat)[1] # days of simulation
+
+## weights at start and end of simulation
+Wobs   <- data.frame(
+  day = c(1,nd),
+  W   = c(W_start,W_end)) 
+Wobs$date <- summerTdat$date[Wobs$day]
+
+# simulation data frames
+DCRBdat4sim   <- list(
+                  Wtarget  = Wobs,
+                  parSIM  = parms,
+                  simTdat = summerTdat,
+                  dataSIM  = sim_dat,
+                  dataMOLT = dataMOLT$Cmagister)
+
+sim_out       <- summerTdat %>% mutate(W=0)
+```
+
+
+```{r}
+test.sim4 <- sim_W(par=0.4, dataIN=DCRBdat4sim, LL=F)
+plot.sim(sim.out =test.sim4,nd=nd)
+```

@@ -104,7 +104,9 @@ cw.df <- lab_metadat %>% dplyr::select(sample_id,CW_mm) %>%
   filter(!is.na(presence)) %>% dplyr::select(-presence)
 
 
-saveRDS(cw.df, here('data','metadata','carapace_widths_for_zoid.rds'))
+if(!knitting){
+  saveRDS(cw.df, here('data','metadata','carapace_widths_for_zoid.rds'))
+}
 ```
 
 
@@ -285,480 +287,18 @@ p  <-  0.04274; p*3
 
 ## Zoid: common taxa
 
-Since we're only interested in the extent to which the prevalence of each taxon is upweighted / downweighted when size increases, it's ok to use the sequence abundances as the zoid input (?). 
+Since we're only interested in the extent to which the prevalence of each taxon is upweighted / downweighted when size increases, it's ok to use the proportion of total sequences as zoid input. 
 
 Then the covariate will be carapace width.
 
-As with the green crab diet data, the general sparsity of the data is still a problem for zoid. So the option is to either drop species or aggregate them into groups. 
-
-### raw reads INCORRECT
-
-#### prep data
-Remove taxa that occur in fewer than ten crab (not super useful for comparing across sizes). the function `dropspc` assumes that the species are in columns of the matrix. Otherwise, **zoid will not run**
-```{r}
-crabID.reads.filter.mat <- dropspc(crabID.reads.mat, minocc=9)
-crabID.reads.filter.mat <- crabID.reads.filter.mat[which(rowSums(crabID.reads.filter.mat) > 0),]
-
-dim(crabID.reads.mat); dim(crabID.reads.filter.mat)
-```
+As with the green crab diet data, the general sparsity of the data is still a problem for zoid. So the option is to either filter species or aggregate them into groups. 
 
 
-join with carapace widths
-```{r}
-zoidIN.reads <- crabID.reads.filter.mat %>%
-  rownames_to_column("crab_id") %>%
-  left_join(cw.df,by="crab_id") %>%
-  column_to_rownames("crab_id")
-
-
-
-any(is.na(zoidIN.reads$CW_mm))
-```
-
-
-#### run zoid
-create the design matrix (site / site type information per observation, aka per crab) and the data matrix (read counts only)
-```{r}
-design_matrix = zoidIN.reads[,which(names(zoidIN.reads)=="CW_mm"), drop=FALSE]
-data_matrix = zoidIN.reads[,which(names(zoidIN.reads)!="CW_mm")]
-design_matrix$y = 1 # dummy variable
-```
-
-attempt to zoid!
-```{r}
-fit_1_prey <- fit_zoid(formula = y ~ CW_mm, 
-                       design_matrix = design_matrix, 
-                       data_matrix = as.matrix(data_matrix)/1000,
-                       overdispersion = TRUE,
-                       chains=4,
-                       iter=5000,
-                       overdispersion_sd = 0.1)
-```
-```
-SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 1).
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: Rejecting initial value:
-Chain 1:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 1:   Stan can't start sampling from this initial value.
-Chain 1: 
-Chain 1: Gradient evaluation took 0.001 seconds
-Chain 1: 1000 transitions using 10 leapfrog steps per transition would take 10 seconds.
-Chain 1: Adjust your expectations accordingly!
-Chain 1: 
-Chain 1: 
-Chain 1: Iteration:    1 / 5000 [  0%]  (Warmup)
-Chain 1: Iteration:  500 / 5000 [ 10%]  (Warmup)
-Chain 1: Iteration: 1000 / 5000 [ 20%]  (Warmup)
-Chain 1: Iteration: 1500 / 5000 [ 30%]  (Warmup)
-Chain 1: Iteration: 2000 / 5000 [ 40%]  (Warmup)
-Chain 1: Iteration: 2500 / 5000 [ 50%]  (Warmup)
-Chain 1: Iteration: 2501 / 5000 [ 50%]  (Sampling)
-Chain 1: Iteration: 3000 / 5000 [ 60%]  (Sampling)
-Chain 1: Iteration: 3500 / 5000 [ 70%]  (Sampling)
-Chain 1: Iteration: 4000 / 5000 [ 80%]  (Sampling)
-Chain 1: Iteration: 4500 / 5000 [ 90%]  (Sampling)
-Chain 1: Iteration: 5000 / 5000 [100%]  (Sampling)
-Chain 1: 
-Chain 1:  Elapsed Time: 113.54 seconds (Warm-up)
-Chain 1:                93.227 seconds (Sampling)
-Chain 1:                206.767 seconds (Total)
-Chain 1: 
-
-SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 2).
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: Rejecting initial value:
-Chain 2:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 2:   Stan can't start sampling from this initial value.
-Chain 2: 
-Chain 2: Gradient evaluation took 0.001 seconds
-Chain 2: 1000 transitions using 10 leapfrog steps per transition would take 10 seconds.
-Chain 2: Adjust your expectations accordingly!
-Chain 2: 
-Chain 2: 
-Chain 2: Iteration:    1 / 5000 [  0%]  (Warmup)
-Chain 2: Iteration:  500 / 5000 [ 10%]  (Warmup)
-Chain 2: Iteration: 1000 / 5000 [ 20%]  (Warmup)
-Chain 2: Iteration: 1500 / 5000 [ 30%]  (Warmup)
-Chain 2: Iteration: 2000 / 5000 [ 40%]  (Warmup)
-Chain 2: Iteration: 2500 / 5000 [ 50%]  (Warmup)
-Chain 2: Iteration: 2501 / 5000 [ 50%]  (Sampling)
-Chain 2: Iteration: 3000 / 5000 [ 60%]  (Sampling)
-Chain 2: Iteration: 3500 / 5000 [ 70%]  (Sampling)
-Chain 2: Iteration: 4000 / 5000 [ 80%]  (Sampling)
-Chain 2: Iteration: 4500 / 5000 [ 90%]  (Sampling)
-Chain 2: Iteration: 5000 / 5000 [100%]  (Sampling)
-Chain 2: 
-Chain 2:  Elapsed Time: 111.97 seconds (Warm-up)
-Chain 2:                124.09 seconds (Sampling)
-Chain 2:                236.06 seconds (Total)
-Chain 2: 
-
-SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 3).
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: Rejecting initial value:
-Chain 3:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 3:   Stan can't start sampling from this initial value.
-Chain 3: 
-Chain 3: Gradient evaluation took 0.001 seconds
-Chain 3: 1000 transitions using 10 leapfrog steps per transition would take 10 seconds.
-Chain 3: Adjust your expectations accordingly!
-Chain 3: 
-Chain 3: 
-Chain 3: Iteration:    1 / 5000 [  0%]  (Warmup)
-Chain 3: Iteration:  500 / 5000 [ 10%]  (Warmup)
-Chain 3: Iteration: 1000 / 5000 [ 20%]  (Warmup)
-Chain 3: Iteration: 1500 / 5000 [ 30%]  (Warmup)
-Chain 3: Iteration: 2000 / 5000 [ 40%]  (Warmup)
-Chain 3: Iteration: 2500 / 5000 [ 50%]  (Warmup)
-Chain 3: Iteration: 2501 / 5000 [ 50%]  (Sampling)
-Chain 3: Iteration: 3000 / 5000 [ 60%]  (Sampling)
-Chain 3: Iteration: 3500 / 5000 [ 70%]  (Sampling)
-Chain 3: Iteration: 4000 / 5000 [ 80%]  (Sampling)
-Chain 3: Iteration: 4500 / 5000 [ 90%]  (Sampling)
-Chain 3: Iteration: 5000 / 5000 [100%]  (Sampling)
-Chain 3: 
-Chain 3:  Elapsed Time: 113.439 seconds (Warm-up)
-Chain 3:                107.362 seconds (Sampling)
-Chain 3:                220.801 seconds (Total)
-Chain 3: 
-
-SAMPLING FOR MODEL 'dirichregmod' NOW (CHAIN 4).
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: Rejecting initial value:
-Chain 4:   Log probability evaluates to log(0), i.e. negative infinity.
-Chain 4:   Stan can't start sampling from this initial value.
-Chain 4: 
-Chain 4: Gradient evaluation took 0.001 seconds
-Chain 4: 1000 transitions using 10 leapfrog steps per transition would take 10 seconds.
-Chain 4: Adjust your expectations accordingly!
-Chain 4: 
-Chain 4: 
-Chain 4: Iteration:    1 / 5000 [  0%]  (Warmup)
-Chain 4: Iteration:  500 / 5000 [ 10%]  (Warmup)
-Chain 4: Iteration: 1000 / 5000 [ 20%]  (Warmup)
-Chain 4: Iteration: 1500 / 5000 [ 30%]  (Warmup)
-Chain 4: Iteration: 2000 / 5000 [ 40%]  (Warmup)
-Chain 4: Iteration: 2500 / 5000 [ 50%]  (Warmup)
-Chain 4: Iteration: 2501 / 5000 [ 50%]  (Sampling)
-Chain 4: Iteration: 3000 / 5000 [ 60%]  (Sampling)
-Chain 4: Iteration: 3500 / 5000 [ 70%]  (Sampling)
-Chain 4: Iteration: 4000 / 5000 [ 80%]  (Sampling)
-Chain 4: Iteration: 4500 / 5000 [ 90%]  (Sampling)
-Chain 4: Iteration: 5000 / 5000 [100%]  (Sampling)
-Chain 4: 
-Chain 4:  Elapsed Time: 109.997 seconds (Warm-up)
-Chain 4:                97.94 seconds (Sampling)
-Chain 4:                207.937 seconds (Total)
-Chain 4: 
-```
-
-save data
-```{r}
-saveRDS(fit_1_prey,here(resultsdir,'zoidOUT_nReads_allTaxa10plus_by_CW.rds'))
-```
-
-
-
-
-#### zoid output
-Get the fitted values and label the species / sizes
-```{r}
-fitted_1 <- get_fitted(fit_1_prey)
-
-## add in taxa / carapace width / crab id 
-fitted_1 %<>% left_join(data.frame(group=seq(1:dim(data_matrix)[2]),
-                                         taxon=colnames(data_matrix)), by=c("group"))
-
-fitted_1 %<>% left_join(data.frame(obs=seq(1:dim(data_matrix)[1]),
-                                   CW_mm=design_matrix[,1],
-                                     crab_id=rownames(data_matrix)),by="obs")
-
-## remove estimated values for taxa that didn't actually show up in the data for a given carapace width
-fitted_1_filter <- fitted_1 %>%
-  left_join(
-    data_matrix %>% 
-      rownames_to_column("crab_id") %>%
-      pivot_longer(cols=2:(dim(data_matrix)[2]+1), names_to="taxon",values_to="reads"),
-    by=c("crab_id","taxon")
-  ) %>%
-  filter(reads!=0)
-```
-
-Plot the fitted values
-```{r}
-png(here(resultsdir,paste0('zoid_raw_AllTaxa10plus_GroupedByCW_4chains50K.png')), res=300,height=2000,width=3000)
-fitted_1_filter %>%
-  group_by(taxon,CW_mm) %>%
-  summarise(mean_cw=mean, upper_cw=lo,lower_cw=hi, n=length(unique(obs))) %>%
-ggplot(aes(y=mean_cw,x=as.numeric(CW_mm))) +
-    geom_point() + geom_errorbar(aes(ymin=lower_cw,ymax=upper_cw), width=0.25) + 
-  geom_hline(aes(yintercept=0)) +
-  geom_text(aes(y=0.001,x=as.numeric(CW_mm),label=n)) +
-    facet_wrap(~taxon, scales="free_y") + 
-    labs(x="Carapace Width (mm)", y="Bayesian posterior mean", subtitle="Taxa present in 10+ crab") +
-    theme_bw() +
-    theme(axis.text.x=element_text(angle=45,hjust=1))
-dev.off()
-```
-
-compare the medians of the fitted values to the median read counts
-```{r}
-fitted_readsVest <- fitted_1_filter %>% 
-  left_join(data.frame(crab_id=rownames(data_matrix), total_reads=as.numeric(rowSums(data_matrix)))) %>%
-  mutate(preads=reads/total_reads) %>%
-  group_by(taxon,CW_mm) %>% 
-  summarise(mean_preads=mean(preads),sd_preads=sd(preads), n=length(unique(crab_id))) %>%
-  mutate(sd_preads=ifelse(is.na(sd_preads),0,sd_preads)) %>%
-  left_join(fitted_1_filter %>% dplyr::select(CW_mm,mean,lo,hi,taxon) %>% distinct())
-
-p1 <- ggplot(data=fitted_readsVest, aes(x=CW_mm,y=mean)) +
-  geom_point() + geom_errorbar(aes(ymin=lo,ymax=hi), width=0.25) + 
-  geom_hline(aes(yintercept=0)) +
-  facet_grid(rows=vars(taxon), scales="free_y") +
-  xlim(c(5, 20)) +
-  theme_bw() + theme(strip.placement = "outside")
-
-p2 <- ggplot(data=fitted_readsVest, aes(x=CW_mm,y=mean_preads)) +
-  geom_point() + geom_errorbar(aes(ymin=mean_preads-sd_preads,ymax=mean_preads+sd_preads), width=0.25) + 
-  geom_hline(aes(yintercept=0)) +
-  facet_grid(rows=vars(taxon)) +
-  ylim(c(0,1)) + xlim(c(5, 20)) +
-  theme_bw() + theme(strip.placement = "inside")
-
-png(here(resultsdir,'zoid_AllPhyla10plus_4chains50K_fittedVals_v_pReads.png'), res=300,height=4000,width=2000)
-plot_grid(p1,p2,ncol=2)
-dev.off()
-```
-
-
-Use the smallest crab size *for which the phylum was present* as the reference value (min possible = CW 5mm), and Get the difference between the value at carapace width X and the reference (so that if X > reference, difference is +)
-```{r}
-fitted_1_ref <- fitted_1_filter %>%
-  # set the reference according to minimum CW in which that phylum was detected
-  group_by(phylum) %>% mutate(min_cw=min(CW_mm)) %>% ungroup() %>%
-  filter(CW_mm==min_cw) %>%
-  dplyr::select(group,phylum,mean,median) %>% rename(ref_mean=mean,ref_median=median) %>%
-  right_join(fitted_1_filter,by=c("group","phylum")) %>%
-  # calculate change from reference
-  mutate(scaled_mean=mean-ref_mean,
-         scaled_median=median-ref_median)
-```
-
-
-```{r}
-## plot for each phylum 
-png(here(resultsdir,paste0('zoid_AllPhyla10plus_GroupedByCW_4chains50K.png')), res=300,height=2000,width=3000)
-ggplot(fitted_1_ref, aes(y=scaled_mean,x=as.numeric(CW_mm))) +
-    geom_point() + geom_hline(aes(yintercept=0)) +
-    facet_wrap(~phylum, scales="free_y") + 
-    labs(x="Carapace Width (mm)", y="Difference from 5mm CW", subtitle=p) +
-    theme_bw() +
-    theme(axis.text.x=element_text(angle=45,hjust=1))
-dev.off()
-```
-
-
-### common taxa: standardized reads CORRECT
-
-standardize to proportions of total reads for the given crab, then generate a new value from a multinomial
-
+### common taxa (filter)
 
 first, get the proportion of each crab's total reads that belong to each species
 ```{r}
 crabID.preads.mat <- decostand(x=crabID.reads.filter.mat,method="total",MARGIN=1)
-```
-
-then, get the average total reads per crab (for the 11 species we're including in the matrix)
-```{r}
-avg_reads_all <- round(median(rowSums(data_matrix)),0)
-```
-
-calculate reads per species using the average total read depth, by drawing from a multinomially distributed random number vector
-```{r}
-set.seed(555)
-std.reads.df <- crabID.preads.mat %>%
-  rownames_to_column("crab") %>%
-  pivot_longer(cols=2:(dim(crabID.preads.mat)[2]+1), names_to="taxon",values_to="value") %>%
-  group_by(crab) %>%
-  nest() %>%
-  summarise(new_counts=purrr::map(data, ~rmultinom(n=1,size=726, prob=.x$value))) %>%
-  unnest_longer(new_counts, indices_include=FALSE) %>% arrange(crab,desc(new_counts)) %>%
-  bind_cols(crabID.preads.mat %>%
-              rownames_to_column("crab") %>%
-              pivot_longer(cols=2:(dim(crabID.preads.mat)[2]+1), names_to="taxon",values_to="value") %>% 
-              rename(crab2=crab) %>% arrange(crab2,desc(value))) %>%
-  mutate(sp_reads=new_counts[,1]) %>% dplyr::select(-new_counts,-crab2)
-```
-
-Because many species contribute super low (but non-zero) proportion of DNA, the `rmultinom` function may return 0 reads. re-run `rmultinom` with a new seed until there are no zeroes remaining.
-```{r}
-to_fix <- length(filter(std.reads.df, sp_reads==0 & value != 0) %>% pull(crab))
-max_trials <- 1200
-
-s <- 560
-i <- 0
-while(to_fix > 0 & i < max_trials){
-  set.seed(s)
-  std.reads.df %<>% mutate(sp_reads=ifelse(sp_reads==0 & value != 0, 
-                                            rmultinom(n=1,size=avg_reads_all, prob=value),sp_reads))
-  
-  to_fix <- length(filter(std.reads.df, sp_reads==0 & value != 0) %>% pull(crab))
-  s <- s+5
-  i <- i + 1
-  message(to_fix, " crab with zeros remaining.")
-}
-```
-
-do you need to manually fix the remaining to sp_reads=1?
-```{r}
-filter(std.reads.df, sp_reads==0 & value != 0)
-
-std.reads.df %<>% mutate(sp_reads=ifelse((crab=="CLAY_08" & taxon=="Chordariaceae"), 1,sp_reads))
-```
-
-
-make matrix of the expected number of reads
-```{r}
-std.reads.mat <- std.reads.df %>% 
-  dplyr::select(crab,taxon,sp_reads) %>%
-  pivot_wider(names_from="taxon",values_from="sp_reads", values_fill=0)
 ```
 
 join with carapace widths
@@ -784,7 +324,7 @@ design_matrix$y = 1 # dummy variable
 ```
 
 attempt to zoid!
-```{r}
+```{r eval=FALSE}
 fit_2_prey <- fit_zoid(formula = y ~ CW_mm, 
                        design_matrix = design_matrix, 
                        data_matrix = as.matrix(data_matrix),
@@ -972,7 +512,12 @@ Chain 4:                89.855 seconds (Sampling)
 Chain 4:                191.494 seconds (Total)
 Chain 4: 
 ```
-
+```{r include=FALSE}
+# save
+saveRDS(fit_2_prey, here(resultsdir,'zoidOBJ_pReads_AllTaxa10plus_byCW_4ch5KiOD_2023-10-06.rds'))
+# re-read input
+fit_2_prey <- readRDS(here(resultsdir,'zoidOBJ_pReads_AllTaxa10plus_byCW_4ch5KiOD_2023-10-06.rds'))
+```
 
 #### zoid output
 Get the fitted values and label the species / sizes
@@ -1000,7 +545,9 @@ fitted_2_filter <- fitted_2 %>%
 
 Plot the fitted values
 ```{r}
-png(here(resultsdir,paste0('zoid_rawMeans_AllTaxa10plus_pReads_4chains50K.png')), res=300,height=2000,width=3000)
+if(!knitting){
+  
+png(here('figs',paste0('zoidMeansRaw_pReads_AllTaxa10plus_byCW_4ch5KiOD_2023-10-06.png')), res=300,height=2000,width=3000)
 fitted_2_filter %>%
   group_by(taxon,CW_mm) %>%
   summarise(mean_cw=mean, upper_cw=lo,lower_cw=hi, n=length(unique(obs))) %>%
@@ -1013,10 +560,14 @@ ggplot(aes(y=mean_cw,x=as.numeric(CW_mm))) +
     theme_bw() +
     theme(axis.text.x=element_text(angle=45,hjust=1))
 dev.off()
+
+}
 ```
 
 compare the medians of the fitted values to the median read counts
 ```{r}
+if(!knitting){
+  
 fitted_readsVest <- fitted_2_filter %>% 
   left_join(data_matrix %>% rownames_to_column("crab_id") %>% 
               pivot_longer(cols=2:(ncol(data_matrix)+1), names_to="taxon",values_to="preads")) %>%
@@ -1039,9 +590,11 @@ p2 <- ggplot(data=fitted_readsVest, aes(x=CW_mm,y=mean_preads)) +
   ylim(c(0,1)) + xlim(c(5, 20)) +
   theme_bw() + theme(strip.placement = "inside")
 
-png(here(resultsdir,'zoid_fittedVals_v_pReads_AllTaxa10plus_4chains50K.png'), res=300,height=4000,width=2000)
+png(here('figs','zoid_fittedVals_v_pReads_AllTaxa10plus_byCW_4ch5KiOD_2023-10-06.png'), res=300,height=4000,width=2000)
 plot_grid(p1,p2,ncol=2)
 dev.off()
+
+}
 ```
 
 
@@ -1060,17 +613,27 @@ fitted_2_ref <- fitted_2_filter %>%
 
 
 ```{r}
+if(!knitting){
+  
+  
 ## plot for each taxon
-png(here(resultsdir,paste0('zoid_relMeans_AllTaxa10plus_pReads_4chains50K.png')), res=300,height=2000,width=3000)
+png(here('figs',paste0('zoidMeansRelative_preads_AllTaxa10plus_4ch5KiOD_2023-10-06.png')), res=300,height=2000,width=3000)
 ggplot(fitted_2_ref, aes(y=scaled_mean,x=as.numeric(CW_mm))) +
     geom_point() + geom_hline(aes(yintercept=0)) +
     facet_wrap(~taxon, scales="free_y") + 
     labs(x="Carapace Width (mm)", y="Difference from 5mm CW") +
+  ylim(c(-0.075,0.1)) +
     theme_bw() +
     theme(axis.text.x=element_text(angle=45,hjust=1))
 dev.off()
+
+}
 ```
 
+save out the data frame of fitted values
+```{r}
+write_csv(fitted_2_filter,here(resultsdir,paste0('zoidFittedValsFiltered_preads_AllTaxa10plus_4ch5KiOD_2023-10-06.csv')))
+```
 
 
 
@@ -1364,10 +927,10 @@ for(p in unique(fitted_2_ref$phylum)){
 
 
 
-## Something basic
+## GLM
 
 
-### GLM on distances
+### just on distances
 Is there a correlation between the Bray-Curtis distance and the difference in carapace width between every pair of samples? 
 
 
@@ -1385,7 +948,7 @@ cw_diffs.df <- cw_diffs %>%
 
 ggplot(cw_diffs.df, aes(x=CW_diff)) + 
   geom_histogram(aes(y=after_stat(density))) +
-  labs(x="Differences in Carapace Width (mm)", y="density") + theme_bw()
+  labs(x="Difference in Carapace Width (mm)", y="density") + theme_bw()
 ```
 
 Calculate the distances between each sample's prey composition (eDNA index, bray-curtis distance)
@@ -1429,7 +992,7 @@ reg.in <- as.matrix(index.bc) %>%
 What do they look like plotted against each other?
 ```{r}
 ggplot(reg.in,aes(x=CW_diff,y=BCdistance)) +
-  geom_point() + labs(x="Difference in CW (mm)", y="Difference in Prey Composition") +
+  geom_point() + labs(x="Difference in Carapace Width (mm)", y="Bray-Curtis Distance") +
   theme_bw()
 ```
 
@@ -1474,13 +1037,94 @@ Diagnostics
 plot(cw.glm)
 ```
 
+compare deviance
+```{r}
+null <- 792/3363
+resid <- 771/3362
+
+(null-resid)/null
+```
 
 
-### CCA 
 
-#### All Taxa
+### spatial x CW 
+
+#### add estuary / site
+
+Determine whether each pair of crabs come from the same (1) or different (0) estuary. Save this information in the `reg.in2` dataframe
+```{r}
+reg.in2 <- reg.in
+
+# add estuary / site for each crab in the pair
+reg.in2 %<>% left_join(dplyr::select(lab_metadat,sample_id,estuary,sampling_location), by=c("crab_id"="sample_id")) %>% 
+  rename(estuary1=estuary, site1=sampling_location) %>%
+  left_join(dplyr::select(lab_metadat,sample_id,estuary,sampling_location), by=c("crab_id2"="sample_id")) %>% 
+  rename(estuary2=estuary, site2=sampling_location)
+
+# make PBNERR crab from the same site
+reg.in2 %<>% mutate(site1=ifelse(grepl("PBNERR", site1), "PBNERR", site1),
+                    site2=ifelse(grepl("PBNERR", site2), "PBNERR",site2))
+
+# code same or different estuary / site
+reg.in2 %<>% mutate(estuary=ifelse(estuary1==estuary2, 1, 0),
+                    site=ifelse(site1==site2,1,0))
+
+colnames(reg.in2)
+```
+
+How does this interact with carapace width differences?
+```{r fig.height=3, fig.width=3}
+reg.in2 %>% mutate(site=as.factor(site),estuary=as.factor(estuary)) %>%
+ggplot( aes(y=CW_diff,x=site, fill=estuary)) + 
+  geom_boxplot() + theme_bw()
+```
+
+
+#### run set of models
+
+Diet Difference ~ Change in CW 
+```{r}
+cw.glm <- glm(BCdistance ~ CW_diff, data = reg.in2, family = quasibinomial('logit'))
+```
+
+Diet Difference ~ Estuary  ; Diet Difference ~ Change in CW + Estuary  ; Diet Difference ~ Change in CW * Estuary
+```{r}
+est.glm <- glm(BCdistance ~ estuary, data = reg.in2, family = quasibinomial('logit'))
+
+cw.est.glm1 <- glm(BCdistance ~ CW_diff + estuary, data = reg.in2, family = quasibinomial('logit'))
+
+cw.est.glm2 <- glm(BCdistance ~ CW_diff * estuary, data = reg.in2, family = quasibinomial('logit'))
+```
+
+Diet Difference ~ Site ;  Diet Difference ~ Change in CW + Site  ;   Diet Difference ~ Change in CW * Site
+```{r}
+site.glm <- glm(BCdistance ~  site, data = reg.in2, family = quasibinomial('logit'))
+
+cw.site.glm1 <- glm(BCdistance ~ CW_diff + site, data = reg.in2, family = quasibinomial('logit'))
+
+cw.site.glm2 <- glm(BCdistance ~ CW_diff * site, data = reg.in2, family = quasibinomial('logit'))
+```
+
+```{r}
+anova(cw.glm,cw.est.glm1,cw.est.glm2, test="F") #also checked with LRT
+anova(est.glm,cw.est.glm1,cw.est.glm2, test="F") #also checked with LRT
+```
+
+
+```{r}
+anova(cw.glm,cw.site.glm1,cw.site.glm2, test="F") #also checked with LRT
+anova(site.glm,cw.site.glm1,cw.site.glm2, test="F") #also checked with LRT
+```
+
+
+
+## CCA 
+
+### All Taxa
 
 Use the eDNA index values to conduct a canonical correlation analysis. 
+
+#### run CCA
 
 Drop rare species (occur in < `mo` crab) 
 ```{r}
@@ -1504,17 +1148,20 @@ n <- dim(crabID.index.filter.df)[2]
 
 run CCA
 ```{r}
+set.seed(555)
 cc1 <- cca(X=as.matrix(crabID.index.filter.df[,2:(n-1)]), Y=crabID.index.filter.df[,n, drop=FALSE])
 plot(cc1)
 ```
 
 ```{r}
+set.seed(555)
 anova(cc1,permutations = how(nperm=10000))
 ```
 
 
-PLOT CCA
+### plot CCA
 
+extract CCA1 / CA1 scores and the biplot from the CCA object.
 ```{r}
 cc1.obj <- fortify(cc1)
 
@@ -1531,6 +1178,8 @@ cc1.biplot <- as.data.frame(cc1.obj[want, , drop = FALSE ]) %>%
   mutate(label="Carapace\nwidth")
 ```
 
+plot
+
 ```{r}
 ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) + 
   geom_point() + 
@@ -1545,54 +1194,29 @@ ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) +
 ```
 
 
-Only label the species with the highest / lowest CCA1 scores
+Only label the species with the highest / lowest CCA1 scores -- outside the 99% confidence interval
 
 ```{r}
 tmp.lm <- lm(CCA1 ~ 1,data=cc1.species)
-ci90.species <- confint(tmp.lm,level=0.90)
+ci99.species <- confint(tmp.lm,level=0.99)
 
-lowest_cca <- cc1.species %>% filter(CCA1 < ci90.species[1]) %>% arrange(CCA1) %>% pull(label)
-highest_cca <- cc1.species %>% filter(CCA1 > ci90.species[2]) %>% arrange(CCA1) %>% pull(label)
+lowest_cca <- cc1.species %>% filter(CCA1 < ci99.species[1]) %>% arrange(CCA1) %>% pull(label)
+highest_cca <- cc1.species %>% filter(CCA1 > ci99.species[2]) %>% arrange(CCA1) %>% pull(label)
 ```
 
 ```{r}
-ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) + 
-  geom_point() + 
+plot.99ci <- ggplot(cc1.species,aes(x=CCA1,y=CA1)) + 
+  geom_point(data=cc1.sites,aes(x=CCA1,y=CA1,color=estuary), pch=1,inherit.aes = FALSE) +
+  geom_point(pch=16) + 
   geom_text_repel(data=filter(cc1.species, label %in% highest_cca),
                   aes(x=CCA1,y=CA1, label=label), 
                   min.segment.length=0.01,ylim=c(2,4),inherit.aes = FALSE) +
   geom_point(data=filter(cc1.species, label %in% highest_cca),
-                  aes(x=CCA1,y=CA1), pch=1,inherit.aes = FALSE) +
+                  aes(x=CCA1,y=CA1), pch=15,size=2,inherit.aes = FALSE) +
   geom_text_repel(data=filter(cc1.species, label %in% lowest_cca) %>% mutate(label2=paste0("italic('",label,"')")),
                   aes(x=CCA1,y=CA1, label=label2), 
                   min.segment.length=0.01, nudge_y=-1,nudge_x=-0.75,inherit.aes = FALSE,parse=TRUE) +
   geom_point(data=filter(cc1.species, label %in% lowest_cca),
-                  aes(x=CCA1,y=CA1),pch=1,inherit.aes = FALSE) +
-  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*6,yend=cc1.biplot$CA1),
-               arrow = arrow(length = unit(0.2, "cm")),
-                         colour = "gray50", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*5, y = cc1.biplot$CA1+0.3, label = "label"), 
-            colour = "gray50", inherit.aes = FALSE) +
-   theme_bw()
-```
-
-```{r}
-lowest2_cca <- cc1.species %>% top_n(n=2,wt=desc(CCA1)) %>% pull(label)
-highest2_cca <- cc1.species %>% top_n(n=2,wt=CCA1) %>% arrange(CCA1) %>% pull(label)
-
-
-ggplot(cc1.species,aes(x=CCA1,y=CA1)) + 
-  geom_point(data=cc1.sites,aes(x=CCA1,y=CA1,color=estuary), pch=1,inherit.aes = FALSE) +
-  geom_point(pch=16) + 
-  geom_text_repel(data=filter(cc1.species, label %in% highest2_cca),
-                  aes(x=CCA1,y=CA1, label=label), 
-                  min.segment.length=0.01,ylim=c(2,4),inherit.aes = FALSE) +
-  geom_point(data=filter(cc1.species, label %in% highest2_cca),
-                  aes(x=CCA1,y=CA1), pch=15,size=2,inherit.aes = FALSE) +
-  geom_text_repel(data=filter(cc1.species, label %in% lowest2_cca) %>% mutate(label2=paste0("italic('",label,"')")),
-                  aes(x=CCA1,y=CA1, label=label2), 
-                  min.segment.length=0.01, nudge_y=-1,nudge_x=-0.75,inherit.aes = FALSE,parse=TRUE) +
-  geom_point(data=filter(cc1.species, label %in% lowest2_cca),
                   aes(x=CCA1,y=CA1),pch=15,size=2,inherit.aes = FALSE) +
   geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*3,yend=cc1.biplot$CA1),
                arrow = arrow(length = unit(0.2, "cm")),
@@ -1601,56 +1225,20 @@ ggplot(cc1.species,aes(x=CCA1,y=CA1)) +
             colour = "gray50", inherit.aes = FALSE) +
   xlim(c(-3.5, 3.5)) +
    theme_bw()
-```
-
-```{r}
-png(here('figs','Fig4_CCA_AllTaxa10plus_v_CW_label90CI.png'), res=300,width=2100,height=1500)
-ggplot(cc1.sites,aes(x=CCA1,y=CA1,color=estuary)) + 
-  geom_point() + 
- geom_text_repel(data=filter(cc1.species, label %in% highest_cca),
-                  aes(x=CCA1,y=CA1, label=label), 
-                  min.segment.length=0.01,ylim=c(2,4),inherit.aes = FALSE) +
-  geom_point(data=filter(cc1.species, label %in% highest_cca),
-                  aes(x=CCA1,y=CA1), pch=1,inherit.aes = FALSE) +
-  geom_text_repel(data=filter(cc1.species, label %in% lowest_cca) %>% mutate(label2=paste0("italic('",label,"')")),
-                  aes(x=CCA1,y=CA1, label=label2), 
-                  min.segment.length=0.01, nudge_y=-1,nudge_x=-0.75,inherit.aes = FALSE,parse=TRUE) +
-  geom_point(data=filter(cc1.species, label %in% lowest_cca),
-                  aes(x=CCA1,y=CA1),pch=1,inherit.aes = FALSE) +
-  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*6,yend=cc1.biplot$CA1),
-               arrow = arrow(length = unit(0.2, "cm")),
-                         colour = "gray50", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*5, y = cc1.biplot$CA1+0.3, label = "label"), 
-            colour = "gray50", inherit.aes = FALSE) +
-   theme_bw()
-dev.off()
+plot.99ci
 ```
 
 
 ```{r}
-png(here('figs','Fig4_CCA_AllTaxa10plus_v_CW_labeltop2.png'), res=300,width=2100,height=1500)
-ggplot(cc1.species,aes(x=CCA1,y=CA1)) + 
-  geom_point(data=cc1.sites,aes(x=CCA1,y=CA1,color=estuary), pch=1,inherit.aes = FALSE) +
-  geom_point(pch=16) + 
-  geom_text_repel(data=filter(cc1.species, label %in% highest2_cca),
-                  aes(x=CCA1,y=CA1, label=label), 
-                  min.segment.length=0.01,ylim=c(2,4),inherit.aes = FALSE) +
-  geom_point(data=filter(cc1.species, label %in% highest2_cca),
-                  aes(x=CCA1,y=CA1), pch=15,size=2,inherit.aes = FALSE) +
-  geom_text_repel(data=filter(cc1.species, label %in% lowest2_cca) %>% mutate(label2=paste0("italic('",label,"')")),
-                  aes(x=CCA1,y=CA1, label=label2), 
-                  min.segment.length=0.01, nudge_y=-1,nudge_x=-0.75,inherit.aes = FALSE,parse=TRUE) +
-  geom_point(data=filter(cc1.species, label %in% lowest2_cca),
-                  aes(x=CCA1,y=CA1),pch=15,size=2,inherit.aes = FALSE) +
-  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*3,yend=cc1.biplot$CA1),
-               arrow = arrow(length = unit(0.2, "cm")),
-                         colour = "gray50", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*1.7, y = cc1.biplot$CA1+0.3, label = "label"), 
-            colour = "gray50", inherit.aes = FALSE) +
-  xlim(c(-3.5, 3.5)) +
-   theme_bw()
+if(!knitting){
+  
+png(here('figs','Fig4_CCA_AllTaxa10plus_v_CW_label99CI.png'), res=300,width=2100,height=1500)
+print(plot.99ci)
 dev.off()
+
+}
 ```
+
 
 
 ## Sparse partial least squares analysis
@@ -1881,8 +1469,199 @@ ok, here we can see why the regression is crap. only about 15 crab actually have
 
 
 
-## Clustering
 
+
+
+## Parking Lot
+
+### CCA viz
+Only label the species with the highest / lowest CCA1 scores -- the top 2 species
+
+```{r eval=FALSE}
+lowest2_cca <- cc1.species %>% top_n(n=2,wt=desc(CCA1)) %>% pull(label)
+highest2_cca <- cc1.species %>% top_n(n=2,wt=CCA1) %>% arrange(CCA1) %>% pull(label)
+
+
+plot.top2 <- ggplot(cc1.species,aes(x=CCA1,y=CA1)) + 
+  geom_point(data=cc1.sites,aes(x=CCA1,y=CA1,color=estuary), pch=1,inherit.aes = FALSE) +
+  geom_point(pch=16) + 
+  geom_text_repel(data=filter(cc1.species, label %in% highest2_cca),
+                  aes(x=CCA1,y=CA1, label=label), 
+                  min.segment.length=0.01,ylim=c(2,4),inherit.aes = FALSE) +
+  geom_point(data=filter(cc1.species, label %in% highest2_cca),
+                  aes(x=CCA1,y=CA1), pch=15,size=2,inherit.aes = FALSE) +
+  geom_text_repel(data=filter(cc1.species, label %in% lowest2_cca) %>% mutate(label2=paste0("italic('",label,"')")),
+                  aes(x=CCA1,y=CA1, label=label2), 
+                  min.segment.length=0.01, nudge_y=-1,nudge_x=-0.75,inherit.aes = FALSE,parse=TRUE) +
+  geom_point(data=filter(cc1.species, label %in% lowest2_cca),
+                  aes(x=CCA1,y=CA1),pch=15,size=2,inherit.aes = FALSE) +
+  geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*3,yend=cc1.biplot$CA1),
+               arrow = arrow(length = unit(0.2, "cm")),
+                         colour = "gray50", inherit.aes = FALSE) +
+  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*1.7, y = cc1.biplot$CA1+0.3, label = "label"), 
+            colour = "gray50", inherit.aes = FALSE) +
+  xlim(c(-3.5, 3.5)) +
+   theme_bw()
+plot.top2
+```
+
+
+
+```{r eval=FALSE}
+if(!knitting){
+  
+png(here('figs','Fig4_CCA_AllTaxa10plus_v_CW_labeltop2.png'), res=300,width=2100,height=1500)
+plot.top2
+dev.off()
+
+}
+```
+
+
+### ZOID with raw reads INCORRECT
+
+Remove taxa that occur in fewer than ten crab (not super useful for comparing across sizes). the function `dropspc` assumes that the species are in columns of the matrix. Otherwise, **zoid will not run**
+```{r eval=FALSE}
+crabID.reads.filter.mat <- dropspc(crabID.reads.mat, minocc=9)
+crabID.reads.filter.mat <- crabID.reads.filter.mat[which(rowSums(crabID.reads.filter.mat) > 0),]
+
+dim(crabID.reads.mat); dim(crabID.reads.filter.mat)
+```
+
+
+join with carapace widths
+```{r eval=FALSE}
+zoidIN.reads <- crabID.reads.filter.mat %>%
+  rownames_to_column("crab_id") %>%
+  left_join(cw.df,by="crab_id") %>%
+  column_to_rownames("crab_id")
+
+
+
+any(is.na(zoidIN.reads$CW_mm))
+```
+
+
+create the design matrix (site / site type information per observation, aka per crab) and the data matrix (read counts only)
+```{r eval=FALSE}
+design_matrix = zoidIN.reads[,which(names(zoidIN.reads)=="CW_mm"), drop=FALSE]
+data_matrix = zoidIN.reads[,which(names(zoidIN.reads)!="CW_mm")]
+design_matrix$y = 1 # dummy variable
+```
+
+attempt to zoid!
+```{r eval=FALSE}
+fit_1_prey <- fit_zoid(formula = y ~ CW_mm, 
+                       design_matrix = design_matrix, 
+                       data_matrix = as.matrix(data_matrix)/1000,
+                       overdispersion = TRUE,
+                       chains=4,
+                       iter=5000,
+                       overdispersion_sd = 0.1)
+```
+
+
+save data
+```{r eval=FALSE}
+saveRDS(fit_1_prey,here(resultsdir,'zoidOUT_nReads_allTaxa10plus_by_CW.rds'))
+```
+
+
+Get the fitted values and label the species / sizes
+```{r eval=FALSE}
+fitted_1 <- get_fitted(fit_1_prey)
+
+## add in taxa / carapace width / crab id 
+fitted_1 %<>% left_join(data.frame(group=seq(1:dim(data_matrix)[2]),
+                                         taxon=colnames(data_matrix)), by=c("group"))
+
+fitted_1 %<>% left_join(data.frame(obs=seq(1:dim(data_matrix)[1]),
+                                   CW_mm=design_matrix[,1],
+                                     crab_id=rownames(data_matrix)),by="obs")
+
+## remove estimated values for taxa that didn't actually show up in the data for a given carapace width
+fitted_1_filter <- fitted_1 %>%
+  left_join(
+    data_matrix %>% 
+      rownames_to_column("crab_id") %>%
+      pivot_longer(cols=2:(dim(data_matrix)[2]+1), names_to="taxon",values_to="reads"),
+    by=c("crab_id","taxon")
+  ) %>%
+  filter(reads!=0)
+```
+
+Plot the fitted values
+```{r eval=FALSE}
+png(here(resultsdir,paste0('zoid_raw_AllTaxa10plus_GroupedByCW_4chains50K.png')), res=300,height=2000,width=3000)
+fitted_1_filter %>%
+  group_by(taxon,CW_mm) %>%
+  summarise(mean_cw=mean, upper_cw=lo,lower_cw=hi, n=length(unique(obs))) %>%
+ggplot(aes(y=mean_cw,x=as.numeric(CW_mm))) +
+    geom_point() + geom_errorbar(aes(ymin=lower_cw,ymax=upper_cw), width=0.25) + 
+  geom_hline(aes(yintercept=0)) +
+  geom_text(aes(y=0.001,x=as.numeric(CW_mm),label=n)) +
+    facet_wrap(~taxon, scales="free_y") + 
+    labs(x="Carapace Width (mm)", y="Bayesian posterior mean", subtitle="Taxa present in 10+ crab") +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=45,hjust=1))
+dev.off()
+```
+
+compare the medians of the fitted values to the median read counts
+```{r eval=FALSE}
+fitted_readsVest <- fitted_1_filter %>% 
+  left_join(data.frame(crab_id=rownames(data_matrix), total_reads=as.numeric(rowSums(data_matrix)))) %>%
+  mutate(preads=reads/total_reads) %>%
+  group_by(taxon,CW_mm) %>% 
+  summarise(mean_preads=mean(preads),sd_preads=sd(preads), n=length(unique(crab_id))) %>%
+  mutate(sd_preads=ifelse(is.na(sd_preads),0,sd_preads)) %>%
+  left_join(fitted_1_filter %>% dplyr::select(CW_mm,mean,lo,hi,taxon) %>% distinct())
+
+p1 <- ggplot(data=fitted_readsVest, aes(x=CW_mm,y=mean)) +
+  geom_point() + geom_errorbar(aes(ymin=lo,ymax=hi), width=0.25) + 
+  geom_hline(aes(yintercept=0)) +
+  facet_grid(rows=vars(taxon), scales="free_y") +
+  xlim(c(5, 20)) +
+  theme_bw() + theme(strip.placement = "outside")
+
+p2 <- ggplot(data=fitted_readsVest, aes(x=CW_mm,y=mean_preads)) +
+  geom_point() + geom_errorbar(aes(ymin=mean_preads-sd_preads,ymax=mean_preads+sd_preads), width=0.25) + 
+  geom_hline(aes(yintercept=0)) +
+  facet_grid(rows=vars(taxon)) +
+  ylim(c(0,1)) + xlim(c(5, 20)) +
+  theme_bw() + theme(strip.placement = "inside")
+
+png(here(resultsdir,'zoid_AllPhyla10plus_4chains50K_fittedVals_v_pReads.png'), res=300,height=4000,width=2000)
+plot_grid(p1,p2,ncol=2)
+dev.off()
+```
+
+
+Use the smallest crab size *for which the phylum was present* as the reference value (min possible = CW 5mm), and Get the difference between the value at carapace width X and the reference (so that if X > reference, difference is +)
+```{r eval=FALSE}
+fitted_1_ref <- fitted_1_filter %>%
+  # set the reference according to minimum CW in which that phylum was detected
+  group_by(phylum) %>% mutate(min_cw=min(CW_mm)) %>% ungroup() %>%
+  filter(CW_mm==min_cw) %>%
+  dplyr::select(group,phylum,mean,median) %>% rename(ref_mean=mean,ref_median=median) %>%
+  right_join(fitted_1_filter,by=c("group","phylum")) %>%
+  # calculate change from reference
+  mutate(scaled_mean=mean-ref_mean,
+         scaled_median=median-ref_median)
+```
+
+
+```{r eval=FALSE}
+## plot for each phylum 
+png(here(resultsdir,paste0('zoid_AllPhyla10plus_GroupedByCW_4chains50K.png')), res=300,height=2000,width=3000)
+ggplot(fitted_1_ref, aes(y=scaled_mean,x=as.numeric(CW_mm))) +
+    geom_point() + geom_hline(aes(yintercept=0)) +
+    facet_wrap(~phylum, scales="free_y") + 
+    labs(x="Carapace Width (mm)", y="Difference from 5mm CW", subtitle=p) +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=45,hjust=1))
+dev.off()
+```
 
 
 
