@@ -40,9 +40,10 @@ library(magrittr)
 library(mixOmics)
 library(zoid)
 library(CCA)
+library(arm)
 
 # remotes::install_github("gavinsimpson/ggvegan")
-# library(ggvegan)
+library(ggvegan)
 
 source(here('R','eDNA_index.r'))
 
@@ -55,6 +56,8 @@ marker  <- 'lerayXT'
 site_names <- data.frame(site=c("KAY","KAY-shell","MARPT","PBNERR","SAMI","SAMT","LAR"),
                          site_name=c("Kayak Pt 1","Kayak Pt 2","March Pt",
                                    "NERR","Samish Isl","Samish Bay","Larrabee"))
+
+knitting=TRUE
 ```
 
 ```{r data, include=FALSE}
@@ -296,7 +299,15 @@ As with the green crab diet data, the general sparsity of the data is still a pr
 
 ### common taxa (filter)
 
-first, get the proportion of each crab's total reads that belong to each species
+Remove taxa that occur in fewer than ten crab (not super useful for comparing across sizes). the function `dropspc` assumes that the species are in columns of the matrix. Otherwise, **zoid will not run**
+```{r}
+crabID.reads.filter.mat <- dropspc(crabID.reads.mat, minocc=9)
+crabID.reads.filter.mat <- crabID.reads.filter.mat[which(rowSums(crabID.reads.filter.mat) > 0),]
+
+dim(crabID.reads.mat); dim(crabID.reads.filter.mat)
+```
+
+Get the proportion of each crab's total reads that belong to each species
 ```{r}
 crabID.preads.mat <- decostand(x=crabID.reads.filter.mat,method="total",MARGIN=1)
 ```
@@ -514,9 +525,13 @@ Chain 4:
 ```
 ```{r include=FALSE}
 # save
+if(!knitting){
 saveRDS(fit_2_prey, here(resultsdir,'zoidOBJ_pReads_AllTaxa10plus_byCW_4ch5KiOD_2023-10-06.rds'))
+}
 # re-read input
+if(knitting){
 fit_2_prey <- readRDS(here(resultsdir,'zoidOBJ_pReads_AllTaxa10plus_byCW_4ch5KiOD_2023-10-06.rds'))
+}
 ```
 
 #### zoid output
@@ -548,17 +563,17 @@ Plot the fitted values
 if(!knitting){
   
 png(here('figs',paste0('zoidMeansRaw_pReads_AllTaxa10plus_byCW_4ch5KiOD_2023-10-06.png')), res=300,height=2000,width=3000)
-fitted_2_filter %>%
+print(fitted_2_filter %>%
   group_by(taxon,CW_mm) %>%
   summarise(mean_cw=mean, upper_cw=lo,lower_cw=hi, n=length(unique(obs))) %>%
 ggplot(aes(y=mean_cw,x=as.numeric(CW_mm))) +
     geom_point() + geom_errorbar(aes(ymin=lower_cw,ymax=upper_cw), width=0.25) + 
-  geom_hline(aes(yintercept=0)) +
+  geom_hline(aes(yintercept=0), color="gray60") +
   geom_text(aes(y=0.001,x=as.numeric(CW_mm),label=n)) +
     facet_wrap(~taxon, scales="free_y") + 
     labs(x="Carapace Width (mm)", y="Bayesian posterior mean", subtitle="Taxa present in 10+ crab") +
     theme_bw() +
-    theme(axis.text.x=element_text(angle=45,hjust=1))
+    theme(axis.text.x=element_text(angle=45,hjust=1)))
 dev.off()
 
 }
@@ -604,35 +619,62 @@ fitted_2_ref <- fitted_2_filter %>%
   # set the reference according to minimum CW in which that taxon was detected
   group_by(taxon) %>% mutate(min_cw=min(CW_mm)) %>% ungroup() %>%
   filter(CW_mm==min_cw) %>%
-  dplyr::select(group,taxon,mean,median) %>% rename(ref_mean=mean,ref_median=median) %>%
+  dplyr::select(group,taxon,mean,median,lo,hi) %>% rename(ref_mean=mean,ref_median=median,ref_lo=lo,ref_hi=hi) %>%
   right_join(fitted_2_filter,by=c("group","taxon")) %>%
   # calculate change from reference
   mutate(scaled_mean=mean-ref_mean,
-         scaled_median=median-ref_median)
+         scaled_median=median-ref_median,
+         scaled_lo=lo-ref_lo,
+         scaled_hi=hi-ref_hi)
 ```
 
-
+plot the relativized means without confidence intervals. remove values on the y axis other than zero.
 ```{r}
 if(!knitting){
   
   
 ## plot for each taxon
-png(here('figs',paste0('zoidMeansRelative_preads_AllTaxa10plus_4ch5KiOD_2023-10-06.png')), res=300,height=2000,width=3000)
-ggplot(fitted_2_ref, aes(y=scaled_mean,x=as.numeric(CW_mm))) +
+png(here('figs',paste0('fig6_zoidMeansRelative_preads_AllTaxa10plus_4ch5KiOD_2023-10-06.png')), res=300,height=2000,width=3000)
+print(ggplot(fitted_2_ref, aes(y=scaled_mean,x=as.numeric(CW_mm))) +
     geom_point() + geom_hline(aes(yintercept=0)) +
     facet_wrap(~taxon, scales="free_y") + 
-    labs(x="Carapace Width (mm)", y="Difference from 5mm CW") +
+    labs(x="Carapace Width (CW; mm)", y="Difference from minimum CW") +
   ylim(c(-0.075,0.1)) +
     theme_bw() +
-    theme(axis.text.x=element_text(angle=45,hjust=1))
+    theme(axis.text.x=element_text(angle=45,hjust=1)))
 dev.off()
 
 }
 ```
 
+plot the relativized means with confidence intervals. remove values on the y axis other than zero.
+```{r}
+if(!knitting){
+  
+  
+## plot for each taxon
+png(here('figs',paste0('fig6_zoidMeansConfIntRelative_preads_AllTaxa10plus_4ch5KiOD_2023-10-06.png')), res=300,height=1500,width=2600)
+print(ggplot(fitted_2_ref, aes(y=scaled_mean,x=as.numeric(CW_mm))) +
+      geom_errorbar(aes(ymin=scaled_lo,ymax=scaled_hi),col="gray60",width=0.10) +
+        geom_point(inherit.aes=TRUE) +
+      geom_hline(aes(yintercept=0), color="gray60") +
+    facet_wrap(~taxon, scales="free_y") + 
+    labs(x="Carapace Width (CW; mm)", y="Change from minimum CW") +
+  scale_y_continuous(limits=c(-0.075,0.1)) +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=45,hjust=1)))
+dev.off()
+
+}
+```
+
+
+
 save out the data frame of fitted values
 ```{r}
+if(!knitting){
 write_csv(fitted_2_filter,here(resultsdir,paste0('zoidFittedValsFiltered_preads_AllTaxa10plus_4ch5KiOD_2023-10-06.csv')))
+}
 ```
 
 
@@ -665,12 +707,11 @@ design_matrix = zoidINxCW[,which(names(zoidINxCW)=="CW_mm"), drop=FALSE]
 data_matrix = zoidINxCW[,which(names(zoidINxCW)!="CW_mm")]
 design_matrix$y = 1 # dummy variable
 
-hist()
 ```
 
 attempt to zoid!
 ```{r eval=FALSE}
-fit_2_prey <- fit_zoid(formula = y ~ CW_mm, 
+fit_3_prey <- fit_zoid(formula = y ~ CW_mm, 
                       design_matrix = design_matrix, 
                       data_matrix = as.matrix(data_matrix)/10,
                        overdispersion = TRUE,
@@ -840,28 +881,30 @@ Chain 4:
 ```
 
 
-```{r eval=FALSE}
-saveRDS(fit_2_prey, here('data','results','zoid_AllTaxa_GroupedByCW_4chains50K.rds'))
-```
-```{r echo=FALSE}
-fit_2_prey <- readRDS(here('data','results','zoid_AllTaxa_GroupedByCW_4chains50K.rds'))
+```{r include=FALSE}
+if(!knitting){
+saveRDS(fit_3_prey, here('data','results','zoid_AllTaxa_GroupedByCW_4chains50K.rds'))
+}
+if(knitting){
+fit_3_prey <- readRDS(here('data','results','zoidOBJ_AllTaxa_GroupedByCW_4chains50K.rds'))
+}
 ```
 
 
 
 Get the fitted values and label the species / sizes
 ```{r}
-fitted_2 <- get_fitted(fit_2_prey)
+fitted_3 <- get_fitted(fit_3_prey)
 
 ## add in species / carapace width
-fitted_2 %<>% left_join(data.frame(group=seq(1:dim(data_matrix)[2]),
+fitted_3 %<>% left_join(data.frame(group=seq(1:dim(data_matrix)[2]),
                                          species=colnames(data_matrix)), by=c("group"))
 
-fitted_2 %<>% left_join(data.frame(obs=seq(1:dim(data_matrix)[1]),
+fitted_3 %<>% left_join(data.frame(obs=seq(1:dim(data_matrix)[1]),
                                    CW_mm=design_matrix[,1]),by="obs")
 
 ## remove estimated values for taxa that didn't actually show up in the data for a given carapace width
-fitted_2_filter <- fitted_2 %>%
+fitted_3_filter <- fitted_3 %>%
   left_join(
     bind_cols(design_matrix,data_matrix) %>% 
       pivot_longer(cols=2:(dim(data_matrix)[2]+2), names_to="species",values_to="reads")
@@ -873,25 +916,25 @@ fitted_2_filter <- fitted_2 %>%
 
 Use the smallest crab size as the reference value (CW 5mm)
 ```{r}
-fitted_2_ref <- fitted_2_filter %>%
+fitted_3_ref <- fitted_3_filter %>%
   mutate(mean=ifelse(CW_mm==5 & reads==0, 0, mean),
          median=ifelse(CW_mm==5 & reads==0, 0, median)) %>%
   filter(CW_mm==5) %>%
   dplyr::select(group,species,mean,median) %>% rename(ref_mean=mean,ref_median=median) %>%
-  right_join(fitted_2_filter,by=c("group","species")) %>%
+  right_join(fitted_3_filter,by=c("group","species")) %>%
   mutate(mean=ifelse(CW_mm==5 & reads==0, 0, mean),
          median=ifelse(CW_mm==5 & reads==0, 0, median))
 ```
 
 Get the difference between the value at carapace width X and the reference (so that if X > reference, difference is +)
 ```{r}
-fitted_2_ref %<>% mutate(diff_mean=mean-ref_mean,
+fitted_3_ref %<>% mutate(diff_mean=mean-ref_mean,
                      diff_median=median-ref_median)
 ```
 
 ```{r}
 ## add taxonomy
-fitted_2_ref %<>% left_join(bind_rows(dat, smdat %>% mutate(new_taxon=taxon)) %>%
+fitted_3_ref %<>% left_join(bind_rows(dat, smdat %>% mutate(new_taxon=taxon)) %>%
                           dplyr::select(new_taxon,phylum,class,order,family,genus,species) %>%
                           distinct(), by=c("species"="new_taxon"))
 
@@ -899,9 +942,9 @@ fitted_2_ref %<>% left_join(bind_rows(dat, smdat %>% mutate(new_taxon=taxon)) %>
 
 
 ## plot for each phylum 
-for(p in unique(fitted_2_ref$phylum)){
+for(p in unique(fitted_3_ref$phylum)){
   if(!is.na(p)){
-  tmp <- ggplot(fitted_2_ref %>% filter(phylum==p), aes(y=diff_mean,x=as.numeric(CW_mm))) +
+  tmp <- ggplot(fitted_3_ref %>% filter(phylum==p), aes(y=diff_mean,x=as.numeric(CW_mm))) +
     geom_point() + geom_hline(aes(yintercept=0)) +
     facet_wrap(~species, scales="free_y") + 
     labs(x="Carapace Width (mm)", y="Difference from 5mm CW", subtitle=p) +
@@ -911,15 +954,18 @@ for(p in unique(fitted_2_ref$phylum)){
   print(tmp)
   dev.off()
   } else{
-    tmp <- ggplot(fitted_2_ref %>% filter(is.na(phylum)), aes(y=diff_mean,x=as.numeric(CW_mm))) +
+    tmp <- ggplot(fitted_3_ref %>% filter(is.na(phylum)), aes(y=diff_mean,x=as.numeric(CW_mm))) +
     geom_point() + geom_hline(aes(yintercept=0)) +
     facet_wrap(~species, scales="free_y") + 
     labs(x="Carapace Width (mm)", y="Difference from 5mm CW", subtitle=p) +
     theme_bw() +
     theme(axis.text.x=element_text(angle=45,hjust=1))
+    
+    if(!knitting){
   png(here(resultsdir,paste0('zoid_AllTaxa_GroupedByCW_4chains50K_',p,'.png')), res=300,height=2000,width=3000)
   print(tmp)
   dev.off()
+    }
   }
 }
 ```
@@ -1370,7 +1416,7 @@ plot(tune.spls1.B)
 
 
 Based on the tune.spls() function we extract the final parameters:
-```{r}
+```{r eval=FALSE}
 choice.ncomp.MAE <- tune.spls1.MAE$choice.ncomp$ncomp
 # Optimal number of variables to select in X based on the MAE criterion
 # We stop at choice.ncomp
@@ -1380,7 +1426,7 @@ choice.ncomp.MAE
 
 choice.keepX.MAE
 ```
-```{r}
+```{r eval=FALSE}
 choice.ncomp.B <- tune.spls1.B$choice.ncomp$ncomp
 # Optimal number of variables to select in X based on the MAE criterion
 # We stop at choice.ncomp
@@ -1393,19 +1439,19 @@ choice.keepX.B
 
 #### final model
 Here is our final model with the tuned parameters:
-```{r}
+```{r eval=FALSE}
 spls1.cw <- spls(x, y, ncomp = choice.ncomp.B, keepX = c(rep(choice.keepX.B,2)), 
                     mode = "regression")
 ```
 
 The list of genes selected on component 1 can be extracted with the command line (not output here):
-```{r}
+```{r eval=FALSE}
 selectVar(spls1.cw, comp = 1)$X$name
 selectVar(spls1.cw, comp = 2)$X$name
 ```
 
 We can compare the amount of explained variance for the X data set based on the sPLS1 (on 1 component) versus PLS1 (that was run on 4 components during the tuning step):
-```{r}
+```{r eval=FALSE}
 spls1.cw$prop_expl_var$X
 
 cw.pls1$prop_expl_var$X
@@ -1419,14 +1465,14 @@ Is the Mean Squared Error Prediction is also lower (better) in sPLS1 compared to
 
 plot each sample (crab) across the two components (x/y axis, selected with ncomp) for the "X" data set of prey items, and the "Y" data set of carapace widths.
 
-```{r}
+```{r eval=FALSE}
 plotIndiv(spls1.cw,
           group = y[,1], legend=TRUE)
 ```
 
 plot each sample (crab) for both y / both x components: a reduced representation of a multivariate regression
 
-```{r}
+```{r eval=FALSE}
 data.frame(x=spls1.cw$variates$X,
                   y=spls1.cw$variates$Y,
                   cw=y[,1],
@@ -1441,7 +1487,7 @@ data.frame(x=spls1.cw$variates$X,
 Does PLS1 effectively models a linear relationship between carapace width and the combination of the two prey items selected in X.? This doesn't look much like a linear correlation - maybe if you removed all of those crabs lined up below 0 on the x component.
 
 
-```{r}
+```{r eval=FALSE}
 selectVar(spls1.cw, comp = 1)$X$name
 cor(spls1.cw$variates$X, spls1.cw$variates$Y)
 
