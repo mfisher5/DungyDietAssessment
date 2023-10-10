@@ -11,7 +11,8 @@ From the dDNA data, attach (a) OA impact information, and (b) energy densities, 
 
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE,
+                      theme_set(theme_bw()))
 library(tidyverse)
 library(here)
 library(ggplot2)
@@ -135,21 +136,66 @@ write_csv(taxdat, here(bdir,'OAimpact_runs1-2_lerayxt_allTaxa.csv'))
 
 }
 ```
-
-
-## Crab Index of Exposure: Prey Exposure x Freq
-
-### all data
-
-Calculate the crab index of exposure for each prey item $i$ from the Euclidean distance between $x_i$ = prey item frequency of occurrance (`pcrab`) and $y_i$ = OA impact on prey item (`relative survival scalar`)
 ```{r}
+if(knitting){
+  taxdat <- read_csv(here(bdir,'OAimpact_runs1-2_lerayxt_allTaxa.csv'))
+}
+```
+
+## Crab Index of Exposure: OA impact x Freq
+
+### calculate
+
+The `raw survival scalar` needs to be flipped; the most negative values, which represent the most negative OA impact, should be at **1** and not **0** when re-scaled to 0-1 by range.  the easiest way to do this, I think, is to make all negative values positive, and all positive values negative.
+```{r fig.height=3,fig.width=3}
+taxdat %<>% mutate(rraw_survival_scalar=raw_survival_scalar*-1)
+
+ggplot(taxdat, aes(x=raw_survival_scalar, y=rraw_survival_scalar)) + geom_point()
+```
+
+Calculate the crab index of exposure for each prey item $i$ from the Euclidean distance between $x_i$ = prey item frequency of occurrance (`pcrab`) and $y_i$ = OA impact on prey item (inverse `raw survival scalar`)
+```{r fig.height=3,fig.width=3}
 eindex.dat <- taxdat %>% left_join(prey.fo,by=c("new_taxon"="taxon")) %>%
   mutate(pcrab=pcrab/100) %>%
-  mutate(std_survival_scalar=decostand(x=matrix(data=taxdat$raw_survival_scalar, ncol=1), method="range", MARGIN=2)) %>%
+  mutate(std_survival_scalar=decostand(x=matrix(data=taxdat$rraw_survival_scalar, ncol=1), method="range", MARGIN=2)) %>%
   mutate(eindex=sqrt(pcrab^2 + std_survival_scalar^2))
 
 eindex.dat %<>% mutate(eindex.rescaled=decostand(x=matrix(data=eindex.dat$eindex, ncol=1), method="range", MARGIN=2))
+
+ggplot(eindex.dat, aes(x=rraw_survival_scalar, y=std_survival_scalar)) + geom_point()
 ```
+
+Produce the same dataframe for each estuary, using an estuary-specific frequency of occurrence, but the same scale for the standardized survival scalar.  
+```{r fig.height=3, fig.width=3}
+eindexByEstuary <- eindex.dat %>% dplyr::select(new_taxon,raw_survival_scalar, rraw_survival_scalar,std_survival_scalar,) %>%
+  left_join(prey.fo.estuary,by=c("new_taxon"))
+
+ggplot(eindexByEstuary, aes(x=raw_survival_scalar, y=rraw_survival_scalar, pch=estuary)) + geom_point()
+```
+
+
+
+Calculate the estuary-specific exposure index
+```{r fig.height=3, fig.width=3}
+eindexByEstuary %<>% mutate(eindex=sqrt(pcrab^2 + std_survival_scalar^2))
+eindexByEstuary %<>% mutate(eindex.rescaled=decostand(x=matrix(data=eindexByEstuary$eindex, ncol=1), method="range", MARGIN=2))
+```
+
+
+write out for supplement
+```{r}
+if(!knitting){
+  
+dplyr::select(eindex.dat, functional_group,raw_survival_scalar,std_survival_scalar) %>% 
+    mutate(std_survival_scalar = as.numeric(std_survival_scalar)) %>%
+    distinct() %>%
+    write_csv(here(resultsdir,'tableS8_prey_scalars_by_functional_group.csv'))
+
+}
+```
+
+
+### plot for all
 
 ```{r}
 p1.eindex <- eindex.dat %>%
@@ -176,26 +222,6 @@ p2.eindex <- eindex.dat %>%
 p2.eindex
 ```
 
-for each estuary
-```{r}
-eindexByEstuary <- taxdat %>% left_join(prey.fo.estuary,by=c("new_taxon"))
-eindexByEstuary %<>%
-  mutate(std_survival_scalar=decostand(x=matrix(data=eindexByEstuary$raw_survival_scalar, ncol=1), method="range", MARGIN=2)) %>%
-  mutate(eindex=sqrt(pcrab^2 + std_survival_scalar^2))
-eindexByEstuary %<>% mutate(eindex.rescaled=decostand(x=matrix(data=eindexByEstuary$eindex, ncol=1), method="range", MARGIN=2))
-```
-```{r}
-p.eindex3 <- eindexByEstuary %>%
-  ggplot(aes(x=pcrab,y=std_survival_scalar, col=eindex.rescaled)) +
-  geom_point(size=2) +
-  facet_grid(cols=vars(estuary)) +
-  labs(x="Frequency of Prey Occurrence", y="OA Impact on Prey") +
-  xlim(c(0,1)) +
-  scale_color_distiller(palette="PuRd", name="Crab Index\nof Exposure", direction=1) 
-  # scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
-p.eindex3 
-```
-
 save the plot. first for all crab:
 ```{r}
 png(here('../../','figs','fig5a_crab_eindex_all.png'),res=300,height=2000,width=2300)
@@ -205,20 +231,86 @@ ggdraw(p2.eindex) +
               scale_x_continuous(limits=c(0,1),breaks=c(0,0.5,1),labels=c(0,0.5,1)) +
               scale_y_continuous(limits=c(0,1),breaks=c(0,0.5,1),labels=c(0,0.5,1)) +
               theme(axis.title=element_blank(),legend.position="none"), 
-            x=.54, y=0.08, width=0.3, height=.3)
+            x=.54, y=0.65, width=0.3, height=.3)
 
 dev.off()
 ```
 
+scale points by the number of taxa at that exact value.
+```{r}
+p1.eindex.size <- eindex.dat %>%
+  group_by(pcrab, std_survival_scalar,eindex.rescaled) %>%
+  summarise(ntaxa=length(unique(new_taxon))) %>%
+  ggplot(aes(x=pcrab,y=std_survival_scalar, col=eindex.rescaled)) +
+  geom_point(aes(size=ntaxa)) +
+  labs(x="Frequency of Prey Occurrence", y="OA Impact on Prey") +
+  xlim(c(0,1)) +
+  scale_color_distiller(palette="PuRd", name="Crab Index\nof Exposure", direction=1) +
+  scale_size_continuous(name="Number of\nPrey Taxa", breaks=c(1,2.5,5.0,7.5,10,11)) 
+  # scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
+
+p1.eindex.size
+
+p2.eindex.size <- eindex.dat %>%
+  filter(pcrab < fo.max) %>%
+  group_by(pcrab, std_survival_scalar,eindex.rescaled) %>%
+  summarise(ntaxa=length(unique(new_taxon))) %>%
+  ggplot(aes(x=pcrab,y=std_survival_scalar, col=eindex.rescaled)) +
+  geom_point(aes(size=ntaxa)) +
+  labs(x="Frequency of Prey Occurrence", y="OA Impact on Prey") +
+  xlim(c(0,0.4))  +
+  scale_size_continuous(name="Number of\nPrey Taxa", breaks=c(1,2.5,5.0,7.5,10,11)) +
+  scale_color_distiller(palette="PuRd", name="Crab Index\nof Exposure", direction=1) 
+  # scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
+p2.eindex.size
+```
+
+save the plot.
+```{r}
+png(here('../../','figs','fig5a_crab_eindex_all_ptSize.png'),res=300,height=1800,width=2100)
+
+ggdraw(p2.eindex.size) +
+  draw_plot(p1.eindex.size + 
+              scale_x_continuous(limits=c(0,1),breaks=c(0,0.5,1),labels=c(0,0.5,1)) +
+              scale_y_continuous(limits=c(0,1),breaks=c(0,0.5,1),labels=c(0,0.5,1)) +
+              theme(axis.title=element_blank(),legend.position="none"), 
+            x=.55, y=0.67, width=0.25, height=.3)
+
+dev.off()
+```
+
+
+
+
+### plot for each estuary
+
+```{r}
+p.eindex3 <- eindexByEstuary %>%
+  group_by(estuary, pcrab, std_survival_scalar, eindex.rescaled) %>%
+  summarise(ntaxa=length(unique(new_taxon))) %>%
+  ggplot(aes(x=pcrab,y=std_survival_scalar, col=eindex.rescaled)) +
+  geom_point(aes(size=ntaxa)) +
+  facet_grid(cols=vars(estuary)) +
+  labs(x="Frequency of Prey Occurrence", y="OA Impact on Prey") +
+  xlim(c(0,1)) +
+  scale_size_continuous(name="Number of\nPrey Taxa") +
+  scale_color_distiller(palette="PuRd", name="Crab Index\nof Exposure", direction=1) 
+  # scale_color_viridis_c(option="H",begin=0.1, end=0.8, name="Crab Index\nof Exposure")
+p.eindex3 
+```
+
+
 and then by estuary:
 ```{r}
-png(here('../../','figs','figS_crab_OAexposure_index_byEstuary.png'),res=300,height=1200,width=2200)
-p.eindex3 + theme(axis.text.x=element_text(angle=25, hjust=1))
+png(here('../../','figs','figS_crab_OAexposure_index_byEstuary.png'),res=300,height=1000,width=2600)
+p.eindex3 + theme(axis.text.x=element_text(angle=25, hjust=1), legend.box="horizontal")
 dev.off()
 ```
 
 
 ## Crab Risk: Exposure Index x Sensitivity
+
+### calculate
 
 Combine the exposure index above ($x$) with crab sensitivity to get risk. Sensitivity is defined as the energy density of the prey item. 
 
@@ -243,16 +335,17 @@ risk.dat %<>% mutate(crab.risk=sqrt(eindex.rescaled^2 + std_ed^2))
 risk.dat %<>% mutate(crab.risk=as.numeric(decostand(x=matrix(data=risk.dat$crab.risk, ncol=1), method="range", MARGIN=2)))
 ```
 
+### plot
 
 ```{r}
-# p1.eindex <- 
+ 
 risk.dat %>%
   ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
   geom_point(size=2) +
   geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01) +
   scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
   labs(x="Crab Exposure Index", y="Crab Sensitivity")
-# p1.eindex
+
 ```
 
 ```{r}
@@ -260,11 +353,17 @@ risk.dat %<>% mutate(std_survival_scalar=as.numeric(std_survival_scalar),
                      eindex=as.numeric(eindex),
                      eindex.rescaled=as.numeric(eindex.rescaled),
                      std_ed=as.numeric(std_ed))
+
+if(!knitting){
+  
 write_csv(risk.dat, here(bdir,'OArisk_runs1-2_lerayxt_2023-10-06.csv'))
+  
+}
 ```
 
 ```{r}
-
+if(!knitting){
+  
 png(here('../../','figs','fig5b_crab_OArisk_all.png'),res=300,height=1800,width=2100)
 
 risk.dat %>%
@@ -275,4 +374,143 @@ risk.dat %>%
   labs(x="Crab Exposure Index", y="Crab Sensitivity")
 
 dev.off()
+
+}
 ```
+
+
+
+explore: highest risk prey items?
+```{r}
+risk.dat %>% slice_max(n=5,order_by=crab.risk) %>%
+  dplyr::select(new_taxon, functional_group,pcrab,std_survival_scalar,eindex.rescaled,std_ed,crab.risk)
+```
+
+
+explore: lowest risk prey items?
+```{r}
+risk.dat %>% slice_min(n=5,order_by=crab.risk) %>%
+  dplyr::select(new_taxon, functional_group,pcrab,std_survival_scalar,eindex.rescaled,std_ed,crab.risk)
+```
+
+
+For which prey are we missing energy densities?
+```{r}
+q75 <- quantile(eindex.dat$std_survival_scalar, prob=0.75)
+q25 <- quantile(eindex.dat$std_survival_scalar, prob=0.25)
+
+eindex.dat %>% filter(std_survival_scalar > q75 | std_survival_scalar < q25) %>%
+  filter(!(new_taxon %in% risk.dat$new_taxon)) %>% dplyr::select(new_taxon,functional_group)
+```
+
+
+### calculate for estuaries
+
+```{r}
+riskByEstuary <- eindexByEstuary %>%
+  left_join(ed.dat %>% dplyr::select(-functional_group,-raw_survival_scalar,-ncrab), by=c("new_taxon")) %>%
+  filter(!is.na(ed_JgAFDW))
+
+# standardize energy densities
+riskByEstuary %<>% mutate(std_ed=decostand(matrix(riskByEstuary$ed_JgAFDW,ncol=1),method="range",MARGIN=2))
+```
+
+Calculate overall risk
+```{r}
+riskByEstuary %<>% mutate(crab.risk=sqrt(eindex.rescaled^2 + std_ed^2))
+
+riskByEstuary %<>% mutate(crab.risk=as.numeric(decostand(x=matrix(data=riskByEstuary$crab.risk, ncol=1), method="range", MARGIN=2)))
+```
+
+### plot
+
+```{r}
+ 
+p.risk2 <- riskByEstuary %>%
+  ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
+  geom_point(size=2) +
+  geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01) +
+  facet_grid(cols=vars(fct_relevel(estuary, c("Port Susan Bay","Padilla Bay", "Samish Bay")))) +
+  scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
+  labs(x="Crab Exposure Index", y="Crab Sensitivity")
+p.risk2
+```
+
+
+
+```{r}
+png(here('../../','figs','figS_crab_OArisk_byEstuary.png'),res=300,height=2000,width=4000)
+p.risk2 + theme(axis.text.x=element_text(angle=25, hjust=1), legend.box="horizontal")
+dev.off()
+```
+
+Summarise risk by estuary?
+```{r}
+p.risk3 <- riskByEstuary %>%
+  ggplot(aes(x=fct_relevel(estuary, c("Port Susan Bay","Padilla Bay", "Samish Bay")),y=crab.risk)) +
+  geom_boxplot() +
+  geom_jitter(aes(color=crab.risk), width=0.05) +
+  labs(x="Estuary", y="Crab Risk") +
+  scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
+  theme(legend.position="none")
+p.risk3
+```
+
+```{r}
+median(filter(riskByEstuary, estuary=="Port Susan Bay")$crab.risk)
+median(filter(riskByEstuary, estuary=="Padilla Bay")$crab.risk)
+median(filter(riskByEstuary, estuary=="Samish Bay")$crab.risk)
+```
+
+
+```{r}
+if(!knitting){
+  
+png(here('../../','figs','figSa-b_crab_OArisk_byEstuary.png'),res=300,height=2000,width=4000)
+plot_grid(p.risk2 + theme(axis.text.x=element_text(angle=25, hjust=1), legend.box="horizontal"),
+          p.risk3 + theme(axis.text.x=element_text(angle=25,hjust=1)),
+          ncol=2,rel_widths=c(1,0.2),labels=c("(a)","(b)"))
+dev.off()
+
+}
+```
+
+For species present in all estuaries, how did rank risk change?
+```{r}
+riskByEstuary_ranked <- riskByEstuary %>% 
+  group_by(new_taxon) %>%
+  mutate(nestuary=length(unique(estuary))) %>%
+  ungroup() %>%
+  filter(nestuary > 1) %>%
+  dplyr::select(estuary,new_taxon, pcrab,std_survival_scalar,eindex.rescaled,std_ed,crab.risk) %>%
+  group_by(estuary) %>% 
+    mutate(rank = rank(desc(crab.risk), ties.method = "last"))
+```
+
+save.
+```{r}
+if(!knitting){
+  
+  riskByEstuary_ranked %>%
+    mutate(std_survival_scalar=as.numeric(std_survival_scalar),
+           eindex.rescaled=as.numeric(eindex.rescaled),
+           std_ed=as.numeric(std_ed)) %>%
+  write_csv(here(bdir,'OArisk_byEstuary_runs1-2_lerayxt_ranked_2023-10-09.csv'))
+
+}
+```
+
+
+```{r eval=FALSE}
+View(riskByEstuary_ranked %>% 
+       filter(rank <= 15) %>% 
+       mutate(rank2 = rank(desc(crab.risk), ties.method = "last")) %>%
+       dplyr::select(new_taxon, estuary,rank2) %>%
+       pivot_wider(id_cols="new_taxon",names_from="estuary",values_from="rank2"))
+```
+
+
+
+
+
+

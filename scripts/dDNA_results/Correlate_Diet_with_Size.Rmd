@@ -570,7 +570,7 @@ ggplot(aes(y=mean_cw,x=as.numeric(CW_mm))) +
     geom_point() + geom_errorbar(aes(ymin=lower_cw,ymax=upper_cw), width=0.25) + 
   geom_hline(aes(yintercept=0), color="gray60") +
   geom_text(aes(y=0.001,x=as.numeric(CW_mm),label=n)) +
-    facet_wrap(~taxon, scales="free_y") + 
+    facet_wrap(~taxon, ncol=2, scales="free_y") + 
     labs(x="Carapace Width (mm)", y="Bayesian posterior mean", subtitle="Taxa present in 10+ crab") +
     theme_bw() +
     theme(axis.text.x=element_text(angle=45,hjust=1)))
@@ -626,6 +626,11 @@ fitted_2_ref <- fitted_2_filter %>%
          scaled_median=median-ref_median,
          scaled_lo=lo-ref_lo,
          scaled_hi=hi-ref_hi)
+
+fitted_2_ref %<>% 
+  mutate(taxon=factor(taxon,levels=c("Naviculales","Dinophyceae","Balanus crenatus",
+                                          "Euchlanis dilatata","Pleurosigma",
+                                          "Chordariaceae","Micromonas pusilla","Monocorophium acherusicum", "Monocorophium insidiosum","Bacillariophyta","Bacillariophyceae")))
 ```
 
 plot the relativized means without confidence intervals. remove values on the y axis other than zero.
@@ -634,10 +639,10 @@ if(!knitting){
   
   
 ## plot for each taxon
-png(here('figs',paste0('fig6_zoidMeansRelative_preads_AllTaxa10plus_4ch5KiOD_2023-10-06.png')), res=300,height=2000,width=3000)
+png(here('figs',paste0('fig6_zoidMeansRelative_preads_AllTaxa10plus_4ch5KiOD_2023-10-06.png')), res=300,height=3000,width=2000)
 print(ggplot(fitted_2_ref, aes(y=scaled_mean,x=as.numeric(CW_mm))) +
     geom_point() + geom_hline(aes(yintercept=0)) +
-    facet_wrap(~taxon, scales="free_y") + 
+    facet_wrap(~taxon, ncol=2,dir="v",scales="free_y") + 
     labs(x="Carapace Width (CW; mm)", y="Difference from minimum CW") +
   ylim(c(-0.075,0.1)) +
     theme_bw() +
@@ -653,12 +658,12 @@ if(!knitting){
   
   
 ## plot for each taxon
-png(here('figs',paste0('fig6_zoidMeansConfIntRelative_preads_AllTaxa10plus_4ch5KiOD_2023-10-06.png')), res=300,height=1500,width=2600)
+png(here('figs',paste0('fig6_zoidMeansConfIntRelative_preads_AllTaxa10plus_4ch5KiOD_2023-10-06.png')), res=300,height=2600,width=1500)
 print(ggplot(fitted_2_ref, aes(y=scaled_mean,x=as.numeric(CW_mm))) +
       geom_errorbar(aes(ymin=scaled_lo,ymax=scaled_hi),col="gray60",width=0.10) +
         geom_point(inherit.aes=TRUE) +
       geom_hline(aes(yintercept=0), color="gray60") +
-    facet_wrap(~taxon, scales="free_y") + 
+    facet_wrap(~taxon, ncol=2,dir="v",scales="free_y") + 
     labs(x="Carapace Width (CW; mm)", y="Change from minimum CW") +
   scale_y_continuous(limits=c(-0.075,0.1)) +
     theme_bw() +
@@ -1251,8 +1256,9 @@ highest_cca <- cc1.species %>% filter(CCA1 > ci99.species[2]) %>% arrange(CCA1) 
 ```
 
 ```{r}
+cc1.sites %<>% rename(Estuary=estuary)
 plot.99ci <- ggplot(cc1.species,aes(x=CCA1,y=CA1)) + 
-  geom_point(data=cc1.sites,aes(x=CCA1,y=CA1,color=estuary), pch=1,inherit.aes = FALSE) +
+  geom_point(data=cc1.sites,aes(x=CCA1,y=CA1,color=Estuary), pch=1,inherit.aes = FALSE) +
   geom_point(pch=16) + 
   geom_text_repel(data=filter(cc1.species, label %in% highest_cca),
                   aes(x=CCA1,y=CA1, label=label), 
@@ -1267,7 +1273,7 @@ plot.99ci <- ggplot(cc1.species,aes(x=CCA1,y=CA1)) +
   geom_segment(data=cc1.biplot,aes(x=0,y=0,xend=cc1.biplot$CCA1*3,yend=cc1.biplot$CA1),
                arrow = arrow(length = unit(0.2, "cm")),
                          colour = "gray50", inherit.aes = FALSE) +
-  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*1.7, y = cc1.biplot$CA1+0.3, label = "label"), 
+  geom_text(data = cc1.biplot,aes_string(x = cc1.biplot$CCA1*1.7, y = cc1.biplot$CA1+0.45, label = "label"), 
             colour = "gray50", inherit.aes = FALSE) +
   xlim(c(-3.5, 3.5)) +
    theme_bw()
@@ -1278,7 +1284,7 @@ plot.99ci
 ```{r}
 if(!knitting){
   
-png(here('figs','Fig4_CCA_AllTaxa10plus_v_CW_label99CI.png'), res=300,width=2100,height=1500)
+png(here('figs','Fig4_CCA_AllTaxa10plus_v_CW_label99CI.png'), res=300,width=1700,height=1400)
 print(plot.99ci)
 dev.off()
 
