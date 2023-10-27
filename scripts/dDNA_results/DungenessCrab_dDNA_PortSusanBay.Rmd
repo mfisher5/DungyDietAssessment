@@ -1,0 +1,207 @@
+---
+title: "Dungeness crab Diet"
+subtitle: "Port Susan Bay"
+output: 
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+Mary Fisher (mfisher5@uw.edu)
+updated: `r format(Sys.time(), '%B %d, %Y')`
+
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE,warning=FALSE)
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(ggrepel)
+library(cowplot)
+library(vegan)
+library(zetadiv)
+library(magrittr)
+library(ggordiplots)
+library(ggmap)
+library(ggspatial)
+library(grid); library(gridExtra)
+library(knitr)
+source(here('R','squash_axis.r'))
+source(here('R','ggordiplot_custom.r'))
+source(here('R','eDNA_index.r'))
+source(here('R','get_unique_taxa.r'))
+# User inputs
+blastdir   <- 'data/blast'
+resultsdir <- 'data/results'
+run.nums <- c(1,2)
+marker  <- 'lerayXT'
+
+
+estuary_colors <- data.frame(estuary=c("Port Susan Bay","Padilla Bay", "Samish Bay"),
+                             key=c("#33a02c","#1f78b4","chocolate3"))
+
+site_names <- data.frame(site=c("KAY","KAY-shell","MARPT","PBNERR","SAMI","SAMT","LAR"),
+                         site_name=c("Kayak Point 1","Kayak Point 2","March Point",
+                                   "NERR","Samish Island","Samish Bay","Larrabee"))
+
+
+choose_estuary <- "Port Susan Bay"
+choose_sites <- c("KAY","KAY-shell")
+```
+
+```{r data, include=FALSE}
+## lab metadata (CH,CW,fullness) ##
+lab_metadat <- read_csv(here('data','metadata','crab_metadat.csv')) %>% filter(estuary==choose_estuary)
+
+## site metadata (lat, lon) ##
+
+sampling_metadat <- read_csv(here('data','metadata','sampling_data.csv')) %>%
+  mutate(site=ifelse(site=="Kayak Pt 2", "Kayak Point 2",
+                     ifelse(site=="Kayak Pt 1","Kayak Point 1",site)))
+
+## seq sample id metadata ##
+run_metadat_files <- c('data/DCRB_Run1_samples.csv','data/DCRB_Run2_samples.csv')
+for(i in seq(1,length(run_metadat_files))){
+  tmp.meta <- read_csv(here(run_metadat_files[i])) %>% mutate(MiSeqRun=run.nums[i]) %>% mutate(crab_num=as.character(crab_num), tech=as.character(tech))
+  if(i==1){    metadat <- tmp.meta  } else{
+    metadat <- bind_rows(metadat,tmp.meta)
+  } }
+metadat %<>% filter(site %in% choose_sites)
+
+## blast output, pre-filter ##
+blastout <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_blast_lca_taxonomy.csv")))
+  
+
+blastout %<>% dplyr::select(-mi_seq_run,-sample_id) %>%
+  left_join(metadat, by=c("Sample_name","Locus"="locus","MiSeqRun")) %>%
+  filter(!is.na(site)) %>%
+  rename(sample_id=sample_label) %>%
+  mutate(crab_num=as.numeric(crab_num)) %>%
+  mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
+  mutate(site=ifelse(site=="CLAY","LAR",
+                     ifelse(site=="SIN","SAMI",site))) %>%
+  mutate(estuary=choose_estuary)
+
+## filtered taxa ##
+dat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_uniqueTaxa.csv")))
+
+dat %<>%
+  filter(site %in% choose_sites) %>%
+  mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
+  mutate(site=ifelse(site=="CLAY","LAR",
+                     ifelse(site=="SIN","SAMI",site))) %>%
+  mutate(estuary=choose_estuary)
+
+## too small taxa (aka "detritus") ##
+smdat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_SmallTaxa_uniqueTaxa.csv")))  
+
+smdat %<>%
+  filter(site %in% choose_sites) %>%
+  mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
+  mutate(site=ifelse(site=="CLAY","LAR",
+                     ifelse(site=="SIN","SAMI",site))) %>%
+  mutate(estuary=choose_estuary)
+
+## combine all taxa ##
+alldat <- bind_rows(dat,smdat)
+
+## carapace widths / heights ##
+crab_metadat <- alldat %>% dplyr::select(site,estuary,crab_id) %>% distinct() %>%
+  left_join(lab_metadat,by=c("crab_id"="sample_id","estuary")) %>%
+  filter(site %in% choose_sites)
+
+
+
+# basemap
+base.map <- readRDS(here('data','metadata',"PugetSoundN_terrain_background.rds"))
+wa.map <- map_data("state") %>%
+  filter(region=="washington")
+
+
+# colors for map points
+
+estuary_colors <- data.frame(estuary=c("Port Susan Bay","Padilla Bay", "Samish Bay"),
+                             key=c("#33a02c","#1f78b4","chocolate3"))
+```
+
+
+## Sampling & Metadata
+
+`r choose_estuary` was sampled at `r length(unique(lab_metadat$sampling_location))` sites. The *Kayak Point 1* site represents habitat dominated by sandy sediment / eelgrass cover, whereas the *Kayak Point 2* site represents habitat dominated by cobble and shell hash. 
+
+```{r fig.height=10, fig.width=10}
+plotdat <- sampling_metadat %>% filter(Bay %in% choose_estuary) %>%
+  left_join(site_names %>% rename(site_key=site),by=c("site"="site_name")) %>%
+  filter(site_key %in% choose_sites)
+ggmap(base.map) +
+  geom_point(data=plotdat, aes(x=Longitude,y=Latitude), color="chocolate3", size=4, pch=1) +
+  geom_label_repel(data=plotdat, aes(x=Longitude,y=Latitude, label=site), segment.color="chocolate3",
+                   force=1, force_pull=0.25, segment.size=1, size=4,
+                   min.segment.length=0.1, show.legend=FALSE, nudge_x=0.5) +
+  ylab("Latitude") + xlab("Longitude") +
+  theme(axis.title=element_text(size=14),
+        axis.text=element_text(size=12),
+        legend.title=element_blank(),
+        legend.text=element_text(size=12), legend.position="none")
+```
+
+**Table 1.** The number of crab sampled for each sampling date. 
+```{r}
+kable(lab_metadat %>% group_by(sampling_location, sampling_date) %>% 
+  summarize(`Crab Sampled (N)`=length(unique(sample_id))) %>%
+  rename(Site=sampling_location, Date=sampling_date))
+```
+<br>
+<br>
+
+Across all individuals in `r choose_estuary`, the average carapace width was `r round(mean(crab_metadat$CW_mm),1)` and the average carapace height was `r round(mean(crab_metadat$CH_mm),1)`. 
+
+```{r fig.height=3}
+ggplot(crab_metadat, aes(x=CW_mm,y=CH_mm)) +
+  geom_point() + facet_grid(cols=vars(sampling_location)) +
+  labs(x="Carapace width (mm)", y="Carapace height (mm)") +
+  theme_bw() + theme(legend.position="none", strip.background=element_rect("white"))
+```
+
+<br>
+<br>
+
+
+We detected a number of unicellular organisms in crab stomach contents, including those which commonly occur as small phytoplankton and zooplankton in marine and brackish waters. Field observations suggest early instar Dungeness crab may consume diatoms and algal epiphytes, and laboratory studies have shown it is possible for J1-3 instars to grow and molt on a diet of pure filamentous diatoms, or diatoms mixed with naturally-occurring microorganisms (Jensen & Asplen, 1998). However, there is some question about the energetic value of certain of these small phyto- and zooplankton (G. C. Jensen & Asplen, 1998). We therefore provide some summaries (e.g., **Table 2**) and analyses separately for single- versus multi-cellular prey items; to more clearly communicate which prey items we include for each analysis, we specify whether the analysis was run on “all taxa” (both single- and multi-cellular prey items), “single-celled organisms,” or “multi-cellular prey.”
+
+
+**Table 2.** The number of crab sampled which contained putative prey items. 
+```{r}
+diet_summary <- lab_metadat %>% group_by(sampling_location) %>%
+  summarize(`Crab Sampled (N)`=length(unique(sample_id))) %>%
+  rename(site_name=sampling_location) %>%
+  left_join(
+
+    alldat %>% left_join(site_names, by=c("site")) %>%
+  group_by(site_name) %>% 
+  summarise(`Crab with Prey (all)`=length(unique(crab_id))) %>%
+  left_join(smdat %>% left_join(site_names, by=c("site")) %>%
+              group_by(site_name) %>% summarise(`with Prey (single-celled)`=length(unique(crab_id)))) %>%
+  left_join(dat %>%left_join(site_names, by=c("site")) %>%
+  group_by(site_name) %>% summarise(`with Prey (multi-cellular)`=length(unique(crab_id))))
+) %>%
+  rename(Site=site_name)
+
+
+kable(diet_summary)
+```
+
+## Prey Diversity
+
+
+## Prey Items
+
+
+
+
+
+
+

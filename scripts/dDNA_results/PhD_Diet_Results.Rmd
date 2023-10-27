@@ -56,6 +56,7 @@ library(grid); library(gridExtra)
 source(here('R','squash_axis.r'))
 source(here('R','ggordiplot_custom.r'))
 source(here('R','eDNA_index.r'))
+source(here('R','get_unique_taxa.r'))
 # User inputs
 blastdir   <- 'data/blast'
 resultsdir <- 'data/results'
@@ -119,7 +120,7 @@ alldat <- bind_rows(dat,smdat)
 ```
 <br>
 
-# 1. Metadata
+# 1a. Metadata
 
 ### Sample Sizes
 
@@ -169,7 +170,9 @@ blastout %>% dplyr::select(site,crab_num,estuary) %>% distinct() %>%
 
 
 ```{r}
+if(!knitting){
 write_csv(pcrab_with_preytax, here(resultsdir, 'lerayXT_runs1-2_percent_crab_with_prey_taxa.csv'))
+}
 ```
 
 
@@ -228,6 +231,7 @@ if(!knitting){saveRDS(fig1b, here('figs','fig1b_obj.rds'))}
 
 Graph mean and sdev carapace width and height for each site, and save for supplement.
 ```{r}
+if(!knitting){
 png(here('figs','figS_CW_CH_bysite.png'),res=300,height=1700,width=1900)
   
 crab_metadat %>% left_join(site_names) %>%
@@ -246,6 +250,7 @@ ggplot(aes(x=mean_cw,y=mean_ch,pch=site_name,color=site_name)) +
   theme_bw() 
 
 dev.off()
+}
 ```
 ```{r fig.height=3, fig.width=3}
 ggplot(crab_metadat, aes(x=CW_mm)) + 
@@ -261,12 +266,9 @@ summary(size.aov)
 TukeyHSD(size.aov)
 ```
 
+### specificity
 
-
-
-# Taxa
-
-Allows for non-species-level IDs, as long as they are unique. 
+Using **Taxa** instead of just **species** allows for for non-species-level IDs, as long as they are unique. 
 
 What % of the unique taxa we've identified go down to the species level, for **all data**?
 ```{r}
@@ -291,7 +293,14 @@ smdat_overall <- get_unique_taxa(smdat)
 with(smdat_overall %>% dplyr::select(taxon,rank) %>% distinct(),table(rank)) / length(smdat_overall %>% pull(taxon) %>% unique())
 ```
 
-## eDNA Index
+
+
+
+
+
+
+# eDNA Index
+
 
 calculate eDNA index for all technical replicates (1 row = 1 crab x 1 replicate)
 ```{r}
@@ -329,7 +338,7 @@ index.df <- as.data.frame(t(index.mat)) %>%
 
 
 
-## 2. Prey Diversity
+# 2. Prey Diversity (Taxa)
 
 ### Alpha div
 
@@ -434,9 +443,11 @@ plot.alpha
 
 Save plot.
 ```{r echo=TRUE}
+if(!knitting){
 png(here('figs','figS_alpha-div.png'), res=300, height=1000,width=2800)
 plot.alpha
 dev.off()
+}
 ```
 <br>
 
@@ -491,14 +502,14 @@ drichness.crab <- smdat %>%
   group_by(estuary,site,crab_id) %>%
   summarise(richness=length(unique(taxon))) %>% 
   left_join(estuary_colors,by="estuary") %>%
-  left_join(crabdat)
+  left_join(crab_metadat)
 
 ### combined ###
 all.richness.crab <- alldat %>%
   group_by(estuary,site,crab_id) %>%
   summarise(richness=length(unique(taxon))) %>% 
   left_join(estuary_colors,by="estuary") %>%
-  left_join(crabdat)
+  left_join(crab_metadat)
 ```
 
 
@@ -540,10 +551,11 @@ Save plot with the alpha diversity x site plot
 # png(here('figs','figS_alpha-div_site_fullness.png'), res=200, height=1000,width=1500)
 # plot_grid(plot.alpha + theme(plot.margin=margin(t=0,r=0,b=10,l=20)), alpha_by_fll, nrow=2)
 # dev.off()
-
+if(!knitting){
 png(here('figs','figS_alpha-div_fullness.png'), res=200, height=800,width=1500)
 alpha_by_fll
 dev.off()
+}
 ```
 <br>
 <br>
@@ -580,9 +592,11 @@ alpha_by_cw
 ```
 Save plot
 ```{r echo=TRUE}
+if(!knitting){
 png(here('figs','figS_alpha-div_cw.png'), res=200, height=800,width=1500)
 alpha_by_cw
 dev.off()
+}
 ```
 
 
@@ -701,7 +715,7 @@ ggplot(plotdat2, aes(x=ncrab,y=nsp,color=estuary)) +
 <br>
 
 ```{r}
-
+if(!knitting){
 p1 <- ggplot(plotdat, aes(x=ncrab,y=nsp,color=estuary)) +
   geom_point( size=0.5) + geom_path() +
   scale_color_manual(values=c("gray30",estuary_colors$key[c(2,1,3)])) +
@@ -716,6 +730,7 @@ p2 <- ggplot(plotdat2, aes(x=ncrab,y=nsp,color=estuary)) +
 png(here('figs','figS_saturation_curve_alltax_lgtax.png'), res=300,height=1300,width=2200)
 plot_grid(p1,p2, rel_widths=c(0.7,1))
 dev.off()
+}
 ```
 
 
@@ -739,13 +754,13 @@ sp.taxonomy <- dat %>%
   rename("Phylum"=phylum, "Class"=class,"Order"=order,"Family"=family,"Genus"=genus) %>%
   filter((!is.na(Phylum) & !is.na(Class) & !is.na(Order)) & !is.na(Family) & !is.na(Genus))
 x <- as.data.frame(sp.taxonomy %>% dplyr::select(Genus,Family,Order,Class,Phylum))
-rownames(x) <- sp.taxonomy$species
+# rownames(x) <- sp.taxonomy$species
 sp.dist.mat <- taxa2dist(x, varstep = FALSE, check = TRUE, labels=rownames(x))
 
 # presence / absence matrix
 prey.sp.site.df <- dat %>%
   filter(species %in% sp.taxonomy$species) %>%
-  dplyr::select(Site, taxon) %>% distinct() %>%
+  dplyr::select(site, taxon) %>% distinct() %>%
   mutate(presence=1) %>%
   pivot_wider(id_cols="Site", names_from="taxon",values_from="presence", values_fill=0)
 
@@ -889,16 +904,74 @@ write_csv(as.data.frame(bdiv, row.names=rownames(bdiv)) %>% rownames_to_column("
 write_csv(as.data.frame(bdiv3, row.names=rownames(bdiv3)) %>% rownames_to_column("x"), here('data','results','betadiver_estuaries_runs1-2_lerayXT_presence_allTaxa.csv'))
 ```
 
-plot how within / between estuary differences change for larger and single-celled organisms. 
+create summary data frames for all v. single-celled v. multi-cellular organisms
 ```{r}
+site.bdiv.summary <- as.data.frame(bdiv) %>% rownames_to_column("site1") %>%
+  pivot_longer(cols=2:(ncol(bdiv)+1), names_to="site2",values_to="jaccard") %>%
+  mutate(taxa="All") %>%
+  bind_rows(
+    as.data.frame(bdiv2) %>% rownames_to_column("site1") %>%
+      pivot_longer(cols=2:(ncol(bdiv)+1), names_to="site2",values_to="jaccard") %>%
+      mutate(taxa="Multi-cellular")
+  ) %>%
+  bind_rows(
+    as.data.frame(bdiv2b) %>% rownames_to_column("site1") %>%
+      pivot_longer(cols=2:(ncol(bdiv)+1), names_to="site2",values_to="jaccard") %>%
+      mutate(taxa="Single-celled")
+  ) %>%
+  mutate(comparison=paste0(site1, " - ", site2))
 
-
-
-
+estuary.bdiv.summary <- as.data.frame(bdiv3) %>% rownames_to_column("site1") %>%
+  pivot_longer(cols=2:(ncol(bdiv3)+1), names_to="site2",values_to="jaccard") %>%
+  mutate(taxa="All") %>%
+  bind_rows(
+    as.data.frame(bdiv4) %>% rownames_to_column("site1") %>%
+      pivot_longer(cols=2:(ncol(bdiv3)+1), names_to="site2",values_to="jaccard") %>%
+      mutate(taxa="Multi-cellular")
+  ) %>%
+  bind_rows(
+    as.data.frame(bdiv4b) %>% rownames_to_column("site1") %>%
+      pivot_longer(cols=2:(ncol(bdiv3)+1), names_to="site2",values_to="jaccard") %>%
+      mutate(taxa="Single-celled")
+  ) %>%
+  mutate(comparison=paste0(site1, " - ", site2))
 ```
 
 
 Supp Figure: pairwise beta diversity (y axis) for sites, within / between estuaries (faceted), with different data sets colored.  
+```{r}
+p.bdive <- estuary.bdiv.summary %>%
+  filter(site1 != site2) %>%
+  ggplot(aes(x=comparison,y=jaccard,fill=taxa)) +
+  geom_col(position="dodge") +
+  geom_hline(aes(yintercept=0)) +
+  scale_fill_grey(name="taxa") +
+  ylim(c(0,1.0)) + labs(x="Estuary Pair",y="Beta Diversity") +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45,hjust=1))
+p.bdive
+p.bdivs <- site.bdiv.summary %>%
+  filter(site1 != site2) %>%
+  # ggplot(aes(x=comparison,y=jaccard,fill=taxa)) +
+  # geom_col(position="dodge") +
+  ggplot(aes(x=taxa,y=jaccard)) +
+  geom_boxplot() +
+  geom_hline(aes(yintercept=0)) +
+  scale_fill_grey(name="taxa") +
+  ylim(c(0,1.0)) + labs(x="taxa",y="Beta Diversity", subtitle="Site Pairs") +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45,hjust=1))
+p.bdivs
+```
+```{r}
+if(!knitting){
+  
+  png(here('figs','figS_betadiv_byDataSet.png'), res=300,height=1000, width=1850)
+  plot_grid(p.bdive+theme(plot.margin=margin(5.5,5.5,5.5,50)),p.bdivs, rel_widths=c(1,0.4), labels=c("(a)","(b)"))
+  dev.off()
+}
+```
+
 
 
 ### Zeta diversity
