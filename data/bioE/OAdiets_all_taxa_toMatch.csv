@@ -1,160 +1,160 @@
-group,new_taxon,ncrab,functional_group
-amphipod,Ampithoe lacertosa,3,Deposit feeders
-amphipod,Ampithoe valida,8,Deposit feeders
-amphipod,Grandidierella japonica,4,Deposit feeders
-amphipod,Monocorophium acherusicum,43,Deposit feeders
-amphipod,Monocorophium insidiosum,15,Deposit feeders
-annelid worm,Serpulidae,4,Carnivorous infauna
-barnacle,Balanus crenatus,22,Shallow benthic filter feeders
-bivalves,Clinocardium nuttallii,6,Bivalves
-bivalves,Limecola,3,Bivalves
-bivalves,Modiolus modiolus,7,Bivalves
-bivalves,Mytilus trossulus,3,Bivalves
-bivalves,Saxidomus,3,Bivalves
-bivalves,Tellinidae,6,Bivalves
-brown algae,Chordariaceae,19,Macroalgae
-brown algae,Ectocarpaceae,4,Macroalgae
-brown algae,Fucales,9,Macroalgae
-brown algae,Fucus distichus,6,Macroalgae
-brown algae,Ralfsiaceae,3,Macroalgae
-brown algae,Sargassum,3,Macroalgae
-bryozoan,Membranipora membranacea,3,Shallow benthic filter feeders
-copepod,Paracalanus,5,Mesozooplankton
-crab,Hemigrapsus oregonensis,4,Crabs
-flatworm,Polycystididae,3,Carnivorous infauna
-green algae,Ulvales,7,Macroalgae
-horse and gaper clams,Tresus,9,Bivalves
-jelly fish,Phacellophora camtschatica,5,Gelatinous zooplankton
-marine snails,Haminoea,4,Sea stars moonsnail whelk
-polychaete,Eupolymnia heterobranchia,4,Carnivorous infauna
-polychaete,Pseudopolydora bassarginensis,6,Carnivorous infauna
-polychaete,Pseudopolydora paucibranchiata,7,Carnivorous infauna
-polychaete,Rhynchospio arenincola,3,Carnivorous infauna
-red algae,Rhodomelaceae,7,Macroalgae
-shrimp,Crangon,3,Crangon shrimp
-tunicate,Botrylloides,4,Shallow benthic filter feeders
-venus clams,Veneridae,4,Bivalves
-worm,Platynereis,9,Carnivorous infauna
-Bacillariophyta,Bacillariaceae,8,Large phytoplankton
-Bacillariophyta,Bacillariophyceae,21,Large phytoplankton
-Bacillariophyta,Bacillariophyta,20,Large phytoplankton
-Bacillariophyta,Coscinodiscophyceae,6,Large phytoplankton
-Bacillariophyta,Cymbellales,5,Large phytoplankton
-Bacillariophyta,Ditylum brightwellii,4,Large phytoplankton
-Bacillariophyta,Haslea,4,Large phytoplankton
-Bacillariophyta,Mediophyceae,9,Large phytoplankton
-Bacillariophyta,Navicula,4,Large phytoplankton
-Bacillariophyta,Naviculales,20,Large phytoplankton
-Bacillariophyta,Nitzschia,7,Large phytoplankton
-Bacillariophyta,Pinnularia sp.,3,Large phytoplankton
-Bacillariophyta,Pleurosigma,20,Large phytoplankton
-Bacillariophyta,Pseudo-nitzschia,4,Large phytoplankton
-Bacillariophyta,Rhizosoleniaceae,5,Large phytoplankton
-Bacillariophyta,Thalassiosirales,3,Large phytoplankton
-Chlorophyta,Micromonas pusilla,17,Small phytoplankton
-Rotifera,Euchlanis dilatata,17,Microzooplankton
-NA,Chattonella marina,4,Large phytoplankton
-NA,Cryptomonas curvata,3,Small phytoplankton
-NA,Cryptophyceae,6,Small phytoplankton
-NA,Dinophyceae,12,Microzooplankton
-NA,Heterosigma akashiwo,3,Large phytoplankton
-Annelida,Alitta,1,Carnivorous infauna
-Annelida,Armandia brevis,1,Carnivorous infauna
-Annelida,Eteone,1,Carnivorous infauna
-Annelida,Eumida,1,Carnivorous infauna
-Annelida,Exogone molesta,1,Carnivorous infauna
-Annelida,Glycinde,1,Carnivorous infauna
-Annelida,Naididae,1,Carnivorous infauna
-Annelida,Nais,1,Carnivorous infauna
-Annelida,Nereis vexillosa,1,Carnivorous infauna
-Annelida,Oxydromus pugettensis,1,Carnivorous infauna
-Annelida,Scolelepis squamata,1,Carnivorous infauna
-Arthropoda,Acanthocyclops,1,
-Arthropoda,Acartia longiremis,1,
-Arthropoda,Balanus,1,
-Arthropoda,Caprella californica,1,
-Arthropoda,Diarthrodes,1,
-Arthropoda,Gnorimosphaeroma,1,
-Arthropoda,Harpacticus,1,
-Arthropoda,Hyperiidae,1,
-Arthropoda,Idoteidae,1,
-Arthropoda,Pagurus granosimanus,1,
-Arthropoda,Pagurus hirsutiusculus,1,
-Arthropoda,Pinnixa,1,
-Arthropoda,Tortanus discaudatus,1,
-Bacillariophyta,Gomphonema parvulum,1,Large phytoplankton
-Bacillariophyta,Grammatophora,1,Large phytoplankton
-Bacillariophyta,Lithodesmiaceae,1,Large phytoplankton
-Bacillariophyta,Naviculaceae,1,Large phytoplankton
-Bacillariophyta,Podosira stelligera,1,Large phytoplankton
-Bacillariophyta,Sellaphora auldreekie,1,Large phytoplankton
-Bacillariophyta,Thalassiosira,1,Large phytoplankton
-brown algae,Ectocarpus,1,Macroalgae
-Bryozoa,Membranipora,1,Shallow benthic filter feeders
-Bryozoa,Plumatella,1,Shallow benthic filter feeders
-Chlorophyta,Chlamydomonas,1,
-Chlorophyta,Chlamydomonas sp. UWO 241,1,
-Chlorophyta,Ostreococcus tauri,1,
-Chlorophyta,Tetradesmus obliquus,1,
-Chordata,Botrylloides violaceus,1,
-Cnidaria,Cyanea,1,
-Cnidaria,Obelia,1,
-Cnidaria,Zanclea,1,
-Cryptophyceae,Teleaulax amphioxeia,1,
-Dinophyceae,Azadinium,1,Microzooplankton
-Dinophyceae,Durinskia baltica,1,Microzooplankton
-Dinophyceae,Heterocapsa rotundata,1,Microzooplankton
-Echinodermata,Leptosynapta clarki,1,
-Eustigmatophyceae,Nannochloropsis,1,
-Mollusca,Limecola balthica,1,Bivalves
-Mollusca,Melanochlamys diomedea,1,Benthic herbivorous grazers
-Mollusca,Mitrella gausapata,1,Sea stars moonsnail whelk
-Mollusca,Mya,1,Bivalves
-Mollusca,Onchidoris bilamellata,1,Benthic herbivorous grazers
-Mollusca,Panopea generosa,1,Bivalves
-Nematoda,Chromadoridae,1,
-Nematoda,Terschellingia,1,
-Nemertea,Cephalothrix spiralis,1,
-Nemertea,Emplectonema viride,1,
-Nemertea,Paranemertes peregrina,1,
-Pelagophyceae,Aureococcus anophagefferens,1,
-Phaeophyceae,Acinetosporaceae,1,
-Phaeophyceae,Ectocarpus siliculosus,1,
-Phaeophyceae,Myriotrichia,1,
-Phaeophyceae,Saccharina,1,
-Platyhelminthes,Microstomum,1,Meiobenthos
-Platyhelminthes,Microstomum bispiralis,1,Meiobenthos
-Platyhelminthes,Notocomplana septentrionalis,1,Meiobenthos
-Porifera,Cliona,1,
-Rhodophyta,Acrochaetium,1,
-Rhodophyta,Polysiphonia paniculata,1,
-Rotifera,Eurotatoria,1,
-Rotifera,Trichotria tetractis,1,
-Rotifera,Tripleuchlanis plicata,1,
-amphipod,Caprella laeviuscula,2,
-Annelida,Polydora cornuta,2,Carnivorous infauna
-Arthropoda,Calanus,2,Mesozooplankton
-Arthropoda,Centropages abdominalis,2,
-Arthropoda,Nihonotrypaea,2,
-Arthropoda,Pinnotheridae,2,
-Arthropoda,Tisbe,2,
-Bacillariophyta,Cylindrotheca closterium,2,Large phytoplankton
-Bacillariophyta,Skeletonema,2,Large phytoplankton
-bivalves,Nuttallia,2,Bivalves
-brown algae,Feldmannia mitchelliae,2,Macroalgae
-brown algae,Hincksia,2,Macroalgae
-brown algae,Petalonia fascia,2,Macroalgae
-Chlorophyta,Ulva,2,Macroalgae
-Chordata,Cymatogaster aggregata,2,
-Cryptophyceae,Guillardia theta,2,
-Dinophyceae,Suessiales,2,Microzooplankton
-Foraminifera,Rotaliida,2,
-bivalves,Hiatella,2,Bivalves
-bivalves,Mya arenaria,2,Bivalves
-Nemertea,Zygonemertes,2,Carnivorous infauna
-nemertean worm,Tubulanus,2,Carnivorous infauna
-Phaeophyceae,Scytosiphon,2,
-Platyhelminthes,Notocomplana,2,Meiobenthos
-polychaeate,Phyllodoce,2,Carnivorous infauna
-polychaete,Oweniidae,2,Carnivorous infauna
-sponge,Scopalina ruetzleri,2,
+group,new_taxon,ncrab,functional_group,OA_species
+amphipod,Ampithoe lacertosa,3,Deposit feeders,
+amphipod,Ampithoe valida,8,Deposit feeders,
+amphipod,Grandidierella japonica,4,Deposit feeders,
+amphipod,Monocorophium acherusicum,43,Deposit feeders,
+amphipod,Monocorophium insidiosum,15,Deposit feeders,
+annelid worm,Serpulidae,4,Carnivorous infauna,
+barnacle,Balanus crenatus,22,Shallow benthic filter feeders,
+bivalves,Clinocardium nuttallii,6,Bivalves,
+bivalves,Limecola,3,Bivalves,
+bivalves,Modiolus modiolus,7,Bivalves,
+bivalves,Mytilus trossulus,3,Bivalves,
+bivalves,Saxidomus,3,Bivalves,
+bivalves,Tellinidae,6,Bivalves,
+brown algae,Chordariaceae,19,Macroalgae,
+brown algae,Ectocarpaceae,4,Macroalgae,
+brown algae,Fucales,9,Macroalgae,
+brown algae,Fucus distichus,6,Macroalgae,
+brown algae,Ralfsiaceae,3,Macroalgae,
+brown algae,Sargassum,3,Macroalgae,
+bryozoan,Membranipora membranacea,3,Shallow benthic filter feeders,
+copepod,Paracalanus,5,Mesozooplankton,
+crab,Hemigrapsus oregonensis,4,Crabs,
+flatworm,Polycystididae,3,Carnivorous infauna,
+green algae,Ulvales,7,Macroalgae,
+horse and gaper clams,Tresus,9,Bivalves,
+jelly fish,Phacellophora camtschatica,5,Gelatinous zooplankton,
+marine snails,Haminoea,4,Sea stars moonsnail whelk,
+polychaete,Eupolymnia heterobranchia,4,Carnivorous infauna,
+polychaete,Pseudopolydora bassarginensis,6,Carnivorous infauna,
+polychaete,Pseudopolydora paucibranchiata,7,Carnivorous infauna,
+polychaete,Rhynchospio arenincola,3,Carnivorous infauna,
+red algae,Rhodomelaceae,7,Macroalgae,
+shrimp,Crangon,3,Crangon shrimp,
+tunicate,Botrylloides,4,Shallow benthic filter feeders,
+venus clams,Veneridae,4,Bivalves,
+worm,Platynereis,9,Carnivorous infauna,
+Bacillariophyta,Bacillariaceae,8,Large phytoplankton,
+Bacillariophyta,Bacillariophyceae,21,Large phytoplankton,
+Bacillariophyta,Bacillariophyta,20,Large phytoplankton,
+Bacillariophyta,Coscinodiscophyceae,6,Large phytoplankton,
+Bacillariophyta,Cymbellales,5,Large phytoplankton,
+Bacillariophyta,Ditylum brightwellii,4,Large phytoplankton,
+Bacillariophyta,Haslea,4,Large phytoplankton,
+Bacillariophyta,Mediophyceae,9,Large phytoplankton,
+Bacillariophyta,Navicula,4,Large phytoplankton,
+Bacillariophyta,Naviculales,20,Large phytoplankton,
+Bacillariophyta,Nitzschia,7,Large phytoplankton,
+Bacillariophyta,Pinnularia sp.,3,Large phytoplankton,
+Bacillariophyta,Pleurosigma,20,Large phytoplankton,
+Bacillariophyta,Pseudo-nitzschia,4,Large phytoplankton,
+Bacillariophyta,Rhizosoleniaceae,5,Large phytoplankton,
+Bacillariophyta,Thalassiosirales,3,Large phytoplankton,
+Chlorophyta,Micromonas pusilla,17,Small phytoplankton,
+Rotifera,Euchlanis dilatata,17,Microzooplankton,
+NA,Chattonella marina,4,Large phytoplankton,
+NA,Cryptomonas curvata,3,Small phytoplankton,
+NA,Cryptophyceae,6,Small phytoplankton,
+NA,Dinophyceae,12,Microzooplankton,
+NA,Heterosigma akashiwo,3,Large phytoplankton,
+Annelida,Alitta,1,Carnivorous infauna,
+Annelida,Armandia brevis,1,Carnivorous infauna,
+Annelida,Eteone,1,Carnivorous infauna,
+Annelida,Eumida,1,Carnivorous infauna,
+Annelida,Exogone molesta,1,Carnivorous infauna,
+Annelida,Glycinde,1,Carnivorous infauna,
+Annelida,Naididae,1,Carnivorous infauna,
+Annelida,Nais,1,Carnivorous infauna,
+Annelida,Nereis vexillosa,1,Carnivorous infauna,
+Annelida,Oxydromus pugettensis,1,Carnivorous infauna,
+Annelida,Scolelepis squamata,1,Carnivorous infauna,
+Arthropoda,Acanthocyclops,1,,
+Arthropoda,Acartia longiremis,1,,
+Arthropoda,Balanus,1,Shallow benthic filter feeders,
+Arthropoda,Caprella californica,1,Deposit feeders,Amphipoda
+Arthropoda,Diarthrodes,1,Mesozooplankton,Harpacticoida
+Arthropoda,Gnorimosphaeroma,1,Deposit feeders,Isopoda
+Arthropoda,Harpacticus,1,Deposit feeders,Amphipoda
+Arthropoda,Hyperiidae,1,Deposit feeders,Amphipoda
+Arthropoda,Idoteidae,1,Deposit feeders,Isopoda
+Arthropoda,Pagurus granosimanus,1,Deposit feeders,Small Crustaceans (Harvey et al.)
+Arthropoda,Pagurus hirsutiusculus,1,Deposit feeders,Small Crustaceans (Harvey et al.)
+Arthropoda,Pinnixa,1,Bivalves,Host
+Arthropoda,Tortanus discaudatus,1,Mesozooplankton,
+Bacillariophyta,Gomphonema parvulum,1,Large phytoplankton,
+Bacillariophyta,Grammatophora,1,Large phytoplankton,
+Bacillariophyta,Lithodesmiaceae,1,Large phytoplankton,
+Bacillariophyta,Naviculaceae,1,Large phytoplankton,
+Bacillariophyta,Podosira stelligera,1,Large phytoplankton,
+Bacillariophyta,Sellaphora auldreekie,1,Large phytoplankton,
+Bacillariophyta,Thalassiosira,1,Large phytoplankton,
+brown algae,Ectocarpus,1,Macroalgae,
+Bryozoa,Membranipora,1,Shallow benthic filter feeders,
+Bryozoa,Plumatella,1,Shallow benthic filter feeders,
+Chlorophyta,Chlamydomonas,1,,
+Chlorophyta,Chlamydomonas sp. UWO 241,1,,
+Chlorophyta,Ostreococcus tauri,1,,
+Chlorophyta,Tetradesmus obliquus,1,,
+Chordata,Botrylloides violaceus,1,,
+Cnidaria,Cyanea,1,,
+Cnidaria,Obelia,1,,
+Cnidaria,Zanclea,1,,
+Cryptophyceae,Teleaulax amphioxeia,1,,
+Dinophyceae,Azadinium,1,Microzooplankton,
+Dinophyceae,Durinskia baltica,1,Microzooplankton,
+Dinophyceae,Heterocapsa rotundata,1,Microzooplankton,
+Echinodermata,Leptosynapta clarki,1,,
+Eustigmatophyceae,Nannochloropsis,1,,
+Mollusca,Limecola balthica,1,Bivalves,
+Mollusca,Melanochlamys diomedea,1,Benthic herbivorous grazers,
+Mollusca,Mitrella gausapata,1,Sea stars moonsnail whelk,
+Mollusca,Mya,1,Bivalves,
+Mollusca,Onchidoris bilamellata,1,Benthic herbivorous grazers,
+Mollusca,Panopea generosa,1,Bivalves,
+Nematoda,Chromadoridae,1,,
+Nematoda,Terschellingia,1,,
+Nemertea,Cephalothrix spiralis,1,,
+Nemertea,Emplectonema viride,1,,
+Nemertea,Paranemertes peregrina,1,,
+Pelagophyceae,Aureococcus anophagefferens,1,,
+Phaeophyceae,Acinetosporaceae,1,,
+Phaeophyceae,Ectocarpus siliculosus,1,,
+Phaeophyceae,Myriotrichia,1,,
+Phaeophyceae,Saccharina,1,,
+Platyhelminthes,Microstomum,1,Meiobenthos,
+Platyhelminthes,Microstomum bispiralis,1,Meiobenthos,
+Platyhelminthes,Notocomplana septentrionalis,1,Meiobenthos,
+Porifera,Cliona,1,,
+Rhodophyta,Acrochaetium,1,,
+Rhodophyta,Polysiphonia paniculata,1,,
+Rotifera,Eurotatoria,1,,
+Rotifera,Trichotria tetractis,1,,
+Rotifera,Tripleuchlanis plicata,1,,
+amphipod,Caprella laeviuscula,2,,
+Annelida,Polydora cornuta,2,Carnivorous infauna,
+Arthropoda,Calanus,2,Mesozooplankton,
+Arthropoda,Centropages abdominalis,2,Mesozooplankton,Calanoida
+Arthropoda,Nihonotrypaea,2,Carnivorous infauna,Burrowing shrimp
+Arthropoda,Pinnotheridae,2,Bivalves,Host
+Arthropoda,Tisbe,2,Mesozooplankton,Harpacticoida
+Bacillariophyta,Cylindrotheca closterium,2,Large phytoplankton,
+Bacillariophyta,Skeletonema,2,Large phytoplankton,
+bivalves,Nuttallia,2,Bivalves,
+brown algae,Feldmannia mitchelliae,2,Macroalgae,
+brown algae,Hincksia,2,Macroalgae,
+brown algae,Petalonia fascia,2,Macroalgae,
+Chlorophyta,Ulva,2,Macroalgae,
+Chordata,Cymatogaster aggregata,2,,
+Cryptophyceae,Guillardia theta,2,,
+Dinophyceae,Suessiales,2,Microzooplankton,
+Foraminifera,Rotaliida,2,,
+bivalves,Hiatella,2,Bivalves,
+bivalves,Mya arenaria,2,Bivalves,
+Nemertea,Zygonemertes,2,Carnivorous infauna,
+nemertean worm,Tubulanus,2,Carnivorous infauna,
+Phaeophyceae,Scytosiphon,2,,
+Platyhelminthes,Notocomplana,2,Meiobenthos,
+polychaeate,Phyllodoce,2,Carnivorous infauna,
+polychaete,Oweniidae,2,Carnivorous infauna,
+sponge,Scopalina ruetzleri,2,,
