@@ -49,6 +49,7 @@ library(ggplot2)
 library(ggrepel)
 library(cowplot)
 library(vegan)
+library(labdsv)
 library(zetadiv)
 library(magrittr)
 library(ggordiplots)
@@ -292,8 +293,8 @@ with(smdat_overall %>% dplyr::select(taxon,rank) %>% distinct(),table(rank)) / l
 # eDNA Index
 
 
-calculate eDNA index for all technical replicates (1 row = 1 crab x 1 replicate)
-```{r}
+-- NOT THIS ONE --- calculate eDNA index for all technical replicates (1 row = 1 crab x 1 replicate)
+```{r eval=FALSE}
 sample.reads.mat <- dat %>%
   group_by(sample_id, taxon) %>% summarise(techReads=sum(nReads)) %>%
   pivot_wider(id_cols="sample_id", names_from="taxon",values_from="techReads", values_fill=0) %>%
@@ -309,10 +310,16 @@ index2.df <- as.data.frame(t(index2.mat)) %>%
   pivot_wider(names_from=taxon,values_from=DNAindex)
 ```
 
+
+
 calculate eDNA index from the sum of reads across technical replicates (1 row = 1 crab)
+Because ~6 crab have different numbers of technical replicates, standardize the summed reads by the number replicates  
 ```{r}
+### multicellular only
 crab.reads.mat <- dat %>%
-  group_by(crab_id, taxon) %>% summarise(sumReads=sum(nReads)) %>%
+  group_by(crab_id, taxon) %>% summarise(sumReads=sum(nReads),
+                                         nTech=length(unique(tech))) %>%
+  mutate(sumReads=sumReads/nTech) %>% dplyr::select(-nTech) %>%
   pivot_wider(id_cols="crab_id", names_from="taxon",values_from="sumReads", values_fill=0) %>%
   column_to_rownames("crab_id")
 
@@ -324,11 +331,13 @@ index.df <- as.data.frame(t(index.mat)) %>%
   left_join(dat %>% dplyr::select(crab_id,site,estuary) %>% distinct(),by="crab_id") %>%
   left_join(site_names) %>%
   pivot_wider(names_from=taxon,values_from=DNAindex)
-```
-calculate eDNA index from the sum of reads across technical replicates (1 row = 1 crab)
-```{r}
+
+
+### unicellular only
 crab.smreads.mat <- smdat %>%
-  group_by(crab_id, taxon) %>% summarise(sumReads=sum(nReads)) %>%
+  group_by(crab_id, taxon) %>% summarise(sumReads=sum(nReads),
+                                         nTech=length(unique(tech))) %>%
+  mutate(sumReads=sumReads/nTech) %>% dplyr::select(-nTech) %>%
   pivot_wider(id_cols="crab_id", names_from="taxon",values_from="sumReads", values_fill=0) %>%
   column_to_rownames("crab_id")
 
@@ -340,11 +349,13 @@ index.sm.df <- as.data.frame(t(index.sm.mat)) %>%
   left_join(smdat %>% dplyr::select(crab_id,site,estuary) %>% distinct(),by="crab_id") %>%
   left_join(site_names) %>%
   pivot_wider(names_from=taxon,values_from=DNAindex)
-```
-Bind small / regular tax together
-```{r}
+
+
+## all data
 crab.allreads.mat <- alldat %>%
-  group_by(crab_id, taxon) %>% summarise(sumReads=sum(nReads)) %>%
+  group_by(crab_id, taxon) %>% summarise(sumReads=sum(nReads),
+                                         nTech=length(unique(tech))) %>%
+  mutate(sumReads=sumReads/nTech) %>% dplyr::select(-nTech) %>%
   pivot_wider(id_cols="crab_id", names_from="taxon",values_from="sumReads", values_fill=0) %>%
   column_to_rownames("crab_id")
 
@@ -361,13 +372,80 @@ index.all.df <- as.data.frame(t(index.all.mat)) %>%
 ```{r}
 if(!knitting){
   index.df %>%
-  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_eDNAindex.csv'))
+  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_sumtech-standardized_eDNAindex.csv'))
    index.sm.df %>%
-  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_SmallTaxa_eDNAindex.csv'))
+  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_sumtech-standardized_SmallTaxa_eDNAindex.csv'))
    index.all.df %>%
-  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_AllTaxa_eDNAindex.csv'))
+  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_sumtech-standardized_AllTaxa_eDNAindex.csv'))
 }
 ```
+
+
+
+calculate eDNA index from the sum of reads across technical replicates (1 row = 1 crab)
+Because ~6 crab have different numbers of technical replicates, standardize the summed reads by the number replicates  
+** Remove rare taxa **
+```{r}
+mo <- 2   ## deletes two or fewer species
+```
+
+```{r}
+### multicellular only
+crab.reads.mat.filter <- dropspc(as.matrix(crab.reads.mat), minocc=mo)
+rownames(crab.reads.mat.filter) <- rownames(crab.reads.mat)
+
+index.filter.mat <- eDNA_index(x=t(crab.reads.mat.filter))
+
+index.filter.df <- as.data.frame(t(index.mat)) %>%
+  rownames_to_column("crab_id") %>% 
+  pivot_longer(cols=2:(dim(index.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
+  left_join(dat %>% dplyr::select(crab_id,site,estuary) %>% distinct(),by="crab_id") %>%
+  left_join(site_names) %>%
+  pivot_wider(names_from=taxon,values_from=DNAindex)
+
+
+### unicellular only
+crab.smreads.mat.filter <- as.matrix(dropspc(as.matrix(crab.smreads.mat), minocc=mo))
+rownames(crab.smreads.mat.filter) <- rownames(crab.smreads.mat) 
+crab.smreads.mat.filter <- crab.smreads.mat.filter[-which(rowSums(crab.smreads.mat.filter)==0),]  ### some crab have no species now
+
+index.sm.filter.mat <- eDNA_index(x=t(crab.smreads.mat.filter))
+
+index.sm.filter.df <- as.data.frame(t(index.sm.filter.mat)) %>%
+  rownames_to_column("crab_id") %>% 
+  pivot_longer(cols=2:(dim(index.sm.filter.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
+  left_join(smdat %>% dplyr::select(crab_id,site,estuary) %>% distinct(),by="crab_id") %>%
+  left_join(site_names) %>%
+  pivot_wider(names_from=taxon,values_from=DNAindex)
+
+
+### all data
+crab.allreads.mat.filter <- dropspc(as.matrix(crab.allreads.mat), minocc=mo)
+rownames(crab.allreads.mat.filter) <- rownames(crab.allreads.mat)
+
+index.all.filter.mat <- eDNA_index(x=t(crab.allreads.mat.filter))
+
+index.all.filter.df <- as.data.frame(t(index.all.filter.mat)) %>%
+  rownames_to_column("crab_id") %>% 
+  pivot_longer(cols=2:(dim(index.all.filter.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
+  left_join(alldat %>% dplyr::select(crab_id,site,estuary) %>% distinct(),by="crab_id") %>%
+  left_join(site_names) %>%
+  pivot_wider(names_from=taxon,values_from=DNAindex)
+
+dim(index.all.filter.mat); dim(index.sm.filter.mat); dim(index.filter.mat)
+```
+
+```{r}
+if(!knitting){
+  index.filter.df %>%
+  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_sumtech-standardized-noRare_eDNAindex.csv'))
+   index.sm.filter.df %>%
+  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_sumtech-standardized-noRare_SmallTaxa_eDNAindex.csv'))
+   index.all.filter.df %>%
+  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_sumtech-standardized-noRare_AllTaxa_eDNAindex.csv'))
+}
+```
+
 
 
 # 2. Prey Diversity (Taxa)
@@ -414,9 +492,9 @@ dat_overall %>% mutate(level=ifelse(!is.na(phylum), "phylum", "class"),
 
 What is the taxonomic richness ($\alpha$ diversity) at each site, **for all taxa**? Standardized site richness is simply the  richness / total crab from site.
 ```{r}
-dat_sites <- get_unique_taxa(taxa.df=alldat, level="site")
+alldat_sites <- get_unique_taxa(taxa.df=alldat, level="site")
 
-richness.site <- dat_sites %>% group_by(site) %>% summarise(richness=length(unique(taxon)),
+richness.site <- alldat_sites %>% group_by(site) %>% summarise(richness=length(unique(taxon)),
                                                             ncrab=length(unique(crab_id))) %>%
   mutate(std.richness=richness/ncrab)
 richness.site
@@ -465,15 +543,15 @@ paste0("unicellular taxonomic richness per crab ranges from ", min(smrichness.cr
 ```
 ```{r}
 plot.alpha <- allrichness.crab %>% mutate(dataset="All Taxa") %>%
-  bind_rows(richness.crab %>% mutate(dataset="Excluding Single-celled organisms")) %>%
-  bind_rows(smrichness.crab %>% mutate(dataset="Single-celled organisms alone")) %>%
+  bind_rows(richness.crab %>% mutate(dataset="Multi-cellular Taxa")) %>%
+  bind_rows(smrichness.crab %>% mutate(dataset="Unicellular Taxa")) %>%
   left_join(site_names, by="site") %>%
   mutate(site_name=factor(site_name, levels=c("Kayak Pt 1","Kayak Pt 2","March Pt","NERR","Samish Isl","Samish Bay", "Larrabee"))) %>%
   ggplot(aes(x=site_name,y=richness,color=estuary)) +
   geom_boxplot() +
   geom_jitter(width=0.1) +
   facet_grid(cols=vars(dataset)) +
-  labs(y="Number Taxa per crab",x="Sampling Site") +
+  labs(y="Number taxa per crab",x="Sampling Site") +
   scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
   scale_color_manual(values=unique(richness.crab$key)) +
   theme_bw() + theme(axis.text.x=element_text(angle=25, hjust=1))
@@ -558,7 +636,7 @@ all.richness.crab <- alldat %>%
 p.alpha3 <- ggplot(richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
   geom_boxplot() +
   geom_jitter(width=0.1) +
-  labs(y="",x="", title="\nOnly Multi-cellular Taxa") +
+  labs(y="",x="", title="Only Multi-cellular\n Taxa") +
   scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
   theme_bw()
 p.alpha2 <- ggplot(all.richness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
@@ -570,7 +648,7 @@ p.alpha2 <- ggplot(all.richness.crab %>% filter(!is.na(stomach_fullness)), aes(x
 p.alpha4 <- ggplot(drichness.crab %>% filter(!is.na(stomach_fullness)), aes(x=as.factor(stomach_fullness),y=richness)) +
   geom_boxplot() +
   geom_jitter(width=0.1) +
-  labs(y="",x="", title="Only Single-celled\n Organisms") +
+  labs(y="",x="", title="Only Unicellular\n Taxa") +
   scale_y_continuous(limits=c(0,max(drichness.crab$richness)+2), expand=c(0,0)) +
   theme_bw()
 
@@ -606,7 +684,7 @@ dev.off()
 ```{r}
 p.alpha2 <- ggplot(richness.crab %>% filter(!is.na(CW_mm)), aes(x=CW_mm,y=richness)) +
   geom_point() +
-  labs(y="",x="", title="\nOnly Multi-cellular Taxa") +
+  labs(y="",x="", title="Only Multi-cellular\n Taxa") +
   scale_y_continuous(limits=c(0,max(richness.crab$richness)+2), expand=c(0,0)) +
   theme_bw()
 p.alpha1 <- ggplot(all.richness.crab %>% filter(!is.na(CW_mm)), aes(x=CW_mm,y=richness)) +
@@ -616,7 +694,7 @@ p.alpha1 <- ggplot(all.richness.crab %>% filter(!is.na(CW_mm)), aes(x=CW_mm,y=ri
   theme_bw()
 p.alpha3 <- ggplot(drichness.crab %>% filter(!is.na(CW_mm)), aes(x=CW_mm,y=richness)) +
   geom_point() +
-  labs(y="",x="", title="Only Single-celled\n Organisms") +
+  labs(y="",x="", title="Only Unicellular\n Taxa") +
   scale_y_continuous(limits=c(0,max(drichness.crab$richness)+2), expand=c(0,0)) +
   theme_bw()
 
@@ -765,7 +843,7 @@ p1 <- ggplot(plotdat, aes(x=ncrab,y=nsp,color=estuary)) +
 p2 <- ggplot(plotdat2, aes(x=ncrab,y=nsp,color=estuary)) +
   geom_point( size=0.5) + geom_path() +
   scale_color_manual(values=c("gray30",estuary_colors$key[c(2,1,3)])) +
-  labs(y="",x="number of crab", subtitle="excluding single-celled organisms") + theme_bw()
+  labs(y="",x="number of crab", subtitle="only multi-cellular taxa") + theme_bw()
 
 
 png(here('figs','figS_saturation_curve_alltax_lgtax.png'), res=300,height=1300,width=2200)
@@ -958,7 +1036,7 @@ site.bdiv.summary <- as.data.frame(bdiv) %>% rownames_to_column("site1") %>%
   bind_rows(
     as.data.frame(bdiv2b) %>% rownames_to_column("site1") %>%
       pivot_longer(cols=2:(ncol(bdiv)+1), names_to="site2",values_to="jaccard") %>%
-      mutate(taxa="Single-celled")
+      mutate(taxa="Unicellular")
   ) %>%
   mutate(comparison=paste0(site1, " - ", site2))
 
@@ -973,7 +1051,7 @@ estuary.bdiv.summary <- as.data.frame(bdiv3) %>% rownames_to_column("site1") %>%
   bind_rows(
     as.data.frame(bdiv4b) %>% rownames_to_column("site1") %>%
       pivot_longer(cols=2:(ncol(bdiv3)+1), names_to="site2",values_to="jaccard") %>%
-      mutate(taxa="Single-celled")
+      mutate(taxa="Unicellular")
   ) %>%
   mutate(comparison=paste0(site1, " - ", site2))
 ```
@@ -1035,6 +1113,8 @@ So, I read an asymptote after $\zeta_5$ - $\zeta_6$. I think this means that onc
 Based on AIC, the exponential regression is the better fit
 ```{r}
 zout$aic
+
+zout$zeta.exp
 ```
 
 
@@ -1260,7 +1340,7 @@ ggplot(aes(x=zorder,y=val,color=estuary,pch=estuary)) +
   geom_path() + 
   facet_wrap(~metric,scales="free_y") +
   scale_color_manual(values=estuary_colors$key, name="estuary") +
-  labs(x="Zeta order (samples)",y="", title="multi-cellular prey only") +
+  labs(x="Zeta order (samples)",y="", title="multi-cellular taxa only") +
   theme_bw()
 zplot3
 ```
@@ -1478,115 +1558,202 @@ Run 100 stress 0.0001711876
    100: scale factor of the gradient < sfgrmin
 Warning: stress is (nearly) zero: you may have insufficient data
 
-#### PERMANOVA
+#### PERMANOVA for all taxa
 
 First by **estuary**
 
 ```{r}
-perm.index.indat <- index.df %>% 
-  dplyr::select(c(1,5,6:118))
+perm.allindex.indat <- index.all.filter.df %>% 
+  dplyr::select(c(1,3,5:dim(index.all.filter.df)[2]))
 ```
 
 ```{r}
-site.index2.perm <- adonis2(perm.index.indat[,4:dim(perm.index.indat)[2]]~estuary, data=perm.index.indat, method="bray")
-site.index2.perm
+set.seed(55)
+est.allindex.perm <- adonis2(perm.allindex.indat[,3:dim(perm.allindex.indat)[2]]~estuary, data=perm.allindex.indat, method="bray")
+est.allindex.perm
 ```
 
 The permanova is highly significant
 
-Is the significance due to the differences in centroids or due to the differences in dispersion of samples in principal coordinate space of dissimilarity (PCoA)?
+Is the significance due to the differences in centroids or due to the dfferences in dispersion of samples in principal coordinate space of dissimilarity (PCoA)?
 ```{r}
-index.indat.dist <- vegdist(x=perm.index.indat[,4:dim(perm.index.indat)[2]],method="bray")
-estuary.index.perm.betadisper <- betadisper(d=index.indat.dist, group=perm.index.indat$estuary)
+set.seed(55)
+allindex.indat.dist <- vegdist(x=perm.allindex.indat[,3:dim(perm.allindex.indat)[2]],method="bray")
+est.allindex.perm.betadisper <- betadisper(d=allindex.indat.dist, group=perm.allindex.indat$estuary)
 
-anova(betadisper(d=index.indat.dist, perm.index.indat$estuary))
+anova(betadisper(d=allindex.indat.dist, perm.allindex.indat$estuary))
 # adonis2(dist(estuary.index.perm.betadisper$distances)~estuary.index.perm.betadisper$group)
 ```
 Significant result from PERMDISP: groups differ in dispersion 
 
 And here's the PCoA from the PERMDISP.
 ```{r}
-myplot <- gg_ordiplot_customLines(ord=estuary.index.perm.betadisper, groups=perm.index.indat$estuary, 
+myplot.est.all <- gg_ordiplot_customLines(ord=est.allindex.perm.betadisper, groups=perm.allindex.indat$estuary, 
                                   groups_plotdiff="color,shape",hull=FALSE, ellipse=FALSE, label=FALSE, spiders=TRUE, 
                                   pt.size=2, line.alpha=0.5)
-myplot$plot + 
+myplot.est.all$plot + 
   scale_shape_manual(values=c(15,17, 16), name="Estuary") +
   scale_color_manual(values=estuary_colors$key[c(2,1,3)], name="Estuary") +
   labs(x="PCoA Dim 1",y="PCoA Dim 2") +
   theme_bw() + theme(axis.text=element_blank(),axis.ticks=element_blank())
 ```
-```{r echo=TRUE}
-png(here('figs','fig3_PCoA-estuary.png'), res=200, height=900,width=900)
-myplot$plot + 
+Then by **site**
+
+```{r}
+permS.allindex.indat <- index.all.filter.df %>% 
+  dplyr::select(c(1,4,5:dim(index.all.filter.df)[2]))
+```
+
+```{r}
+set.seed(55)
+site.allindex.perm <- adonis2(permS.allindex.indat[,3:dim(permS.allindex.indat)[2]]~site_name, data=permS.allindex.indat, method="bray")
+site.allindex.perm
+```
+
+The permanova is highly significant
+
+Is the significance due to the differences in centroids or due to the dfferences in dispersion of samples in principal coordinate space of dissimilarity (PCoA)?
+```{r}
+set.seed(55)
+site.allindex.perm.betadisper <- betadisper(d=allindex.indat.dist, group=permS.allindex.indat$site_name)
+
+anova(betadisper(d=allindex.indat.dist, permS.allindex.indat$site_name))
+# adonis2(dist(estuary.index.perm.betadisper$distances)~estuary.index.perm.betadisper$group)
+```
+Significant result from PERMDISP: groups differ in dispersion 
+
+And here's the PCoA from the PERMDISP.
+```{r}
+myplot.site.all <- gg_ordiplot_customLines(ord=site.allindex.perm.betadisper, groups=permS.allindex.indat$site_name, 
+                                  groups_plotdiff="color,shape",hull=FALSE, ellipse=FALSE, label=FALSE, spiders=TRUE, 
+                                  pt.size=2, line.alpha=0.5)
+myplot.site.all$plot + 
+  # scale_shape_manual(values=c(15,17, 16), name="Site") +
+  # scale_color_manual(values=estuary_colors$key[c(2,1,3)], name="Estuary") +
+  labs(x="PCoA Dim 1",y="PCoA Dim 2") +
+  theme_bw() + theme(axis.text=element_blank(),axis.ticks=element_blank())
+```
+
+
+
+
+
+#### PERMANOVA for multicellular taxa
+
+First by **estuary**
+
+```{r}
+perm.index.indat <- index.filter.df %>% 
+  dplyr::select(c(1,3,5:dim(index.filter.df)[2]))
+```
+
+```{r}
+set.seed(55)
+est.index.perm <- adonis2(perm.index.indat[,3:dim(perm.index.indat)[2]]~estuary, data=perm.index.indat, method="bray")
+est.index.perm
+```
+
+The permanova is highly significant
+
+Is the significance due to the differences in centroids or due to the dfferences in dispersion of samples in principal coordinate space of dissimilarity (PCoA)?
+```{r}
+set.seed(55)
+index.indat.dist <- vegdist(x=perm.index.indat[,3:dim(perm.index.indat)[2]],method="bray")
+est.index.perm.betadisper <- betadisper(d=index.indat.dist, group=perm.index.indat$estuary)
+
+anova(betadisper(d=index.indat.dist, perm.index.indat$estuary))
+# adonis2(dist(estuary.index.perm.betadisper$distances)~estuary.index.perm.betadisper$group)
+```
+
+
+And here's the PCoA from the PERMDISP.
+```{r}
+myplot.est.multi <- gg_ordiplot_customLines(ord=est.index.perm.betadisper, groups=perm.index.indat$estuary, 
+                                  groups_plotdiff="color,shape",hull=FALSE, ellipse=FALSE, label=FALSE, spiders=TRUE, 
+                                  pt.size=2, line.alpha=0.5)
+myplot.est.multi$plot + 
   scale_shape_manual(values=c(15,17, 16), name="Estuary") +
   scale_color_manual(values=estuary_colors$key[c(2,1,3)], name="Estuary") +
   labs(x="PCoA Dim 1",y="PCoA Dim 2") +
   theme_bw() + theme(axis.text=element_blank(),axis.ticks=element_blank())
-dev.off()
 ```
+
 <br>
 <br>
 
 Then by **site**
 
 ```{r}
-site.index2.perm <- adonis2(perm.index.indat[,4:dim(perm.index.indat)[2]]~site_name, data=perm.index.indat, method="bray")
-site.index2.perm
+permS.index.indat <- index.filter.df %>% 
+  dplyr::select(c(1,4,5:dim(index.filter.df)[2]))
+```
+
+```{r}
+set.seed(55)
+site.index.perm <- adonis2(permS.index.indat[,3:dim(permS.index.indat)[2]]~site_name, data=permS.index.indat, method="bray")
+site.index.perm
 ```
 
 The permanova is highly significant
 
-Is the significance due to the differences in centroids or due to the differences in dispersion of samples in principal coordinate space of dissimilarity (PCoA)?
+Is the significance due to the differences in centroids or due to the dfferences in dispersion of samples in principal coordinate space of dissimilarity (PCoA)?
 ```{r}
-index.indat.dist <- vegdist(x=perm.index.indat[,4:dim(perm.index.indat)[2]],method="bray")
-site.index.perm.betadisper <- betadisper(d=index.indat.dist, group=perm.index.indat$site_name)
+set.seed(55)
+index.indat.dist <- vegdist(x=permS.index.indat[,3:dim(permS.index.indat)[2]],method="bray")
+site.index.perm.betadisper <- betadisper(d=index.indat.dist, group=permS.index.indat$site_name)
 
-anova(betadisper(d=index.indat.dist, perm.index.indat$site_name))
+anova(betadisper(d=index.indat.dist, permS.index.indat$site_name))
 # adonis2(dist(estuary.index.perm.betadisper$distances)~estuary.index.perm.betadisper$group)
 ```
 Significant result from PERMDISP: groups differ in dispersion 
 
-Save the PCoA from the PERMDISP.
 ```{r}
-myplot2 <- gg_ordiplot_customLines(ord=site.index.perm.betadisper, groups=perm.index.indat$site_name, 
+myplot.site.multi <- gg_ordiplot_customLines(ord=site.index.perm.betadisper, groups=permS.index.indat$site_name, 
                                   groups_plotdiff="color,shape",hull=FALSE, ellipse=FALSE, label=FALSE, spiders=TRUE, 
                                   pt.size=2, line.alpha=0.5)
-
-png(here('figs','supplement_PCoA-site.png'), res=200, height=900,width=900)
-myplot2$plot + 
+myplot.site.multi$plot + 
   labs(x="PCoA Dim 1",y="PCoA Dim 2") +
   theme_bw() + theme(axis.text=element_blank(),axis.ticks=element_blank())
+```
+
+#### Save the PCoAs from the PERMDISP.
+
+(a) has all data, (b) has only multicellular taxa
+```{r echo=TRUE}
+png(here('figs','fig3_PCoA-estuary.png'), res=200, height=600,width=1200)
+p1 <- myplot.est.all$plot + 
+  scale_shape_manual(values=c(15,17, 16), name="Estuary") +
+  scale_color_manual(values=estuary_colors$key[c(2,1,3)], name="Estuary") +
+  labs(x="PCoA Dim 1",y="PCoA Dim 2") +
+  theme_bw() + theme(axis.text=element_blank(),axis.ticks=element_blank(),legend.position="none")
+p2 <- myplot.est.multi$plot + 
+  scale_shape_manual(values=c(15,17, 16), name="Estuary") +
+  scale_color_manual(values=estuary_colors$key[c(2,1,3)], name="Estuary") +
+  labs(x="PCoA Dim 1",y="PCoA Dim 2") +
+  theme_bw() + theme(axis.text=element_blank(),axis.title.y=element_blank(), axis.ticks=element_blank())
+plot_grid(p1,p2,labels=c("(a)","(b)"), rel_widths=c(0.65,1))
 dev.off()
 ```
 
-### eDNA Index x Size class
-
-Before learning correlations for compositional data, see what happens when we impose size classes based somewhat off of instar stages: CW < 6mm, 6-8mm, 8-11.5mm, >11.5mm
-
-Add CWs and size class
+(a) has all data, (b) has only multicellular taxa
 ```{r}
-index.df.cw <- left_join(index.df,lab_metadat %>% dplyr::select(sample_id,CW_mm), by=c("crab_id"="sample_id")) %>%
-  mutate(size_class=ifelse(CW_mm < 6, "j1",
-                           ifelse(CW_mm < 8, "j2",
-                                  ifelse(CW_mm < 11.5, "j3","j4"))))
+myplot.site.all <- gg_ordiplot_customLines(ord=site.allindex.perm.betadisper, groups=permS.allindex.indat$site_name, 
+                                  groups_plotdiff="color,shape",hull=FALSE, ellipse=FALSE, label=FALSE, spiders=TRUE, 
+                                  pt.size=2, line.alpha=0.5)
+myplot.site.multi <- gg_ordiplot_customLines(ord=site.index.perm.betadisper, groups=permS.index.indat$site_name, 
+                                  groups_plotdiff="color,shape",hull=FALSE, ellipse=FALSE, label=FALSE, spiders=TRUE, 
+                                  pt.size=2, line.alpha=0.5)
+p1 <- myplot.site.all$plot + 
+  labs(x="PCoA Dim 1",y="PCoA Dim 2") +
+  theme_bw() + theme(axis.text=element_blank(),axis.ticks=element_blank(), legend.position="none")
+p2 <- myplot.site.multi$plot + 
+  labs(x="PCoA Dim 1",y="PCoA Dim 2") +
+  theme_bw() + theme(axis.text=element_blank(),axis.ticks=element_blank(), axis.title.y=element_blank(), legend.title=element_blank())
 
-permCW.index.indat <- index.df.cw %>% 
-  dplyr::select(c(1,120,7:118))
+png(here('figs','figS_PCoA-site.png'), res=200, height=900,width=1400)
+plot_grid(p1,p2,labels=c("(a)","(b)"), rel_widths=c(0.73,1))
+dev.off()
 ```
-
-Run the PERMANOVA / PERMDISP
-```{r}
-cw.index.perm <- adonis2(permCW.index.indat[,3:dim(permCW.index.indat)[2]]~size_class, data=permCW.index.indat, method="bray")
-cw.index.perm
-```
-
-```{r}
-indexCW.indat.dist <- vegdist(x=permCW.index.indat[,3:dim(permCW.index.indat)[2]],method="bray")
-
-anova(betadisper(d=indexCW.indat.dist, permCW.index.indat$size_class))
-# adonis2(dist(estuary.index.perm.betadisper$distances)~estuary.index.perm.betadisper$group)
-```
-
 
 
 # 3. Prey identity
@@ -1598,13 +1765,15 @@ Calculate frequency of occurrence of each taxon.
 total.crab <- length(unique(dat$crab_id))
 
 plotdat.fo <- dat %>% mutate(plot.group=ifelse(is.na(phylum), class, phylum)) %>%
+  mutate(plot.group=ifelse(plot.group=="Arthropoda" & class=="Insecta","Insecta",
+                           ifelse(plot.group=="Arthropoda" & class!="Insecta","Arthropoda",plot.group))) %>%
   group_by(taxon,plot.group) %>%
   summarise(ncrab=length(unique(crab_id))) %>%
   mutate(pcrab=(ncrab/total.crab)*100) %>%
   arrange(plot.group)
 
 ## detritus groups
-fo.sm <- smdat %>% mutate(plot.group="single-celled organisms") %>%
+fo.sm <- smdat %>% mutate(plot.group="unicellular taxa") %>%
   filter(crab_id %in% dat$crab_id) %>%
   group_by(taxon,plot.group) %>%
   summarise(ncrab=length(unique(crab_id))) %>%
@@ -1618,19 +1787,21 @@ plotdat.fo %<>% left_join(data.frame(plot.group=unique(plotdat.fo$plot.group),
   unite(plot.group, ngroup, col="plot.group.num",sep="-", remove=FALSE)
 ```
 
-The groups with the highest median frequency of occurrence:
+The groups with the highest median frequency of occurrence, greatest number of taxa:
 ```{r}
 fo.hi <- plotdat.fo %>% group_by(plot.group) %>% 
-  summarise(med.fo=median(pcrab)) %>%
-  slice_max(order_by=med.fo,n=3, with_ties=FALSE) %>%
+  summarise(med.fo=median(pcrab), ntaxa=length(unique(taxon))) %>%
+  filter(ntaxa > 3) %>%
+  slice_max(order_by=med.fo,n=4, with_ties=FALSE) %>%
   left_join(dplyr::select(plotdat.fo,plot.group,taxon) %>% distinct(),by='plot.group') %>%
   left_join(bind_rows(dat,smdat), by='taxon') %>%
   filter(crab_id %in% dat$crab_id) %>%
   
-  mutate(plot.subgroup=ifelse(plot.group=="single-celled organisms" & is.na(phylum), class,
-                              ifelse(plot.group=="single-celled organisms" & !is.na(phylum),phylum,
+  mutate(plot.subgroup=ifelse(plot.group=="unicellular taxa" & is.na(phylum), class,
+                              ifelse(plot.group=="unicellular taxa" & !is.na(phylum),phylum,
                                      ifelse(plot.group=="Arthropoda",order,
-                                            ifelse(plot.group=="Mollusca",order,phylum))))) %>%
+                                            ifelse(plot.group=="Phaeophyceae", order,
+                                            ifelse(plot.group=="Mollusca",order,phylum)))))) %>%
 
   group_by(taxon,plot.group,plot.subgroup) %>%
   summarise(ncrab=length(unique(crab_id))) %>%
@@ -1655,7 +1826,8 @@ Plot
 ```{r}
 plot2a <- 
   ggplot(plotdat.fo, aes(x=plot.group,y=pcrab, fill=subgroup)) +
-  geom_boxplot() + geom_hline(aes(yintercept=-0.1)) +
+  geom_boxplot() + geom_jitter(alpha=0.5,pch=4, width=0.05) +
+  geom_hline(aes(yintercept=-0.1)) +
   geom_text_repel(aes(label=outlier), na.rm=TRUE,min.segment.length = 0.01,nudge_y=0.5, size=3) +
     scale_y_continuous(trans=squish_trans(from=40,to=70,factor=10),
                        breaks=c(0,10,20,30,40,70,75)) +
@@ -1667,11 +1839,11 @@ plot2a
 ```
 
 ```{r}
-plot2b <-  fo.hi %>%
-  mutate(plot.group=ifelse(plot.group=="single-celled organisms", "single-celled\norganisms", plot.group)) %>%
-  ggplot(aes(x=plot.subgroup,y=pcrab, fill=plot.group)) +
+plot2b <-  fo.hi %>% 
+  mutate(plot.group=ifelse(plot.group=="unicellular taxa", "unicellular\ntaxa", plot.group)) %>%
+  ggplot(aes(x=plot.subgroup,y=pcrab)) +
   geom_boxplot() + geom_hline(aes(yintercept=-0.1)) +
-  facet_wrap(~plot.group, scales="free_x") +
+  facet_wrap(~plot.group, scales="free_x", ncol=4) +
   scale_y_continuous(trans=squish_trans(from=40,to=70,factor=10),
                        breaks=c(0,10,20,30,40,70,75)) +
   geom_text_repel(aes(label=outlier), na.rm=TRUE,min.segment.length = 0.01,nudge_y=0.5, size=3) +
@@ -1709,6 +1881,14 @@ dim(plotdat.fo %>% filter(ncrab==2))[2]
 ```
 ```{r}
 fo.hi %>% group_by(plot.group, plot.subgroup) %>% summarise(medFO=median(pcrab)) %>% filter(plot.group %in% c("Arthropoda","Mollusca","single-celled organisms"))
+```
+
+```{r}
+plotdat.fo %>% group_by(plot.group) %>% summarise(medFO=median(pcrab)) %>%
+  mutate(plot.subgroup=NA) %>%
+  bind_rows(fo.hi %>% group_by(plot.group,plot.subgroup) %>%
+              summarise(medFO=median(pcrab))) %>%
+  write_csv(here('data','results','TableS1_MedFOs.csv'))
 ```
 
 
