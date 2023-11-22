@@ -1,63 +1,90 @@
 group,new_taxon,ncrab,functional_group,OA_species_notes
-amphipod,Ampithoe lacertosa,3,Deposit feeders,
-amphipod,Ampithoe valida,8,Deposit feeders,
-amphipod,Grandidierella japonica,4,Deposit feeders,
 amphipod,Monocorophium acherusicum,43,Deposit feeders,
-amphipod,Monocorophium insidiosum,15,Deposit feeders,
-annelid worm,Serpulidae,4,Deposit feeders,"Group Species List:""Worms""; additional diet info"
 barnacle,Balanus crenatus,22,Shallow benthic filter feeders,
-bivalves,Clinocardium nuttallii,6,Bivalves,
-bivalves,Limecola,3,Bivalves,
+Bacillariophyta,Bacillariophyceae,21,Large phytoplankton,
+Bacillariophyta,Bacillariophyta,20,Large phytoplankton,
+Bacillariophyta,Naviculales,20,Large phytoplankton,
+Bacillariophyta,Pleurosigma,20,Large phytoplankton,
+brown algae,Chordariaceae,19,Macroalgae,
+Chlorophyta,Micromonas pusilla,17,Small phytoplankton,
+Rotifera,Euchlanis dilatata,17,Microzooplankton,
+amphipod,Monocorophium insidiosum,15,Deposit feeders,
+NA,Dinophyceae,12,Microzooplankton,
+brown algae,Fucales,9,Macroalgae,
+horse and gaper clams,Tresus,9,Bivalves,
+worm,Platynereis,9,Carnivorous infauna,
+Bacillariophyta,Mediophyceae,9,Large phytoplankton,
+amphipod,Ampithoe valida,8,Deposit feeders,
+Bacillariophyta,Bacillariaceae,8,Large phytoplankton,
 bivalves,Modiolus modiolus,7,Bivalves,
+green algae,Ulvales,7,Macroalgae,
+polychaete,Pseudopolydora paucibranchiata,7,Deposit feeders,"Group Species List:""Worms""; additional diet info"
+red algae,Rhodomelaceae,7,Macroalgae,
+Bacillariophyta,Nitzschia,7,Large phytoplankton,
+bivalves,Clinocardium nuttallii,6,Bivalves,
+bivalves,Tellinidae,6,Bivalves,
+brown algae,Fucus distichus,6,Macroalgae,
+polychaete,Pseudopolydora bassarginensis,6,Deposit feeders,"Group Species List:""Worms""; additional diet info"
+Bacillariophyta,Coscinodiscophyceae,6,Large phytoplankton,
+NA,Cryptophyceae,6,Small phytoplankton,
+copepod,Paracalanus,5,Mesozooplankton,
+jelly fish,Phacellophora camtschatica,5,Gelatinous zooplankton,
+Bacillariophyta,Cymbellales,5,Large phytoplankton,
+Bacillariophyta,Rhizosoleniaceae,5,Large phytoplankton,
+amphipod,Grandidierella japonica,4,Deposit feeders,
+annelid worm,Serpulidae,4,Deposit feeders,"Group Species List:""Worms""; additional diet info"
+brown algae,Ectocarpaceae,4,Macroalgae,
+crab,Hemigrapsus oregonensis,4,Crabs,
+marine snails,Haminoea,4,Sea stars moonsnail whelk,
+polychaete,Eupolymnia heterobranchia,4,Deposit feeders,"Group Species List:""Worms""; additional diet info"
+tunicate,Botrylloides,4,Shallow benthic filter feeders,
+venus clams,Veneridae,4,Bivalves,
+Bacillariophyta,Ditylum brightwellii,4,Large phytoplankton,
+Bacillariophyta,Haslea,4,Large phytoplankton,
+Bacillariophyta,Navicula,4,Large phytoplankton,
+Bacillariophyta,Pseudo-nitzschia,4,Large phytoplankton,
+NA,Chattonella marina,4,Large phytoplankton,
+amphipod,Ampithoe lacertosa,3,Deposit feeders,
+bivalves,Limecola,3,Bivalves,
 bivalves,Mytilus trossulus,3,Bivalves,
 bivalves,Saxidomus,3,Bivalves,
-bivalves,Tellinidae,6,Bivalves,
-brown algae,Chordariaceae,19,Macroalgae,
-brown algae,Ectocarpaceae,4,Macroalgae,
-brown algae,Fucales,9,Macroalgae,
-brown algae,Fucus distichus,6,Macroalgae,
 brown algae,Ralfsiaceae,3,Macroalgae,
 brown algae,Sargassum,3,Macroalgae,
 bryozoan,Membranipora membranacea,3,Shallow benthic filter feeders,
-copepod,Paracalanus,5,Mesozooplankton,
-crab,Hemigrapsus oregonensis,4,Crabs,
 flatworm,Polycystididae,3,Carnivorous infauna,"Group Species List: ""Flatworms"""
-green algae,Ulvales,7,Macroalgae,
-horse and gaper clams,Tresus,9,Bivalves,
-jelly fish,Phacellophora camtschatica,5,Gelatinous zooplankton,
-marine snails,Haminoea,4,Sea stars moonsnail whelk,
-polychaete,Eupolymnia heterobranchia,4,Deposit feeders,"Group Species List:""Worms""; additional diet info"
-polychaete,Pseudopolydora bassarginensis,6,Deposit feeders,"Group Species List:""Worms""; additional diet info"
-polychaete,Pseudopolydora paucibranchiata,7,Deposit feeders,"Group Species List:""Worms""; additional diet info"
 polychaete,Rhynchospio arenincola,3,Deposit feeders,"Group Species List:""Worms""; additional diet info"
-red algae,Rhodomelaceae,7,Macroalgae,
 shrimp,Crangon,3,Crangon shrimp,
-tunicate,Botrylloides,4,Shallow benthic filter feeders,
-venus clams,Veneridae,4,Bivalves,
-worm,Platynereis,9,Carnivorous infauna,
-Bacillariophyta,Bacillariaceae,8,Large phytoplankton,
-Bacillariophyta,Bacillariophyceae,21,Large phytoplankton,
-Bacillariophyta,Bacillariophyta,20,Large phytoplankton,
-Bacillariophyta,Coscinodiscophyceae,6,Large phytoplankton,
-Bacillariophyta,Cymbellales,5,Large phytoplankton,
-Bacillariophyta,Ditylum brightwellii,4,Large phytoplankton,
-Bacillariophyta,Haslea,4,Large phytoplankton,
-Bacillariophyta,Mediophyceae,9,Large phytoplankton,
-Bacillariophyta,Navicula,4,Large phytoplankton,
-Bacillariophyta,Naviculales,20,Large phytoplankton,
-Bacillariophyta,Nitzschia,7,Large phytoplankton,
 Bacillariophyta,Pinnularia sp.,3,Large phytoplankton,
-Bacillariophyta,Pleurosigma,20,Large phytoplankton,
-Bacillariophyta,Pseudo-nitzschia,4,Large phytoplankton,
-Bacillariophyta,Rhizosoleniaceae,5,Large phytoplankton,
 Bacillariophyta,Thalassiosirales,3,Large phytoplankton,
-Chlorophyta,Micromonas pusilla,17,Small phytoplankton,
-Rotifera,Euchlanis dilatata,17,Microzooplankton,
-NA,Chattonella marina,4,Large phytoplankton,
 NA,Cryptomonas curvata,3,Small phytoplankton,
-NA,Cryptophyceae,6,Small phytoplankton,
-NA,Dinophyceae,12,Microzooplankton,
 NA,Heterosigma akashiwo,3,Large phytoplankton,
+amphipod,Caprella laeviuscula,2,Deposit feeders,Amphipoda
+Annelida,Polydora cornuta,2,Deposit feeders,"Group Species List:""Worms"" ; additional diet info"
+Arthropoda,Calanus,2,Mesozooplankton,
+Arthropoda,Centropages abdominalis,2,Mesozooplankton,Calanoida
+Arthropoda,Nihonotrypaea,2,Carnivorous infauna,Burrowing shrimp
+Arthropoda,Pinnotheridae,2,Bivalves,Host
+Arthropoda,Tisbe,2,Mesozooplankton,Harpacticoida
+Bacillariophyta,Cylindrotheca closterium,2,Large phytoplankton,
+Bacillariophyta,Skeletonema,2,Large phytoplankton,
+bivalves,Nuttallia,2,Bivalves,
+brown algae,Feldmannia mitchelliae,2,Macroalgae,
+brown algae,Hincksia,2,Macroalgae,
+brown algae,Petalonia fascia,2,Macroalgae,
+Chlorophyta,Ulva,2,Macroalgae,
+Chordata,Cymatogaster aggregata,2,Fish,Actinopterygii
+Cryptophyceae,Guillardia theta,2,Small phytoplankton,
+Dinophyceae,Suessiales,2,Microzooplankton,Dinoflagellates
+Foraminifera,Rotaliida,2,Microzooplankton,Protozoa
+bivalves,Hiatella,2,Bivalves,
+bivalves,Mya arenaria,2,Bivalves,
+Nemertea,Zygonemertes,2,Carnivorous infauna,Ribbon worms are carnivores
+nemertean worm,Tubulanus,2,Carnivorous infauna,Ribbon worms are carnivores
+Phaeophyceae,Scytosiphon,2,Macroalgae,Ectocarpales
+Platyhelminthes,Notocomplana,2,Carnivorous infauna,"Group Species List: ""Flatworms"""
+polychaeate,Phyllodoce,2,Carnivorous infauna,Phyllodoce novaehollandiae is a benthic predatory polychaete
+polychaete,Oweniidae,2,Deposit feeders,"Group Species List:""Worms"" ; additional diet info"
+sponge,Scopalina,2,Deep benthic filter feeders,Demospongiae
 Annelida,Alitta,1,,
 Annelida,Armandia brevis,1,,
 Annelida,Eteone,1,,
@@ -131,30 +158,3 @@ Rhodophyta,Polysiphonia paniculata,1,,
 Rotifera,Eurotatoria,1,,
 Rotifera,Trichotria tetractis,1,,
 Rotifera,Tripleuchlanis plicata,1,,
-amphipod,Caprella laeviuscula,2,Deposit feeders,Amphipoda
-Annelida,Polydora cornuta,2,Deposit feeders,"Group Species List:""Worms"" ; additional diet info"
-Arthropoda,Calanus,2,Mesozooplankton,
-Arthropoda,Centropages abdominalis,2,Mesozooplankton,Calanoida
-Arthropoda,Nihonotrypaea,2,Carnivorous infauna,Burrowing shrimp
-Arthropoda,Pinnotheridae,2,Bivalves,Host
-Arthropoda,Tisbe,2,Mesozooplankton,Harpacticoida
-Bacillariophyta,Cylindrotheca closterium,2,Large phytoplankton,
-Bacillariophyta,Skeletonema,2,Large phytoplankton,
-bivalves,Nuttallia,2,Bivalves,
-brown algae,Feldmannia mitchelliae,2,Macroalgae,
-brown algae,Hincksia,2,Macroalgae,
-brown algae,Petalonia fascia,2,Macroalgae,
-Chlorophyta,Ulva,2,Macroalgae,
-Chordata,Cymatogaster aggregata,2,Fish,Actinopterygii
-Cryptophyceae,Guillardia theta,2,Small phytoplankton,
-Dinophyceae,Suessiales,2,Microzooplankton,Dinoflagellates
-Foraminifera,Rotaliida,2,Microzooplankton,Protozoa
-bivalves,Hiatella,2,Bivalves,
-bivalves,Mya arenaria,2,Bivalves,
-Nemertea,Zygonemertes,2,Carnivorous infauna,Ribbon worms are carnivores
-nemertean worm,Tubulanus,2,Carnivorous infauna,Ribbon worms are carnivores
-Phaeophyceae,Scytosiphon,2,Macroalgae,Ectocarpales
-Platyhelminthes,Notocomplana,2,Carnivorous infauna,"Group Species List: ""Flatworms"""
-polychaeate,Phyllodoce,2,Carnivorous infauna,Phyllodoce novaehollandiae is a benthic predatory polychaete
-polychaete,Oweniidae,2,Deposit feeders,"Group Species List:""Worms"" ; additional diet info"
-sponge,Scopalina,2,Deep benthic filter feeders,Demospongiae

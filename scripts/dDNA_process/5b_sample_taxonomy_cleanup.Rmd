@@ -25,6 +25,58 @@ library(here)
 library(ggplot2)
 library(ggrepel)
 library(magrittr)
+
+## remove duplicates
+remove_duplicate_taxonomy_algae <- function(x,sp.dat){
+  tmp_sample <- as.character(unique(x[,"dup_sample"]))
+  
+  if(tmp_sample %in% sp.dat$crab_id){
+    green.filter <- x %>% filter(phylum %in% c("Chlorophyta","Rhodophyta","Streptophyta") | (class %in% c("Phaeophyceae","Chrysophyceae"))) %>%
+      filter(!(taxon %in% (filter(sp.dat,crab_id==tmp_sample))$genus) & !(taxon %in% (filter(sp.dat,crab_id==tmp_sample))$family) & !(taxon %in% (filter(sp.dat,crab_id==tmp_sample))$order))
+    x.filter <- x %>% filter(!(phylum %in% c("Chlorophyta","Rhodophyta","Streptophyta")) & (!(class %in% c("Phaeophyceae","Chrysophyceae")))) %>%
+      filter(!(taxon %in% (filter(sp.dat,crab_id==tmp_sample))$genus) & !(taxon %in% (filter(sp.dat,crab_id==tmp_sample))$family)) %>% 
+    bind_rows(green.filter)
+    return(x.filter)
+    
+  } else{return(x)}
+}
+
+remove_duplicate_taxonomy <- function(x,sp.dat){
+  tmp_sample <- as.character(unique(x[,"dup_sample"]))
+  
+  if(tmp_sample %in% sp.dat$crab_id){
+    
+    # remove higher level taxonomy represented by species
+    x.filter <- x %>%
+      filter(!(taxon %in% (filter(sp.dat,crab_id==tmp_sample))$genus) & !(taxon %in% (filter(sp.dat,crab_id==tmp_sample))$family) & !(taxon %in% (filter(sp.dat,crab_id==tmp_sample))$order))
+    
+    # remove higher level taxonomy represented by genus
+    gdat <- x.filter %>% filter(rank=="genus")
+    x.filter <- x.filter %>%
+      filter(!(taxon %in% (filter(gdat,dup_sample==tmp_sample))$family) & !(taxon %in% (filter(gdat,dup_sample==tmp_sample))$order))
+    
+    # remove higher level taxonomy represented by genus
+    fdat <- x.filter %>% filter(rank=="family")
+    x.filter <- x.filter %>%
+      filter(!(taxon %in% (filter(fdat,dup_sample==tmp_sample))$order))
+    
+    return(x.filter)
+  } else{
+    # remove higher level taxonomy represented by genus
+    gdat <- x %>% filter(rank=="genus")
+    x.filter <- x %>%
+      filter(!(taxon %in% (filter(gdat,dup_sample==tmp_sample))$family) & !(taxon %in% (filter(gdat,dup_sample==tmp_sample))$order))
+    
+    # remove higher level taxonomy represented by genus
+    fdat <- x.filter %>% filter(rank=="family")
+    x.filter <- x.filter %>%
+      filter(!(taxon %in% (filter(fdat,dup_sample==tmp_sample))$order))
+    
+    return(x.filter)
+  }
+}
+
+write_out=TRUE
 ```
 
 Specify user directories
@@ -98,6 +150,8 @@ How many crab per site are present in the blast data?
 ```{r}
 site.totals <- blast.dat.filter %>% group_by(site) %>% summarise(total_crab=length(unique(crab_id)), total_hashes=length(unique(Hash)), total_reads=sum(nReads))
 site.totals %>% dplyr::select(site,total_crab)
+
+total.sequenced.reads <- sum(site.totals$total_reads)
 ```
 <br>
 
@@ -110,8 +164,12 @@ To easier track how much data is being removed, I'm going to classify each hash 
 Remove any hashes that don't have taxonomy assigned, *OR* don't have a taxonomic rank at the order level or lower.
 ```{r}
 blast.dat.filter %<>% mutate(missing_rm=ifelse(is.na(rank) | rank %in% c("kingdom","phylum","class"), 1,0))
+
 ```
 ```{r echo=FALSE, message=FALSE}
+p_missing_average <- blast.dat.filter %>% group_by(missing_rm) %>% summarise(nhashes=length(unique(Hash)),nreads=sum(nReads)) %>%
+  mutate(preads=nreads/total.sequenced.reads)
+  
 blast.dat.filter %>% group_by(site,missing_rm) %>%
   summarise(nhashes=length(unique(Hash)),nreads=sum(nReads)) %>%
   left_join(site.totals,by="site") %>%
@@ -125,6 +183,22 @@ blast.dat.filter %>% group_by(site,missing_rm) %>%
   theme_classic() + theme(axis.text.x=element_text(angle=45,hjust=1))
 ```
 <br>
+
+   site   missing_rm preads
+  <chr>       <dbl>  <dbl>
+1 CLAY            1 0.0714
+2 KAY             1 0.0199
+3 MARPT           1 0.0433
+4 PBNERR          1 0.201 
+5 SAMT            1 0.0956
+6 SIN             1 0.0256
+
+ missing_rm nhashes   nreads preads
+       <dbl>   <int>    <dbl>  <dbl>
+1          0    1034 24687831 0.958 
+2          1    2477  1092881 0.0424
+
+
 
 Let's get rid of those hashes missing taxonomy.
 ```{r}
@@ -165,11 +239,21 @@ blast.dat.filter %>%
   scale_fill_manual(values=c("darkseagreen4","dodgerblue4"), name="Predator DNA") +
   theme_classic() + theme(axis.text.x=element_blank())
 ```
-
+  predator_rm total_reads   nreads preads
+        <dbl>       <dbl>    <dbl>  <dbl>
+1           0    24687831  3010275  0.122
+2           1    24687831 21677556  0.878
 <br>
 
 Is there a relationships between the *total reads* in a sample, and the *proportion of predator DNA*?
 ```{r fig.height=4, fig.width=6}
+p_predator_rm <- blast.dat.filter %>%
+  mutate(total_reads=sum(nReads)) %>%
+  group_by(predator_rm, total_reads) %>%
+  summarise(nreads=sum(nReads)) %>%
+  mutate(preads=nreads/total_reads)
+
+
 blast.dat.filter %>%
   group_by(site,crab_id,predator_rm) %>%
   summarise(nreads=sum(nReads)) %>%
@@ -192,22 +276,34 @@ unique(blast.dat.filter$phylum)
 ```
 <br>
 
-There is also one genus of protists, and a genus of amoebas (not shown above).
+There is also one genus of amoebas (not shown above).
 
 These are the bacterial / fungal / amoeba / unicellular algae / (human) taxa to remove: 
 ```{r}
+# to_remove_phyla <- c("Ascomycota","Oomycota", "Basidiomycota", #fungus
+#                      "Tubulinea","Discosea", # amoeba
+#                      "Bacteroidota","Proteobacteria","Pseudomonadota", # bacteria
+#                      "Foraminifera") # single-celled protists
+# to_remove_class <- c("Cryptophyceae")   # unicellular algae
+# to_remove_genus <- c("Nannochloris","Micromonas","Pinnularia","Chattonellaceae","Chlamydomonadaceae","Chloropicaceae","Paralia","Tetraselmis")
+# to_remove_taxa <- c("Primates", "Homo sapiens","Amoebozoa sp.","uncultured organism",
+#                     "uncultured Jiaozhou Bay zooplankton","uncultured bacterium", "Castor canadensis")
+```
+
+
+```{r}
 to_remove_phyla <- c("Ascomycota","Oomycota", "Basidiomycota", #fungus
                      "Tubulinea","Discosea", # amoeba
-                     "Bacteroidota","Proteobacteria","Pseudomonadota", # bacteria
-                     "Foraminifera") # single-celled protists
-to_remove_class <- c("Cryptophyceae")   # unicellular algae
-to_remove_genus <- c("Nannochloris","Micromonas","Pinnularia","Chattonellaceae","Chlamydomonadaceae","Chloropicaceae","Paralia","Tetraselmis")
+                     "Bacteroidota","Proteobacteria","Pseudomonadota") # bacteria
 to_remove_taxa <- c("Primates", "Homo sapiens","Amoebozoa sp.","uncultured organism",
                     "uncultured Jiaozhou Bay zooplankton","uncultured bacterium", "Castor canadensis")
+```
 
+```{r}
 blast.dat.filter %<>% 
-  mutate(target_rm=ifelse(phylum %in% to_remove_phyla | taxon %in% to_remove_taxa | genus %in% to_remove_genus, 1, 0))
+  mutate(target_rm=ifelse(phylum %in% to_remove_phyla | taxon %in% to_remove_taxa, 1, 0))
 ``` 
+
 ```{r echo=FALSE, message=FALSE, fig.width=10, fig.height=5}
 blast.dat.filter %>%
   group_by(site,crab_id,target_rm) %>%
@@ -242,7 +338,8 @@ summary_dat <- blast.dat.filter %>%
                               ifelse(reason=="retained","retained",NA)))) %>%
   filter(value==1) %>%
   dplyr::select(site,crab_id,Sample_name,sample_id,tech,Hash,nReads,reason,rank,taxon)
-
+```
+```{r eval=write_out}
 write.csv(summary_dat, here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtering_summary.csv")))
 ```
 <br>
@@ -274,7 +371,7 @@ blast.dat.filter %>%
   summarise(sumReads=sum(nReads)) %>%
   ggplot(aes(x=site, y=sumReads)) + geom_boxplot() + 
   facet_grid(cols=vars(MiSeqRun), scales="free_x") +
-  labs(y="number of reads", title="compare MiSeq runs") +
+  labs(y="number of reads retained", title="compare MiSeq runs") +
   theme_bw() + theme(axis.text.x=element_text(angle=45,hjust=1)) 
 ```
 check out the low-read samples in run 2:
@@ -295,10 +392,9 @@ blast.dat.out <- blast.dat.filter %>%
   filter(missing_rm==0 & predator_rm==0 & target_rm==0) %>%
   dplyr::select(-"missing_rm",-"predator_rm",-"target_rm")
 ```
-<br>
 
-write out. 
-```{r}
+
+```{r eval=write_out}
 write_csv(blast.dat.out, here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered.csv")))
 ```
 <br>
@@ -324,56 +420,44 @@ dat.out <- read_csv(here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="
 save just the species-level IDs
 ```{r}
 spdat <- dat.out %>% filter(rank=="species")
-write_csv(spdat, (here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered_species.csv"))))
+
 
 spdat_summary <- spdat %>% group_by(taxon,kingdom,phylum,class,order,family,genus,species) %>%
   summarise(n.crab=length(unique(crab_id)),
             n.sites=length(unique(site)),
             sites=paste(site,collapse=", "))
 
+```
+```{r eval=write_out}
+write_csv(spdat, (here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered_species.csv"))))
 write_csv(spdat_summary, (here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered_speciesSUMMARY.csv"))))
 ```
 
 keep non-specific ids in data set *only if that taxon is not represented for the given crab in the species-level data* -- for all plant / algae IDs allow for order thru genus, otherwise just through genus
 ```{r}
 nonspec_dat <- dat.out %>% 
-  filter((phylum %in% c("Chlorophyta","Rhodophyta","Streptophyta") & rank=="order") | (class %in% c("Phaeophyceae") & rank=="order") | rank %in% c("genus","family")) %>%
   mutate(dup_sample=crab_id)
 
 nonspec_dat %<>%
   group_by(crab_id) %>%
   nest()
 
-remove_duplicate_taxonomy <- function(x){
-  tmp_sample <- as.character(unique(x[,"dup_sample"]))
-  
-  if(tmp_sample %in% spdat$crab_id){
-    green.filter <- x %>% filter(phylum %in% c("Chlorophyta","Rhodophyta","Streptophyta") | (class %in% c("Phaeophyceae","Chrysophyceae"))) %>%
-      filter(!(taxon %in% (filter(spdat,crab_id==tmp_sample))$genus) & !(taxon %in% (filter(spdat,crab_id==tmp_sample))$family) & !(taxon %in% (filter(spdat,crab_id==tmp_sample))$order))
-    x.filter <- x %>% filter(!(phylum %in% c("Chlorophyta","Rhodophyta","Streptophyta")) & (!(class %in% c("Phaeophyceae","Chrysophyceae")))) %>%
-      filter(!(taxon %in% (filter(spdat,crab_id==tmp_sample))$genus) & !(taxon %in% (filter(spdat,crab_id==tmp_sample))$family)) %>% 
-    bind_rows(green.filter)
-    return(x.filter)
-    
-  } else{return(x)}
-}
-
-nonspec_dat %<>% mutate(data.filter=purrr::map(data,remove_duplicate_taxonomy))
+nonspec_dat %<>% mutate(data.filter=purrr::map(data,remove_duplicate_taxonomy, spdat))
 
 unqdat <- nonspec_dat %>% dplyr::select(-data) %>% unnest(c(crab_id,data.filter)) %>% dplyr::select(-dup_sample) %>%
   bind_rows(spdat)
 ```
 
-manually remove duplicates that have two + entries of higher level taxonomy.
+with the updated function, we shouldn't have to remove duplicates that have two + entries of higher level taxonomy.
 ```{r}
 duplicates_to_edit <- unqdat %>% 
   filter(rank!="species") %>% 
   dplyr::select(crab_id,Hash,taxon,rank,species,genus,family,order,class) %>% distinct() %>%
   group_by(Hash, crab_id) %>% summarise(duplicated.ranks=length(unique(rank))) %>% filter(duplicated.ranks > 1)
 duplicates_to_edit
-# View(left_join(duplicates_to_edit, unqdat))
+# View(left_join(duplicates_to_edit, unqdat))  ## 6 hashes with duplicated ranks
 ```
-```{r}
+```{r eval=FALSE}
 # fix hashes
 tmpdat <- filter(unqdat, Hash=="1190ea6a61d23f996ab852bf67978413355a6b53" & crab_id %in% c("SAMT_01")) %>%
   filter(rank=="genus") %>%
@@ -404,17 +488,17 @@ unqdat %<>% anti_join(dplyr::select(duplicates_to_edit, c(Hash,crab_id))) %>%
 ```
 
 Save 
-```{r}
+```{r eval=write_out}
 write_csv(unqdat, (here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered_uniqueTaxa.csv"))))
 
 
-unq_summary <- unqdat %>%
+unqdat %>%
   group_by(taxon,rank,kingdom,phylum,class,order,family,genus,species) %>%
   summarise(n.crab=length(unique(crab_id)),
             n.sites=length(unique(site)),
             sites=paste0(unique(site),collapse=","),
-            miseqruns=paste0(unique(MiSeqRun),collapse=","))
-write_csv(unq_summary, (here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered_uniqueTaxaSUMMARY.csv"))))
+            miseqruns=paste0(unique(MiSeqRun),collapse=",")) %>%
+write_csv((here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered_uniqueTaxaSUMMARY.csv"))))
 
 ```
 
@@ -436,17 +520,20 @@ head(manual_filter)
 
 If I need to filter out the taxon, new_rank should be "NA". the reason for removing the taxon will be in the new_taxon column.
 ```{r}
-filter(manual_filter, new_rank=="NA") %>% pull(new_taxon)
+filter(manual_filter, !is.na(removal_code)) %>% pull(removal_code)
 ```
 
-I did leave in some of the "too small" organisms, add those to the manual filter.
+Code unicellular organisms as "too small" in the manual filter.
 ```{r}
-too_small_dat <- unqdat %>% filter(phylum %in% c("Bacillariophyta","Rotifera") |
-                            class %in% c("Dinophyceae","Chlorophyceae"))
+too_small_dat <- unqdat %>% filter(phylum %in% c("Bacillariophyta","Rotifera", "Foraminifera") |
+                            class %in% c("Dinophyceae","Chlorophyceae", "Raphidophyceae","Cryptophyceae",
+                                         "Eustigmatophyceae","Pelagophyceae","Mamiellophyceae"))
 too_small_filter <- dplyr::select(too_small_dat, taxon, rank) %>%
-  mutate(new_rank="NA",new_taxon="too small") %>% distinct()
+  distinct() %>%
+  left_join(manual_filter) %>%
+  mutate(removal_code=ifelse(is.na(removal_code),"too small",removal_code))
 
-manual_filter %<>% filter(!(new_taxon %in% too_small_filter$taxon)) %>%
+manual_filter %<>% filter(!(taxon %in% too_small_filter$taxon)) %>%
   bind_rows(too_small_filter) %>% distinct()
 ```
 
@@ -456,15 +543,16 @@ Join the dataframe to the unique taxa dataset, and filter out taxa.  Also get ri
 unqdat_filter <- unqdat %>%
   dplyr::select(-c(19:36)) %>%
   left_join(manual_filter, by=c("taxon","rank")) %>%
-  filter(new_rank!="NA")
+  filter(is.na(removal_code))
 ```
 
 Rename taxa if needed (usually to back out species to genus, if the species name is just a sample identifier from blast, or if the species is not known to be found in the Puget Sound but the genus is.)
 ```{r}
-unqdat_filter <- unqdat_filter %>% filter(rank!=new_rank) %>%
+unqdat_filter <- unqdat_filter %>% filter(rank!=new_rank | taxon!=new_taxon) %>%
   mutate(taxon=new_taxon,
          rank=new_rank) %>%
-  bind_rows(filter(unqdat_filter,rank==new_rank))
+  bind_rows(filter(unqdat_filter,rank==new_rank)) %>% 
+  dplyr::select(-new_rank,-new_taxon)
 
 ## check some of the renamed taxa
 head(filter(unqdat_filter,rank=="genus" & !is.na(species)) %>% dplyr::select(crab_id,sample_id,MiSeqRun,rank,taxon,species))
@@ -484,8 +572,10 @@ spdat_summary <- spdat %>% group_by(taxon,kingdom,phylum,class,order,family,genu
   summarise(n.crab=length(unique(crab_id)),
             n.sites=length(unique(site)),
             sites=paste(site,collapse=", "))
+```
 
-write_csv(spdat_summary, (here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_speciesSUMMARY.csv"))))
+```{r eval=write_out}
+write_csv(spdat_summary, (here('data','results', paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_speciesSUMMARY.csv"))))
 ```
 
 keep non-specific ids in data set *only if that taxon is not represented for the given crab in the species-level data* 
@@ -497,99 +587,162 @@ nonspec_dat <- unqdat_filter %>%
 nonspec_dat %<>%
   group_by(crab_id) %>%
   nest()
+# 
+# remove_duplicate_taxonomy <- function(x){
+#   tmp_sample <- as.character(unique(x[,"dup_sample"]))
+#   
+#   if(tmp_sample %in% spdat$crab_id){
+#     x.filter <- x %>%
+#       filter(!(taxon %in% (filter(spdat,crab_id==tmp_sample))$genus) & !(taxon %in% (filter(spdat,crab_id==tmp_sample))$family) & !(taxon %in% (filter(spdat,crab_id==tmp_sample))$order))
+#     return(x.filter)
+#     
+#   } else{return(x)}
+# }
 
-remove_duplicate_taxonomy <- function(x){
-  tmp_sample <- as.character(unique(x[,"dup_sample"]))
-  
-  if(tmp_sample %in% spdat$crab_id){
-    x.filter <- x %>%
-      filter(!(taxon %in% (filter(spdat,crab_id==tmp_sample))$genus) & !(taxon %in% (filter(spdat,crab_id==tmp_sample))$family) & !(taxon %in% (filter(spdat,crab_id==tmp_sample))$order))
-    return(x.filter)
-    
-  } else{return(x)}
-}
-
-nonspec_dat %<>% mutate(data.filter=purrr::map(data,remove_duplicate_taxonomy))
+nonspec_dat %<>% mutate(data.filter=purrr::map(data,remove_duplicate_taxonomy, sp.dat=spdat))
 
 unqdat_filter2 <- nonspec_dat %>% dplyr::select(-data) %>% unnest(c(crab_id,data.filter)) %>% dplyr::select(-dup_sample) %>%
   bind_rows(spdat)
 ```
 
+Remove everything below the new rank
+```{r}
+unqdat_filter3 <- unqdat_filter2 %>%
+  filter(rank=="genus" & !is.na(species)) %>%
+  mutate(species=NA) %>%
+  bind_rows(
+    
+    unqdat_filter2 %>%
+      filter(rank=="family" & !is.na(genus)) %>%
+      mutate(species=NA, genus=NA)
+    
+  ) %>%
+  bind_rows(
+    
+    unqdat_filter2 %>%
+      filter(rank=="order" & !is.na(family)) %>%
+      mutate(species=NA, genus=NA, family=NA)
+    
+  ) 
 
-*********************************************
+unqdat_filter3 %<>% bind_rows(
+  unqdat_filter2 %>%
+    filter(!(rank=="genus" & !is.na(species)) & !(rank=="family" & !is.na(genus)) & !(rank=="order" & !is.na(family)))
+)
+
+dim(unqdat_filter3) == dim(unqdat_filter2)
+# bind_rows(
+#     
+#     unqdat_filter2 %>%
+#       filter(rank=="class" & !is.na(order)) %>%
+#       mutate(species=NA, genus=NA, family=NA, order=NA)
+#     
+#   ) %>%
+#   bind_rows(
+#     
+#     unqdat_filter2 %>%
+#       filter(rank=="phylum" & !is.na(class)) %>%
+#       mutate(species=NA, genus=NA, family=NA, order=NA, class=NA)
+#     
+#   )
+```
+
 
 Save the final filtered taxonomy
-```{r}
-write_csv(unqdat_filter2, (here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_uniqueTaxa.csv"))))
+```{r eval=write_out}
+write_csv(unqdat_filter2, (here('data','results', paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_uniqueTaxa.csv"))))
+
+write_csv(unqdat_filter3, (here('data','results', paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered3_uniqueTaxa.csv"))))
 ```
 
 Save a summary of the final filtered taxonomy
 ```{r}
-unq_filter2_summary <- unqdat_filter2 %>%
+unq_filter3_summary <- unqdat_filter3 %>%
+  
   group_by(taxon,rank,kingdom,phylum,class,order,family,genus,species) %>%
   summarise(n.crab=length(unique(crab_id)),
             n.sites=length(unique(site)),
             sites=paste0(unique(site),collapse=","),
             miseqruns=paste0(unique(MiSeqRun),collapse=","))
-write_csv(unq_filter2_summary, (here('data','results', paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_uniqueTaxaSUMMARY.csv"))))
+```
+
+```{r eval=write_out}
+write_csv(unq_filter3_summary, (here('data','results', paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered3_uniqueTaxaSUMMARY.csv"))))
 ```
 
 
-### "too small" dataset
+## "too small" dataset
 
-I want to create a "rotifers / algae / diatoms / protists" category that could potentially represent ingestion of detritus; Galloway et al. included detritus in their feeding experiments for Dungeness crab instars. This does *not* include fungi, amoebas, or bacteria
+I want to create a "rotifers / microalgae / protists" category that could potentially represent ingestion of detritus; Galloway et al. included detritus in their feeding experiments for Dungeness crab instars. This does *not* include fungi, amoebas, or bacteria
 
- **First, re-run lines 1-94 above**. Re-read in the manual filter data
+**First, lines 424 to 454 above if needed**. 
+ 
+Then, grab the 'too small' items from the edited manual filter.
 ```{r}
-blast.small <- blast.dat.filter %>% filter(!is.na(rank))
+unqdat.small <- unqdat %>%
+  dplyr::select(-c(19:36)) %>%
+  filter(taxon %in% filter(manual_filter,removal_code=="too small")$taxon) %>%
+  left_join(manual_filter)
 
-manual_filter <- readxl::read_excel(path=here('data','results','lerayXT_r1-2_sample_taxonomy_filtered_uniqueTaxaSUMMARY.xlsx'),sheet='lerayXT_r1-2_final')
+# rename as needed
+unqdat.small %<>% mutate(taxon=new_taxon,rank=new_rank) %>% dplyr::select(-new_taxon,-new_rank)
 ```
 
-Add back in the small taxa, from either the manual filter dataset or from the list of taxa that I filtered out in the script above. 
+First, grab species-level IDs
 ```{r}
-too_small_taxa <- filter(manual_filter,new_taxon=="too small")
-too_small_phyla <- c("Bacillariophyta","Rotifera","Foraminifera")
-too_small_class <- c("Dinophyceae","Chlorophyceae","Cryptophyceae")
-too_small_genus <- c("Nannochloris","Micromonas","Pinnularia","Chattonellaceae","Chlamydomonadaceae","Chloropicaceae","Paralia","Tetraselmis")
+# species-level IDs
+spdat.sm <- unqdat.small %>% filter(rank=="species")
 
-blast.small %<>% 
-  filter(phylum %in% too_small_phyla | class %in% too_small_class | genus %in% too_small_genus | taxon %in% too_small_taxa$taxon)
-``` 
+spdat.sm_summary <- spdat.sm %>% group_by(taxon,kingdom,phylum,class,order,family,genus,species) %>%
+  summarise(n.crab=length(unique(crab_id)),
+            n.sites=length(unique(site)),
+            sites=paste(site,collapse=", "))
+```
+
+
+```{r eval=write_out}
+write_csv(spdat.sm_summary, (here('data','results', paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_SmallTaxa_speciesSUMMARY.csv"))))
+```
 
 clean up non-unique taxa within each crab
 ```{r}
-# species-level IDs
-spdat <- blast.small %>% filter(rank=="species")
-
 # IDs above species-level
-nonspec_dat <- blast.small %>% 
+nonspec_dat_small <- unqdat.small %>% 
   filter(rank != "species") %>%
   mutate(dup_sample=crab_id)
 
-nonspec_dat %<>%
+nonspec_dat_small %<>%
   group_by(crab_id) %>%
   nest()
 
-remove_duplicate_taxonomy <- function(x){
-  tmp_sample <- as.character(unique(x[,"dup_sample"]))
+nonspec_dat_small %<>% mutate(data.filter=purrr::map(data,remove_duplicate_taxonomy, spdat.sm))
+
+small.out <- nonspec_dat_small %>% dplyr::select(-data) %>% unnest(c(crab_id,data.filter)) %>% dplyr::select(-dup_sample) %>%
+  bind_rows(spdat.sm)
+```
+
+```{r}
+small.out %>% filter(rank=="genus" & !is.na(species))
   
-  if(tmp_sample %in% spdat$crab_id){
-    x.filter <- x %>%
-      filter(!(taxon %in% (filter(spdat,crab_id==tmp_sample))$genus) & !(taxon %in% (filter(spdat,crab_id==tmp_sample))$family) & !(taxon %in% (filter(spdat,crab_id==tmp_sample))$order))
-    return(x.filter)
-    
-  } else{return(x)}
-}
-
-nonspec_dat %<>% mutate(data.filter=purrr::map(data,remove_duplicate_taxonomy))
-
-blast.small.unq <- nonspec_dat %>% dplyr::select(-data) %>% unnest(c(crab_id,data.filter)) %>% dplyr::select(-dup_sample) %>%
-  bind_rows(spdat)
+small.out3 <- small.out %>%
+  mutate(species=ifelse(rank=="genus" & !is.na(species),NA,species))
+  
+small.out3 %>% filter(rank=="genus" & !is.na(species))
 ```
 
 Save!
-```{r}
-write_csv(blast.small.unq %>% dplyr::select(-c(19:36)) %>% mutate(new_taxon="too small",new_rank=NA), (here(outdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_SmallTaxa_uniqueTaxa.csv"))))
+```{r eval=write_out}
+write_csv(small.out, (here('data','results', paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_SmallTaxa_uniqueTaxa.csv"))))
+write_csv(small.out3, (here('data','results', paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered3_SmallTaxa_uniqueTaxa.csv"))))
 ```
 
+Save a summary of the final filtered taxonomy
+```{r eval=write_out}
+unq_filter3_small_summary <- small.out3 %>%
+  group_by(taxon,rank,kingdom,phylum,class,order,family,genus,species) %>%
+  summarise(n.crab=length(unique(crab_id)),
+            n.sites=length(unique(site)),
+            sites=paste0(unique(site),collapse=","),
+            miseqruns=paste0(unique(MiSeqRun),collapse=",")) %>%
+write_csv((here('data','results', paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered3_SmallTaxa_uniqueTaxaSUMMARY.csv"))))
+```

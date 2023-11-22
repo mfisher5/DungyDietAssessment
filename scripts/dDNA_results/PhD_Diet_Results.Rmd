@@ -62,6 +62,7 @@ blastdir   <- 'data/blast'
 resultsdir <- 'data/results'
 run.nums <- c(1,2)
 marker  <- 'lerayXT'
+knitting=FALSE
 
 estuary_colors <- data.frame(estuary=c("Port Susan Bay","Padilla Bay", "Samish Bay"),
                              key=c("#33a02c","#1f78b4","chocolate3"))
@@ -96,7 +97,7 @@ blastout %<>% dplyr::select(-mi_seq_run,-sample_id) %>%
                                     ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
 
 ## filtered taxa ##
-dat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered2_uniqueTaxa.csv")))
+dat <- read_csv(here(resultsdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered3_uniqueTaxa.csv")))
 
 dat %<>%
   mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
@@ -106,7 +107,7 @@ dat %<>%
                                     ifelse(site %in% c("LAR","SAMT","SAMI"), "Samish Bay","Padilla Bay")))
 
 ## too small taxa (aka "detritus") ##
-smdat <- read_csv(here(blastdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_SmallTaxa_uniqueTaxa.csv")))  
+smdat <- read_csv(here(resultsdir, paste0(marker,"_","r",paste(run.nums,collapse="-"),"_sample_taxonomy_filtered3_SmallTaxa_uniqueTaxa.csv")))  
 
 smdat %<>%
   mutate(site=ifelse(site=="KAY" & crab_num > 18, "KAY-shell",site)) %>%
@@ -117,6 +118,12 @@ smdat %<>%
 
 ## combine all taxa ##
 alldat <- bind_rows(dat,smdat)
+
+
+## add carapace widths
+crab_metadat <- alldat %>% dplyr::select(site,estuary,crab_id) %>% distinct() %>%
+  left_join(lab_metadat,by=c("crab_id"="sample_id","estuary"))
+
 ```
 <br>
 
@@ -206,9 +213,6 @@ So, there are enough crab with < 3 technical replicates that when running analys
 ### Carapace width
 
 ```{r}
-crab_metadat <- alldat %>% dplyr::select(site,estuary,crab_id) %>% distinct() %>%
-  left_join(lab_metadat,by=c("crab_id"="sample_id","estuary"))
-
 all(!is.na(crab_metadat$CW_mm))
 ```
 
@@ -257,14 +261,6 @@ ggplot(crab_metadat, aes(x=CW_mm)) +
   geom_histogram() + theme_bw()
 ```
 
-Make sure there aren't significant differences between carapace widths by estuary
-```{r}
-size.aov <- aov(CW_mm ~ estuary, data=crab_metadat)
-summary(size.aov)
-```
-```{r}
-TukeyHSD(size.aov)
-```
 
 ### specificity
 
@@ -292,12 +288,6 @@ smdat_overall <- get_unique_taxa(smdat)
 # percent at each rank?
 with(smdat_overall %>% dplyr::select(taxon,rank) %>% distinct(),table(rank)) / length(smdat_overall %>% pull(taxon) %>% unique())
 ```
-
-
-
-
-
-
 
 # eDNA Index
 
@@ -335,39 +325,90 @@ index.df <- as.data.frame(t(index.mat)) %>%
   left_join(site_names) %>%
   pivot_wider(names_from=taxon,values_from=DNAindex)
 ```
+calculate eDNA index from the sum of reads across technical replicates (1 row = 1 crab)
+```{r}
+crab.smreads.mat <- smdat %>%
+  group_by(crab_id, taxon) %>% summarise(sumReads=sum(nReads)) %>%
+  pivot_wider(id_cols="crab_id", names_from="taxon",values_from="sumReads", values_fill=0) %>%
+  column_to_rownames("crab_id")
 
+index.sm.mat <- eDNA_index(x=t(crab.smreads.mat))
+
+index.sm.df <- as.data.frame(t(index.sm.mat)) %>%
+  rownames_to_column("crab_id") %>% 
+  pivot_longer(cols=2:(dim(index.sm.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
+  left_join(smdat %>% dplyr::select(crab_id,site,estuary) %>% distinct(),by="crab_id") %>%
+  left_join(site_names) %>%
+  pivot_wider(names_from=taxon,values_from=DNAindex)
+```
+Bind small / regular tax together
+```{r}
+crab.allreads.mat <- alldat %>%
+  group_by(crab_id, taxon) %>% summarise(sumReads=sum(nReads)) %>%
+  pivot_wider(id_cols="crab_id", names_from="taxon",values_from="sumReads", values_fill=0) %>%
+  column_to_rownames("crab_id")
+
+index.all.mat <- eDNA_index(x=t(crab.allreads.mat))
+
+index.all.df <- as.data.frame(t(index.all.mat)) %>%
+  rownames_to_column("crab_id") %>% 
+  pivot_longer(cols=2:(dim(index.all.mat)[1]+1), names_to="taxon",values_to="DNAindex") %>%
+  left_join(alldat %>% dplyr::select(crab_id,site,estuary) %>% distinct(),by="crab_id") %>%
+  left_join(site_names) %>%
+  pivot_wider(names_from=taxon,values_from=DNAindex)
+```
+
+```{r}
+if(!knitting){
+  index.df %>%
+  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_eDNAindex.csv'))
+   index.sm.df %>%
+  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_SmallTaxa_eDNAindex.csv'))
+   index.all.df %>%
+  write_csv(here(resultsdir,'lerayxt_r1-2_filtered2_AllTaxa_eDNAindex.csv'))
+}
+```
 
 
 # 2. Prey Diversity (Taxa)
 
-### Alpha div
+## Alpha div
+
+What is the overall number of unique taxa? **142**
+```{r}
+length(alldat_overall %>% pull(taxon) %>% unique())
+```
+```{r}
+alldat_overall %>% group_by(phylum,class,order,family,genus,species) %>% distinct() %>% summarise(ncrab=length(unique(crab_id))) %>%
+  arrange(phylum, class, order, family, genus) %>%
+  write_csv(here('data','results','lerayxt_r1-2_filtered3_AllTaxa_unique_all_crab.csv'))
+```
 
 What is the total number of unique taxa observed, without unicellular species? **99**  
 ```{r}
-dat_overall <- get_unique_taxa(dat)
 length(dat_overall %>% pull(taxon) %>% unique())
 ```
 
 What is the total number of unique taxa observed among unicellular algae / diatoms / rotifers / protists? **38**
 ```{r}
-smdat_overall <- get_unique_taxa(smdat)
 length(smdat_overall %>% pull(taxon) %>% unique())
 ```
+
 How many phyla does this represent?
 ```{r}
 smdat_overall %>% mutate(level=ifelse(!is.na(phylum), "phylum", "class"),
                          to_count=ifelse(!is.na(phylum), phylum, class)) %>% group_by(level) %>% summarise(n=length(unique(to_count)))
 ```
 
-What is the overall number of unique taxa? **136**
-```{r}
-length(alldat_overall %>% pull(taxon) %>% unique())
-```
+
 How many phyla does this represent?
 ```{r}
 dat_overall %>% mutate(level=ifelse(!is.na(phylum), "phylum", "class"),
                          to_count=ifelse(!is.na(phylum), phylum, class)) %>% group_by(level) %>% summarise(n=length(unique(to_count)))
 ```
+
+
+
 
 #### per site
 
@@ -734,7 +775,7 @@ dev.off()
 ```
 
 
-### Distinctness
+## Distinctness
 
 
 *Taxonomic distinctness* is the averaged taxonomic distances among species or individuals in the community (Clarke & Warwick 1998, 2001). These figures display the distinctness in prey assemblages between crab at the same site (with presence/absence data, both distinctness and diversity reduce to the same index, $\Delta^{+}$, Clarke & Warwick (1998)). 
@@ -1548,9 +1589,9 @@ anova(betadisper(d=indexCW.indat.dist, permCW.index.indat$size_class))
 
 
 
-## Prey identity
+# 3. Prey identity
 
-### FO%
+## FO%
 
 Calculate frequency of occurrence of each taxon.
 ```{r}
@@ -1653,6 +1694,12 @@ dev.off()
 save frequencies of occurrence into a dataframe
 ```{r}
 write_csv(plotdat.fo, here('data','results','freqoccur_runs1-2_lerayxt_presence.csv'))
+plotdat.fo %>%
+  bind_rows(filter(fo.hi, plot.group=="single-celled organisms") %>% mutate(plot.group=plot.subgroup) %>%
+              dplyr::select(-plot.subgroup, -outlier)) %>%
+  group_by(plot.group) %>%
+  summarise(median.fo=median(pcrab),mean.fo=mean(pcrab),sd_fo=sd(pcrab)) %>%
+  write_csv(here('data','results','freqoccur_medians_runs1-2_lerayxt_presence.csv'))
 ```
 
 How many prey were only identified in 1 crab?
@@ -1748,5 +1795,68 @@ dat %>% filter(phylum=="Arthropoda") %>%
                                                       strip.background = element_blank(),
                                                       strip.placement = "outside")
 ```
+
+## FO% Stevens et al.
+```{r}
+total.crab <- length(unique(dat$crab_id))
+```
+
+FO% of crustaceans?
+```{r}
+keep_classes <- c("Malacostraca","Thecostraca","Copepoda","Ostracoda","Hexanauplia",
+                  "Mystacocarida","Ichthyostraca","Cyclida",
+                  "Branchiopoda","Cephalocarida","Remipedia","Tantulocarida","Priscansermarinidae")
+```
+
+Calculate frequency of occurrence of each taxon.
+```{r}
+crustacea.fo <- alldat %>% 
+  filter(class %in% keep_classes) %>%
+  group_by(taxon,class,rank) %>%
+  summarise(ncrab=length(unique(crab_id))) %>%
+  mutate(pcrab=(ncrab/total.crab)*100) 
+
+crustacea.fo %>% pull(pcrab) %>% quantile()
+
+with(crustacea.fo, table(rank))
+```
+Calculate frequency of occurrence of all crustacea.
+```{r}
+alldat %>% 
+  filter(class %in% keep_classes) %>%
+  mutate(subphylum="Crustacea") %>%
+  group_by(subphylum) %>%
+  summarise(ncrab=length(unique(crab_id))) %>%
+  mutate(pcrab=(ncrab/total.crab)*100) 
+```
+
+
+FO% of bivalves? 
+```{r}
+keep_classes <- c("Bivalvia")
+```
+
+Calculate frequency of occurrence of each taxon.
+```{r, message=FALSE}
+bivalve.fo <- alldat %>% 
+  filter(class %in% keep_classes) %>%
+  group_by(taxon,class,rank) %>%
+  summarise(ncrab=length(unique(crab_id))) %>%
+  mutate(pcrab=(ncrab/total.crab)*100) 
+
+bivalve.fo %>% pull(pcrab) %>% quantile()
+
+with(bivalve.fo, table(rank))
+```
+Calculate frequency of occurrence of all crustacea.
+```{r}
+alldat %>% 
+  filter(class %in% keep_classes) %>%
+  group_by(class) %>%
+  summarise(ncrab=length(unique(crab_id))) %>%
+  mutate(pcrab=(ncrab/total.crab)*100) 
+```
+
+
 <br>
 <br>

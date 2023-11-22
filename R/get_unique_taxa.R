@@ -15,6 +15,18 @@ get_unique_taxa <- function(taxa.df, level="all"){
   
   dat <- taxa.df %>% anti_join(nonspec_dat,by=c("rank","taxon"="taxonomy"))
   
+  # remove higher level taxonomy represented by genus
+  gdat <- dat %>% filter(rank=="genus")
+  dat <- dat %>%
+    filter(!(taxon %in% gdat$family) & !(taxon %in% gdat$order))
+  
+  # remove higher level taxonomy represented by family
+  fdat <- dat %>% filter(rank=="family")
+  dat <- dat %>%
+    filter(!(taxon %in% fdat$order))
+  
+  
+  
   } else if(level=="site"){
     spdat <-taxa.df %>% filter(rank=="species") %>% 
       dplyr::select(site,taxon,genus,family,order,class) %>% distinct() %>%
@@ -30,6 +42,28 @@ get_unique_taxa <- function(taxa.df, level="all"){
     
    dat <-taxa.df %>%
       anti_join(nonspec_dat,by=c("site","rank","taxon"="taxonomy"))
+   
+   # remove higher level taxonomy represented by genus
+   gdat <- dat %>% filter(rank=="genus") %>%
+     dplyr::select(site,family,order) %>% distinct()
+   keep_fodat <- dat %>% filter(rank %in% c("family","order")) %>%
+     anti_join(gdat, by=c("site","family","order"))
+   
+   dat <- dat %>% filter(!(rank %in% c("family","order"))) %>%
+     bind_rows(keep_fodat)
+     
+   # remove higher level taxonomy represented by family
+   fdat <- dat %>% filter(rank=="family") %>%
+     dplyr::select(site,order) %>% distinct()
+   
+   keep_odat <- dat %>% filter(rank %in% c("order")) %>%
+     anti_join(fdat, by=c("site","order"))
+   
+   dat <- dat %>% filter(!(rank %in% c("order"))) %>%
+     bind_rows(keep_odat)
+   
+   
+   
 
    
   } else{stop("Please choose level = site or level = all")}

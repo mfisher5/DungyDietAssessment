@@ -26,6 +26,11 @@ library(janitor)
 blastdir   <- '../../data/blast'
 resultsdir <- '../../data/results'
 bdir       <- '../../data/bioE'
+
+blastdir   <- 'data/blast'
+resultsdir <- 'data/results'
+bdir       <- 'data/bioE'
+
 run.nums <- c(1,2)
 marker  <- 'lerayXT'
 knitting=FALSE
@@ -203,6 +208,7 @@ dplyr::select(eindex.dat, functional_group,raw_survival_scalar,std_survival_scal
 
 ### plot for all
 
+All that I had in the dataset as of 11/12
 ```{r}
 p1.eindex <- eindex.dat %>%
   ggplot(aes(x=pcrab,y=std_survival_scalar, col=eindex.rescaled)) +
@@ -246,9 +252,9 @@ ggdraw(p2.eindex) +
 dev.off()
 ```
 
-scale points by the number of taxa at that exact value.
+scale points by the number of taxa at that exact value. only plot values from prey present in two or more crab
 ```{r}
-p1.eindex.size <- eindex.dat %>%
+p1.eindex.size <- eindex.dat %>% filter(ncrab.x > 1) %>%
   group_by(pcrab, std_survival_scalar,eindex.rescaled) %>%
   summarise(ntaxa=length(unique(new_taxon))) %>%
   ggplot(aes(x=pcrab,y=std_survival_scalar, col=eindex.rescaled)) +
@@ -371,20 +377,39 @@ risk.dat %<>% mutate(std_survival_scalar=as.numeric(std_survival_scalar),
 
 if(!knitting){
   
-write_csv(risk.dat, here(bdir,'OArisk_runs1-2_lerayxt_2023-10-06.csv'))
+write_csv(risk.dat, here(bdir,'OArisk_runs1-2_lerayxt_2023-11-12.csv'))
+  
+  risk.dat %>% dplyr::select(new_taxon,pcrab,eindex.rescaled,std_ed,crab.risk) %>%
+    arrange(crab.risk) %>% write_csv(here(resultsdir,'TableS9_OArisk_runs1-2_lerayxt_2023-11-12.csv'))
   
 }
+```
+
+The text in the plot is difficult to read. Grab the colors used, darken them, and then recolor the labels. 
+```{r}
+tmp <- risk.dat %>%
+  ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
+  geom_point(size=3) +
+  geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01) +
+  scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") 
+
+
+redo_colors <- data.frame(label=ggplot_build(tmp)$data[[2]]$label,
+                          ggcol=ggplot_build(tmp)$data[[2]]$colour) %>%
+  mutate(labelcol=darken(ggcol,amount=0.3)) %>% 
+  right_join(risk.dat %>% dplyr::select(new_taxon), by=c("label"="new_taxon"))
 ```
 
 ```{r}
 if(!knitting){
   
-png(here('../../','figs','fig5b_crab_OArisk_all.png'),res=300,height=1800,width=2100)
+png(here('../../','figs','fig5b_crab_OArisk_all.png'),res=300,height=1800,width=2200)
 
 risk.dat %>%
+  left_join(redo_colors,by=c("new_taxon"="label")) %>%
   ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
   geom_point(size=2) +
-  geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01, max.overlaps=15) +
+  geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01, max.overlaps=15, col=redo_colors$labelcol) +
   scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
   labs(x="Crab Exposure Index", y="Crab Sensitivity") + theme_bw()
 
@@ -423,7 +448,7 @@ eindex.dat %>% filter(std_survival_scalar > q75 | std_survival_scalar < q25) %>%
 
 ```{r}
 riskByEstuary <- eindexByEstuary %>%
-  left_join(ed.dat %>% dplyr::select(-functional_group,-raw_survival_scalar,-ncrab), by=c("new_taxon")) %>%
+  left_join(ed.dat %>% dplyr::select(-functional_group,-ncrab), by=c("new_taxon")) %>%
   filter(!is.na(ed_JgAFDW))
 
 # standardize energy densities
@@ -455,7 +480,7 @@ p.risk2
 
 ```{r}
 png(here('../../','figs','figS_crab_OArisk_byEstuary.png'),res=300,height=2000,width=4000)
-p.risk2 + theme(axis.text.x=element_text(angle=25, hjust=1), legend.box="horizontal")
+p.risk2 + theme_bw() + theme(axis.text.x=element_text(angle=25, hjust=1), legend.box="horizontal")
 dev.off()
 ```
 
@@ -465,6 +490,7 @@ p.risk3 <- riskByEstuary %>%
   ggplot(aes(x=fct_relevel(estuary, c("Port Susan Bay","Padilla Bay", "Samish Bay")),y=crab.risk)) +
   geom_boxplot() +
   geom_jitter(aes(color=crab.risk), width=0.05) +
+   geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01) +
   labs(x="Estuary", y="Crab Risk") +
   scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
   theme(legend.position="none")
@@ -482,8 +508,8 @@ median(filter(riskByEstuary, estuary=="Samish Bay")$crab.risk)
 if(!knitting){
   
 png(here('../../','figs','figSa-b_crab_OArisk_byEstuary.png'),res=300,height=2000,width=4000)
-plot_grid(p.risk2 + theme(axis.text.x=element_text(angle=25, hjust=1), legend.box="horizontal"),
-          p.risk3 + theme(axis.text.x=element_text(angle=25,hjust=1)),
+plot_grid(p.risk2 + theme_bw() + theme(axis.text.x=element_text(angle=25, hjust=1), legend.box="horizontal"),
+          p.risk3 + theme_bw() + theme(axis.text.x=element_text(angle=25,hjust=1)),
           ncol=2,rel_widths=c(1,0.2),labels=c("(a)","(b)"))
 dev.off()
 
@@ -510,18 +536,19 @@ if(!knitting){
     mutate(std_survival_scalar=as.numeric(std_survival_scalar),
            eindex.rescaled=as.numeric(eindex.rescaled),
            std_ed=as.numeric(std_ed)) %>%
-  write_csv(here(bdir,'OArisk_byEstuary_runs1-2_lerayxt_ranked_2023-10-09.csv'))
+  write_csv(here(bdir,'TableS10_OArisk_byEstuary_runs1-2_lerayxt_ranked_2023-11-12.csv'))
 
 }
 ```
 
 
 ```{r eval=FALSE}
-View(riskByEstuary_ranked %>% 
+(riskByEstuary_ranked %>% 
        filter(rank <= 15) %>% 
        mutate(rank2 = rank(desc(crab.risk), ties.method = "last")) %>%
        dplyr::select(new_taxon, estuary,rank2) %>%
-       pivot_wider(id_cols="new_taxon",names_from="estuary",values_from="rank2"))
+       pivot_wider(id_cols="new_taxon",names_from="estuary",values_from="rank2")) %>%
+  write_csv('TableS10_OArisk_byEstuary_top15ranked_2023-11-12.csv')
 ```
 
 
