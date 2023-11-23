@@ -1584,7 +1584,7 @@ est.allindex.perm.betadisper <- betadisper(d=allindex.indat.dist, group=perm.all
 anova(betadisper(d=allindex.indat.dist, perm.allindex.indat$estuary))
 # adonis2(dist(estuary.index.perm.betadisper$distances)~estuary.index.perm.betadisper$group)
 ```
-Significant result from PERMDISP: groups differ in dispersion 
+Non-significant result from PERMDISP
 
 And here's the PCoA from the PERMDISP.
 ```{r}
@@ -1633,7 +1633,6 @@ myplot.site.all$plot +
   labs(x="PCoA Dim 1",y="PCoA Dim 2") +
   theme_bw() + theme(axis.text=element_blank(),axis.ticks=element_blank())
 ```
-
 
 
 
@@ -1754,6 +1753,22 @@ png(here('figs','figS_PCoA-site.png'), res=200, height=900,width=1400)
 plot_grid(p1,p2,labels=c("(a)","(b)"), rel_widths=c(0.73,1))
 dev.off()
 ```
+#### save the input / output in an r object
+
+```{r}
+out.list <- list(
+perm.index.indat, est.index.perm, est.index.perm.betadisper, permS.index.indat, site.index.perm, site.index.perm.betadisper)
+names(out.list) <- c("permanova input matrix, eDNA index", "permanova obj","permdisp input matrix, dist from eDNA index","permdisp obj")
+
+saveRDS(out.list, here('data','results','permanova_permdisp_eDNAindex-sumtech-standardized-noRare_multicellular.rds'))
+
+out.list <- list(
+perm.allindex.indat, est.allindex.perm, est.allindex.perm.betadisper, permS.allindex.indat, site.allindex.perm, site.allindex.perm.betadisper)
+names(out.list) <- c("permanova input matrix, eDNA index", "permanova obj","permdisp input matrix, dist from eDNA index","permdisp obj")
+
+saveRDS(out.list, here('data','results','permanova_permdisp_eDNAindex-sumtech-standardized-noRare_allTaxa.rds'))
+```
+
 
 
 # 3. Prey identity
