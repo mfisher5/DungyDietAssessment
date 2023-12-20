@@ -577,7 +577,7 @@ print(fitted_2_filter %>%
 ggplot(aes(y=mean_cw,x=as.numeric(CW_mm))) +
     geom_point() + geom_errorbar(aes(ymin=lower_cw,ymax=upper_cw), width=0.25) + 
   geom_hline(aes(yintercept=0), color="gray60") +
-  geom_text(aes(y=0.001,x=as.numeric(CW_mm),label=n)) +
+  geom_text(aes(y=0.0015,x=as.numeric(CW_mm),label=n)) +
     facet_wrap(~taxon, ncol=2, scales="free_y") + 
     labs(x="Carapace Width (mm)", y="Bayesian posterior mean", subtitle="Taxa present in 10+ crab") +
     theme_bw() +
@@ -1505,10 +1505,53 @@ png(here('figs','Fig4_CCA_AllTaxa10plus_v_CW_label95CI.png'), res=300,width=1700
 print(plot.99ci)
 dev.off()
 
-saveRDS(plot.99ci, here('figs','Fig4_CCA_AllTaxa10plus_v_CW_label99CI.rds'))
+saveRDS(cc1, here('data','results','CCA_AllTaxa10plus_v_CW_2023-11-20.rds'))
 
 }
 ```
+
+
+read in the zoid data frame and combine plots
+```{r}
+fitted_2_ref2 <- read_csv(here(resultsdir,paste0('zoidFittedValsFiltered_preads_AllTaxa10plus_4ch5KiOD_2023-11-22.csv'))) %>%
+ # set the reference according to minimum CW in which that taxon was detected
+  group_by(taxon) %>% mutate(min_cw=min(CW_mm)) %>% ungroup() %>%
+  filter(CW_mm==min_cw) %>%
+  dplyr::select(group,taxon,mean,median,lo,hi) %>% rename(ref_mean=mean,ref_median=median,ref_lo=lo,ref_hi=hi) %>%
+  right_join(fitted_2_filter,by=c("group","taxon")) %>%
+  # calculate change from reference
+  mutate(scaled_mean=mean-ref_mean,
+         scaled_median=median-ref_median,
+         scaled_lo=lo-ref_lo,
+         scaled_hi=hi-ref_hi)
+
+fitted_2_ref2 %<>% 
+  mutate(taxon=factor(taxon,levels=c("Balanus crenatus","Pleurosigma","Micromonas pusilla",
+                                          "Euchlanis dilatata","Naviculales",
+                                          "Chordariaceae","Monocorophium acherusicum", "Monocorophium insidiosum")))
+
+p.zoid <- ggplot(fitted_2_ref, aes(y=scaled_mean,x=as.numeric(CW_mm))) +
+    geom_point() + geom_hline(aes(yintercept=0)) +
+    facet_wrap(~taxon, 
+               ncol=2,dir="v",scales="free_y") + 
+    labs(x="Carapace Width (CW; mm)", y="Difference from minimum CW") +
+  ylim(c(-0.075,0.1)) +
+    theme_bw() +
+    theme(axis.text.x=element_text(angle=45,hjust=1))
+
+p.cca <- plot.99ci + theme(legend.position=c(.82,.85))
+
+
+if(!knitting){
+  
+png(here('figs','Fig4ab_CCA_Zoid_AllTaxa10plus_v_CW_label99CI.png'), res=300,width=2800,height=1400)
+plot_grid(p.cca, p.zoid, labels=c("(a)","(b)"), rel_widths=c(1, 0.9))
+dev.off()
+
+}
+```
+
+
 
 
 

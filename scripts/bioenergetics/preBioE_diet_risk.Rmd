@@ -21,15 +21,16 @@ library(cowplot)
 library(vegan)
 library(magrittr)
 library(janitor)
+library(colorspace)
 
 # User inputs
 blastdir   <- '../../data/blast'
 resultsdir <- '../../data/results'
 bdir       <- '../../data/bioE'
 
-blastdir   <- 'data/blast'
-resultsdir <- 'data/results'
-bdir       <- 'data/bioE'
+# blastdir   <- 'data/blast'
+# resultsdir <- 'data/results'
+# bdir       <- 'data/bioE'
 
 run.nums <- c(1,2)
 marker  <- 'lerayXT'
@@ -122,7 +123,7 @@ Uncertainties in manual matching:
 
 - Polychaetes are listed in Functional Groups as Carnivorous Infauna, but many of the polychaetes in the data are mixed filter / deposit feeders. I researched the diet of each worm taxa and used the information to choose between Carnivorous Infauna, and Deposit Feeder
 
-- Hydroids are absent from the species data; placed into the Gelatinous Zooplankton category
+- Hydroids are absent from the species data; placed into the Shallow benthic filter feeder category
 
 
 ```{r}
@@ -238,7 +239,7 @@ eindex.dat %>% filter(ncrab.x > 1) %>%
   mutate(dataset=ifelse(taxon %in% dat$taxon, "multicellular",
                         ifelse(taxon %in% smdat$taxon,"unicellular",NA))) %>%
   group_by(dataset, pcrab, std_survival_scalar,eindex.rescaled) %>%
-  summarise(ntaxa=length(unique(new_taxon))) %>%
+  summarise(ntaxa=length(unique(taxon))) %>%
   ggplot(aes(x=pcrab,y=std_survival_scalar, col=eindex.rescaled)) +
   geom_point(aes(size=ntaxa)) +
   facet_grid(rows=vars(dataset)) +
@@ -370,16 +371,25 @@ Combine the exposure index above ($x$) with crab sensitivity to get risk. Sensit
 
 I don't currently have all energy densities, just those for the prey items with the highest / lowest OA impact scalars. 
 ```{r}
-ed.dat <- read_csv(here(bdir, 'OAdiets_HiLo_energy_Densities.csv')) %>% dplyr::select(-OA.diet.group)
+ed.dat <- read_csv(here(bdir, 'OAdiets_PhD_energy_Densities.csv')) %>% dplyr::select(1:5)
 ```
 
 ```{r}
 risk.dat <- eindex.dat %>%
   filter(ncrab.x > 2) %>%
-  left_join(ed.dat %>% dplyr::select(-functional_group,-ncrab), by=c("taxon"="new_taxon"))
-  filter(!is.na(ed_JgAFDW))
+  left_join(ed.dat %>% dplyr::select(-functional_group), by=c("taxon"="new_taxon"))
+```
 
-# standardize energy densities
+
+```{r}
+risk.dat %>%
+  filter(is.na(ed_JgAFDW))
+```
+
+standardize energy densities
+```{r}
+risk.dat %<>% filter(!is.na(ed_JgAFDW)) 
+
 risk.dat %<>% mutate(std_ed=decostand(matrix(risk.dat$ed_JgAFDW,ncol=1),method="range",MARGIN=2))
 ```
 
@@ -397,7 +407,7 @@ risk.dat %<>% mutate(crab.risk=as.numeric(decostand(x=matrix(data=risk.dat$crab.
 risk.dat %>% 
   ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
   geom_point(size=2) +
-  geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01,
+  geom_text_repel(aes(label=taxon), fontface='italic', min.segment.length = 0.01,
                   max.overlaps = 15) +
   scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
   labs(x="Crab Exposure Index", y="Crab Sensitivity") + theme_bw()
@@ -414,7 +424,7 @@ if(!knitting){
   
 write_csv(risk.dat, here(bdir,'OArisk_runs1-2_lerayxt_2023-11-12.csv'))
   
-  risk.dat %>% dplyr::select(new_taxon,pcrab,eindex.rescaled,std_ed,crab.risk) %>%
+  risk.dat %>% dplyr::select(taxon,pcrab,eindex.rescaled,std_ed,crab.risk) %>%
     arrange(crab.risk) %>% write_csv(here(resultsdir,'TableS9_OArisk_runs1-2_lerayxt_2023-11-12.csv'))
   
 }
@@ -425,26 +435,26 @@ The text in the plot is difficult to read. Grab the colors used, darken them, an
 tmp <- risk.dat %>%
   ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
   geom_point(size=3) +
-  geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01) +
+  geom_text_repel(aes(label=taxon), fontface='italic', min.segment.length = 0.01) +
   scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") 
 
 
 redo_colors <- data.frame(label=ggplot_build(tmp)$data[[2]]$label,
                           ggcol=ggplot_build(tmp)$data[[2]]$colour) %>%
   mutate(labelcol=darken(ggcol,amount=0.3)) %>% 
-  right_join(risk.dat %>% dplyr::select(new_taxon), by=c("label"="new_taxon"))
+  right_join(risk.dat %>% dplyr::select(taxon), by=c("label"="taxon"))
 ```
 
 ```{r}
 if(!knitting){
   
-png(here('../../','figs','fig5b_crab_OArisk_all.png'),res=300,height=1800,width=2200)
+png(here('../../','figs','fig5b_crab_OArisk_all.png'),res=300,height=2200,width=2400)
 
 risk.dat %>%
-  left_join(redo_colors,by=c("new_taxon"="label")) %>%
+  left_join(redo_colors,by=c("taxon"="label")) %>%
   ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
   geom_point(size=2) +
-  geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01, max.overlaps=15, col=redo_colors$labelcol) +
+  geom_text_repel(aes(label=taxon), size=4, fontface='italic', min.segment.length = 0.01, max.overlaps=50, col=redo_colors$labelcol) +
   scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
   labs(x="Crab Exposure Index", y="Crab Sensitivity") + theme_bw()
 
@@ -483,7 +493,7 @@ eindex.dat %>% filter(std_survival_scalar > q75 | std_survival_scalar < q25) %>%
 
 ```{r}
 riskByEstuary <- eindexByEstuary %>%
-  left_join(ed.dat %>% dplyr::select(-functional_group,-ncrab), by=c("new_taxon")) %>%
+  left_join(ed.dat %>% dplyr::select(-functional_group), by=c("taxon"="new_taxon")) %>%
   filter(!is.na(ed_JgAFDW))
 
 # standardize energy densities
@@ -504,13 +514,41 @@ riskByEstuary %<>% mutate(crab.risk=as.numeric(decostand(x=matrix(data=riskByEst
 p.risk2 <- riskByEstuary %>%
   ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
   geom_point(size=2) +
-  geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01) +
+  geom_text_repel(aes(label=taxon), fontface='italic', min.segment.length = 0.01) +
   facet_grid(cols=vars(fct_relevel(estuary, c("Port Susan Bay","Padilla Bay", "Samish Bay")))) +
   scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
-  labs(x="Crab Exposure Index", y="Crab Sensitivity")
+  labs(x="Crab Exposure Index", y="Crab Sensitivity") + theme_bw()
 p.risk2
 ```
 
+The text in the plot is difficult to read. Grab the colors used, darken them, and then recolor the labels. 
+```{r}
+tmp <- riskByEstuary %>%
+  ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
+  geom_point(size=2) +
+  geom_text_repel(aes(label=taxon), fontface='italic', min.segment.length = 0.01) +
+  facet_grid(cols=vars(fct_relevel(estuary, c("Port Susan Bay","Padilla Bay", "Samish Bay")))) +
+  scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk")
+
+redo_colors_est <- data.frame(label=ggplot_build(tmp)$data[[2]]$label,
+                          ggcol=ggplot_build(tmp)$data[[2]]$colour) %>%
+  mutate(labelcol=darken(ggcol,amount=0.3)) %>% 
+  right_join(riskByEstuary %>% dplyr::select(taxon) %>% distinct(), by=c("label"="taxon"))
+```
+
+
+
+```{r}
+ 
+p.risk2 <- riskByEstuary %>%
+  ggplot(aes(x=std_survival_scalar,y=std_ed, color=crab.risk)) +
+  geom_point(size=2) +
+  geom_text_repel(aes(label=taxon), fontface='italic', min.segment.length = 0.01, max.overlaps=20, color=redo_colors_est$labelcol) +
+  facet_grid(cols=vars(fct_relevel(estuary, c("Port Susan Bay","Padilla Bay", "Samish Bay")))) +
+  scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
+  labs(x="Crab Exposure Index", y="Crab Sensitivity") + theme_bw()
+p.risk2
+```
 
 
 ```{r}
@@ -525,7 +563,7 @@ p.risk3 <- riskByEstuary %>%
   ggplot(aes(x=fct_relevel(estuary, c("Port Susan Bay","Padilla Bay", "Samish Bay")),y=crab.risk)) +
   geom_boxplot() +
   geom_jitter(aes(color=crab.risk), width=0.05) +
-   geom_text_repel(aes(label=new_taxon), fontface='italic', min.segment.length = 0.01) +
+   geom_text_repel(aes(label=taxon), fontface='italic', min.segment.length = 0.01) +
   labs(x="Estuary", y="Crab Risk") +
   scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
   theme(legend.position="none")
@@ -541,10 +579,17 @@ median(filter(riskByEstuary, estuary=="Samish Bay")$crab.risk)
 
 ```{r}
 if(!knitting){
+  p.risk3 <-  riskByEstuary %>%
+  ggplot(aes(x=fct_relevel(estuary, c("Port Susan Bay","Padilla Bay", "Samish Bay")),y=crab.risk)) +
+  geom_boxplot() +
+  geom_jitter(aes(color=crab.risk), width=0.05) +
+  labs(x="Estuary", y="Crab Risk") +
+  scale_color_viridis_c(option="H",begin=0.4, end=0.8, name="Crab Risk") +
+  theme(legend.position="none")
   
-png(here('../../','figs','figSa-b_crab_OArisk_byEstuary.png'),res=300,height=2000,width=4000)
+png(here('../../','figs','figSa-b_crab_OArisk_byEstuary.png'),res=300,height=2000,width=5000)
 plot_grid(p.risk2 + theme_bw() + theme(axis.text.x=element_text(angle=25, hjust=1), legend.box="horizontal"),
-          p.risk3 + theme_bw() + theme(axis.text.x=element_text(angle=25,hjust=1)),
+          p.risk3 + theme_bw() + theme(axis.text.x=element_text(angle=25,hjust=1), legend.position="none"),
           ncol=2,rel_widths=c(1,0.2),labels=c("(a)","(b)"))
 dev.off()
 
